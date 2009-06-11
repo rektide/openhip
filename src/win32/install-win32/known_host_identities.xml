@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<known_host_identities>
+  <host_identity alg="RSA" alg_id="5" length="128" anon="no" incoming="yes">
+    <name>hipserver.mct.phantomworks.org-1024</name>
+    <HIT>2001:14:4dcd:2a09:74a:caee:2a0:ec4a</HIT>
+    <LSI>1.230.120.200</LSI>
+  </host_identity>
+  <host_identity alg="RSA" alg_id="5" length="128" anon="no" incoming="yes">
+    <name>crossroads.infrahip.net-1024</name>
+    <addr>193.167.187.134</addr>
+    <HIT>2001:19:b673:8406:e32d:6754:db0b:cde7</HIT>
+    <LSI>1.11.205.231</LSI>
+  </host_identity>
+  <host_identity alg="RSA" alg_id="5" length="128" anon="no" incoming="yes">
+    <name>woodstock4.hip4inter.net-1024</name>
+    <addr>193.234.218.202</addr>
+    <HIT>2001:15:1522:ed39:3a8f:5ef2:eb5:cc30</HIT>
+    <LSI>1.181.204.48</LSI>
+  </host_identity>
+</known_host_identities>

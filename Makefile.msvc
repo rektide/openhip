@@ -1,0 +1,146 @@
+# Host Identity Protocol
+# Copyright (C) 2002-05 the Boeing Company
+# 
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+#  win32 Makefile for MSVC++
+#
+#  Author:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+#
+
+CC	  	= cl
+LIBS = kernel32.lib user32.lib msvcrt.lib ws2_32.lib advapi32.lib iphlpapi.lib iconv.lib libeay32.lib libxml2.lib 
+# could also link with msvcrt.lib instead of libcmt.lib, build with /MD instead of /MT
+LINK = /NODEFAULTLIB /NOLOGO 
+# this replaces LIB environment variable, but has problems with quotes: 
+#/LIBPATH:$(LIB);..\lib
+SRC = .\src
+EXTINC = .\include
+SRCINC = $(SRC)\include
+INC = -I$(SRCINC) -I$(EXTINC)
+SRCPROTO= protocol
+SRCUM 	= usermode
+SRCUTIL = util
+SRCW32	= win32
+
+
+# /MT is for threading /MD for MSVCRT.LIB
+# /GZ enable runtime debug checks, /Zi enable debugging information, /MDd debug lib
+# /MDd for debug
+CFLAGS= /MD /Ox /O2 /Ob2 /W3 /WX /Gs0 /GF /Gy /Zi /Zp1 /nologo -DWIN32_LEAN_AND_MEAN $(INC) -D__UMH__ -D__WIN32__ -DCONFIG_HIP -DSYSCONFDIR="\".\""
+
+OBJS =	$(SRC)\$(SRCPROTO)\hip_addr.obj \
+	$(SRC)\$(SRCPROTO)\hip_cache.obj \
+	$(SRC)\$(SRCPROTO)\hip_dht.obj \
+	$(SRC)\$(SRCPROTO)\hip_globals.obj \
+	$(SRC)\$(SRCPROTO)\hip_input.obj \
+	$(SRC)\$(SRCPROTO)\hip_ipsec.obj \
+	$(SRC)\$(SRCPROTO)\hip_keymat.obj \
+	$(SRC)\$(SRCPROTO)\hip_main.obj \
+	$(SRC)\$(SRCPROTO)\hip_output.obj \
+	$(SRC)\$(SRCPROTO)\hip_status.obj \
+	$(SRC)\$(SRCPROTO)\hip_stun.obj \
+	$(SRC)\$(SRCPROTO)\hip_stun_udp.obj \
+	$(SRC)\$(SRCUM)\hip_dns.obj \
+	$(SRC)\$(SRCUM)\hip_esp.obj \
+	$(SRC)\$(SRCUM)\hip_nl.obj \
+	$(SRC)\$(SRCUM)\hip_pfkey.obj \
+	$(SRC)\$(SRCUM)\hip_sadb.obj \
+	$(SRC)\$(SRCUM)\hip_status2.obj \
+	$(SRC)\$(SRCUM)\hip_umh_main.obj \
+	$(SRC)\$(SRCUM)\libipsec_stub.obj \
+	$(SRC)\$(SRCUTIL)\hip_util.obj \
+	$(SRC)\$(SRCUTIL)\hip_xml.obj \
+	$(SRC)\$(SRCW32)\socketpair.obj \
+	$(SRC)\$(SRCW32)\hip_service.obj 
+
+# names of objects used when linking
+# (we can eliminate this if .obj files end up in same dir as source)
+OBJNAMES=hip_addr.obj \
+	hip_cache.obj \
+	hip_dht.obj \
+	hip_globals.obj \
+	hip_input.obj \
+	hip_ipsec.obj \
+	hip_keymat.obj \
+	hip_main.obj \
+	hip_output.obj \
+	hip_status.obj \
+	hip_stun.obj \
+	hip_stun_udp.obj \
+	hip_dns.obj \
+	hip_esp.obj \
+	hip_nl.obj \
+	hip_pfkey.obj \
+	hip_sadb.obj \
+	hip_status2.obj \
+	hip_umh_main.obj \
+	libipsec_stub.obj \
+	hip_util.obj \
+	hip_xml.obj \
+	socketpair.obj \
+	hip_service.obj 
+
+HITGENOBJS = $(SRC)\$(SRCUTIL)\hitgen.obj \
+	     $(SRC)\$(SRCPROTO)\hitgen_globals.obj \
+	     $(SRC)\$(SRCUTIL)\hitgen_util.obj
+HITGENOBJNAMES = hitgen.obj hitgen_globals.obj hitgen_util.obj
+
+# default target
+all: win
+
+# compile objects for Windows service
+win:	start_win hitgen hipservice finish
+
+#
+# build targets
+#
+hipservice:	$(OBJS) $(SRCINC)\hip\hip_service.h
+	$(CC) $(OBJNAMES) $(CFLAGS) $(LIBS) /link $(LINK) /OUT:hip.exe
+
+# Hitgen utility
+hitgen:         $(HITGENOBJS)
+	$(CC) $(HITGENOBJNAMES) $(CFLAGS) -DHITGEN $(LIBS) /link $(LINK) /OUT:hitgen.exe
+
+# Status helper app	
+status:		$(SRC)\$(SRCUTIL)\usermode-status.c
+	@echo \>\> Building status app...
+	$(CC) $(CFLAGS) $(SRC)\$(SRCUTIL)\usermode-status.c /OUT:status.exe
+
+#
+# source rules
+#
+# could have source rules here for each object file if needed
+#$(SRC)\$(SRCPROTO)\hip_addr.obj:	$(SRCINC)\hip\hip_service.h
+#$(SRC)\$(SRCPROTO)\hip_cache.obj:	$(SRCINC)\hip\hip_service.h
+
+# special rules to control hitgen flags and obj names
+$(SRC)\$(SRCPROTO)\hitgen_globals.obj: 	$(SRC)\$(SRCPROTO)\hip_globals.c
+	$(CC) $(CFLAGS) -DHITGEN /Fohitgen_globals.obj /c $(SRC)\$(SRCPROTO)\hip_globals.c 
+$(SRC)\$(SRCUTIL)\hitgen_util.obj: 	$(SRC)\$(SRCUTIL)\hip_util.c
+	$(CC) $(CFLAGS) -DHITGEN /Fohitgen_util.obj /c $(SRC)\$(SRCUTIL)\hip_util.c
+
+#
+# utility rules
+#
+start_win:
+	@echo Building HIP Windows Service...
+finish:
+	copy /Y hitgen.exe .\bin
+	copy /Y hip.exe .\bin
+	@echo done.
+clean:
+	@echo Removing binary files...
+	del hip.exe hitgen.exe
+	del hip.exp hip.plg hip.ilk hip.ncb hip.opt hip.pdb hip.lib vc60.pdb
+	del hitgen.exp hitgen.plg hitgen.ilk hitgen.ncb hitgen.opt hitgen.pdb hitgen.lib
+	del $(OBJNAMES) $(HITGENOBJNAMES)
+	@echo done.

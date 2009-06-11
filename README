@@ -1,0 +1,15 @@
+Host Identity Protocol implementation
+-------------------------------------
+Version 0.6 (May 28, 2009)
+
+For instructions on how to build and install HIP, please refer to the wiki:
+http://www.openhip.org/wiki
+
+
+Release Notes can be found here:
+http://www.openhip.org/wiki/index.php?title=Release_Notes
+
+The documentation for this implementation is maintained mainly on
+the wiki, but our previous documentation in HTML format can be found
+in the file named doc/hipdoc.html.
+

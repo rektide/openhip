@@ -1,0 +1,24 @@
+The authors thank The Boeing Company and its funding sponsor, the Office
+of Naval Research, for donating the initial HIP software to the project 
+in March, 2005, and subsequent updates.
+
+The original design of this software was inspired by the FreeS/WAN project 
+(http://www.freeswan.org) and OCALA proxy (http://ocala.cs.berkeley.edu).
+
+This file recognizes the individuals who have contributed to this project.
+
+Original authors:
+Jeff Ahrenholz (siliconja@users.sourceforge.net) 
+ - primary author and maintainer for past few years
+Tom Henderson (tom_henderson@users.sourceforge.net)
+ - started the original implementation
+Jeff Meegan (jmeegan@users.sourceforge.net)  
+ - OS X support, various bugfixes
+
+Patch contributors:
+Vivien Schmitt (vivien.schmitt@gmx.de)
+- NAT traversal extensions
+Miriam Esteban (miriam.esteban@netlab.nec.de)
+- rendezvous extensions
+Andrei Gurtov (gurtov@cs.helsinki.fi)
+- Hi3 patch

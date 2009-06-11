@@ -1,0 +1,484 @@
+; ****************************************************************************
+; * Copyright (C) 2005-2009 Boeing                                           *
+; * Portions Copyright (C) 2002-2005 OpenVPN Solutions LLC                   *
+; *  This program is free software; you can redistribute it and/or modify    *
+; *  it under the terms of the GNU General Public License version 2          *
+; *  as published by the Free Software Foundation.                           *
+; ****************************************************************************
+
+; OpenHIP install script for Windows, using NSIS
+; this NSIS script requires the Simple Firewall Plugin available here:
+;   http://nsis.sourceforge.net/NSIS_Simple_Firewall_Plugin
+
+!include "MUI.nsh"
+!include "setpath.nsi"  ; for strstr() function
+
+!define PRODUCT_NAME "OpenHIP"
+!define VERSION "@PACKAGE_VERSION@"
+
+; various paths
+; assuming directory layout with CVS, such as cvs/hipd, cvs/hip-support.
+!define HIPD_DIR "..\..\.."
+!define BIN_DIR "${HIPD_DIR}\bin"
+!define DOC_DIR "${HIPD_DIR}\doc"
+!define HITGEN_DIR "${BIN_DIR}"
+!define HIPMON_DIR "${BIN_DIR}"
+;!define HIPMON_DIR "..\..\..\..\hip-support\hipmon\Release"
+
+
+!define TAP "tap0901"
+!define TAPDRV "${TAP}.sys"
+!define TAPDRV_DIR "."
+
+; these are only for non-release/debug builds
+; something like "-DBG2"
+!define OUTFILE_LABEL ""
+; something like "DEBUG2"
+!define TITLE_LABEL ""
+
+
+;--------------------------------
+;Configuration
+
+  ;General
+
+  OutFile "openhip-${VERSION}${OUTFILE_LABEL}-install.exe"
+
+  SetCompressor bzip2
+
+  ShowInstDetails show
+  ShowUninstDetails show
+
+  ;Folder selection page
+  InstallDir "$PROGRAMFILES\${PRODUCT_NAME}"
+  
+  ;Remember install folder
+  InstallDirRegKey HKCU "Software\${PRODUCT_NAME}" ""
+
+
+;--------------------------------
+;Modern UI Configuration
+
+  Name "${PRODUCT_NAME} ${VERSION} ${TITLE_LABEL}"
+
+  !define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of OpenHIP, an Open Source implementation of the Host Identity Protocol.\r\n\r\nNote that the Windows version of OpenHIP has only been tested with Windows XP.\r\n\r\n\r\n"
+
+  !define MUI_COMPONENTSPAGE_TEXT_TOP "Select the components to install/upgrade.  All DLLs are installed locally."
+
+  !define MUI_COMPONENTSPAGE_SMALLDESC
+;  !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\INSTALL-win32.txt"
+  !define MUI_FINISHPAGE_NOAUTOCLOSE
+;  !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
+  !define MUI_ABORTWARNING
+  !define MUI_ICON "openhip.ico"
+  !define MUI_UNICON "win-uninstall.ico"
+  !define MUI_HEADERIMAGE
+  !define MUI_HEADERIMAGE_BITMAP "openhip.bmp"
+  !define MUI_UNFINISHPAGE_NOAUTOCLOSE
+
+  !insertmacro MUI_PAGE_WELCOME
+  !insertmacro MUI_PAGE_LICENSE "${HIPD_DIR}\LICENSE"
+  !insertmacro MUI_PAGE_COMPONENTS
+  !insertmacro MUI_PAGE_DIRECTORY
+  !insertmacro MUI_PAGE_INSTFILES
+  !insertmacro MUI_PAGE_FINISH
+  
+  !insertmacro MUI_UNPAGE_CONFIRM
+  !insertmacro MUI_UNPAGE_INSTFILES  
+  !insertmacro MUI_UNPAGE_FINISH
+
+
+;--------------------------------
+;Languages
+ 
+  !insertmacro MUI_LANGUAGE "English"
+  
+;--------------------------------
+;Language Strings
+
+  LangString DESC_SecOpenHIPbin ${LANG_ENGLISH} "Install OpenHIP executable and utilities"
+
+  LangString DESC_SecTAP ${LANG_ENGLISH} "Install/Upgrade the TAP-Win32 virtual device driver.  Will not interfere with CIPE."
+
+  LangString DESC_SecService ${LANG_ENGLISH} "Install HIP as a Windows service."
+
+  LangString DESC_SecAddShortcuts ${LANG_ENGLISH} "Add OpenHIP shortcuts to the Start Menu."
+
+  LangString DESC_SecHIPConf ${LANG_ENGLISH} "Generate default configuration and Host Identities for this machine."
+
+;--------------------------------
+;Reserve Files
+  
+  ;Things that need to be extracted on first (keep these lines before any File command!)
+  ;Only useful for BZIP2 compression
+  
+  ReserveFile "openhip.bmp"
+
+;--------------------------------
+;Macros
+
+!macro WriteRegStringIfUndef ROOT SUBKEY KEY VALUE
+Push $R0
+ReadRegStr $R0 "${ROOT}" "${SUBKEY}" "${KEY}"
+StrCmp $R0 "" +1 +2
+WriteRegStr "${ROOT}" "${SUBKEY}" "${KEY}" '${VALUE}'
+Pop $R0
+!macroend
+
+!macro DelRegStringIfUnchanged ROOT SUBKEY KEY VALUE
+Push $R0
+ReadRegStr $R0 "${ROOT}" "${SUBKEY}" "${KEY}"
+StrCmp $R0 '${VALUE}' +1 +2
+DeleteRegValue "${ROOT}" "${SUBKEY}" "${KEY}"
+Pop $R0
+!macroend
+
+!macro DelRegKeyIfUnchanged ROOT SUBKEY VALUE
+Push $R0
+ReadRegStr $R0 "${ROOT}" "${SUBKEY}" ""
+StrCmp $R0 '${VALUE}' +1 +2
+DeleteRegKey "${ROOT}" "${SUBKEY}"
+Pop $R0
+!macroend
+
+!macro DelRegKeyIfEmpty ROOT SUBKEY
+Push $R0
+EnumRegValue $R0 "${ROOT}" "${SUBKEY}" 1
+StrCmp $R0 "" +1 +2
+DeleteRegKey /ifempty "${ROOT}" "${SUBKEY}"
+Pop $R0
+!macroend
+
+!include "servicelib.nsi"  ; for service control
+
+;------------------------------------------
+;Set reboot flag based on tapinstall return
+
+Function CheckReboot
+  IntCmp $R0 1 "" noreboot noreboot
+  IntOp $R0 0 & 0
+  SetRebootFlag true
+  DetailPrint "REBOOT flag set"
+ noreboot:
+FunctionEnd
+
+;--------------------------------
+;Installer Sections
+
+Function .onInit
+  ClearErrors
+  UserInfo::GetName
+  IfErrors ok
+  Pop $R0
+  UserInfo::GetAccountType
+  Pop $R1
+  StrCmp $R1 "Admin" ok
+    Messagebox MB_OK "Administrator privileges required to install OpenHIP [$R0/$R1]"
+    Abort
+  ok:
+  !insertmacro SERVICE stop "HIP" ""
+  Pop $0 ; response
+  DetailPrint "Stop HIP Service $0"
+FunctionEnd
+
+;!define SF_SELECTED 1
+
+Section "OpenHIP binaries" SecOpenHIPbin
+
+  SetOverwrite on
+  SetOutPath "$INSTDIR"
+
+  ; Put files there
+  File "${BIN_DIR}\hip.exe"
+  File "${BIN_DIR}\zlib1.dll"
+  File "${BIN_DIR}\iconv.dll"
+  File "${BIN_DIR}\libeay32.dll"
+  File "${BIN_DIR}\libxml2.dll"
+  File "openhip.ico"
+  File "${HITGEN_DIR}\hitgen.exe"
+  File "${HIPMON_DIR}\hipmon.exe"
+  
+  SetOutPath "$INSTDIR\doc"
+  File "${HIPD_DIR}\LICENSE"
+;  File "${DOC_DIR}\hipdoc.html"
+;  File "${DOC_DIR}\hip-arch.gif"
+;  File "${DOC_DIR}\hipumh-arch.gif"
+
+SectionEnd
+
+Section "TAP-Win32 Virtual Ethernet Adapter" SecTAP
+
+  SetOverwrite on
+  SetOutPath "$INSTDIR\tap32"
+  File "${TAPDRV_DIR}\${TAPDRV}"
+  File "${TAPDRV_DIR}\OemWin2k.inf"
+  File "${TAPDRV_DIR}\tapinstall.exe"
+
+SectionEnd
+
+Section "Install HIP service" SecService
+
+  SetOverwrite on
+  SetOutPath "$INSTDIR"
+
+SectionEnd
+
+Section "Add shortcuts to Start Menu" SecAddShortcuts
+
+  SetOverwrite on
+  CreateDirectory "$SMPROGRAMS\OpenHIP"
+  CreateShortCut "$SMPROGRAMS\OpenHIP\HIP (console mode).lnk" "$INSTDIR\hip.exe" "-v -o -a" "$INSTDIR\openhip.ico"
+  CreateShortCut "$SMPROGRAMS\OpenHIP\HIP monitor.lnk" "$INSTDIR\hipmon.exe" 
+  WriteINIStr    "$SMPROGRAMS\OpenHIP\Documentation.url" "InternetShortcut" "URL" "http://www.openhip.org/wiki/index.php"
+  CreateShortCut "$SMPROGRAMS\OpenHIP\Uninstall OpenHIP.lnk" "$INSTDIR\Uninstall.exe"
+
+SectionEnd
+
+Section "Build HIP configuration files" SecHIPConf
+
+  SetOverwrite off
+  SetOutPath "$INSTDIR"
+
+  ExecWait '"$INSTDIR\hitgen.exe" -conf' $0
+  DetailPrint "hitgen -conf returned $0"
+  ExecWait '"$INSTDIR\hitgen.exe" -noinput' $0
+  DetailPrint "hitgen returned $0"
+
+  File "known_host_identities.xml"
+
+SectionEnd
+
+;--------------------
+;Post-install section
+
+Section -post
+
+  ;
+  ; install/upgrade TAP-Win32 driver if selected, using tapinstall.exe
+  ;
+  SectionGetFlags ${SecTAP} $R0
+  IntOp $R0 $R0 & ${SF_SELECTED}
+  IntCmp $R0 ${SF_SELECTED} "" notap notap
+    ; TAP install/update was selected.
+    ; Should we install or update?
+    ; If tapinstall error occurred, $5 will
+    ; be nonzero.
+    IntOp $5 0 & 0
+    nsExec::ExecToStack '"$INSTDIR\tap32\tapinstall.exe" hwids ${TAP}'
+    Pop $R0 # return value/error/timeout
+    IntOp $5 $5 | $R0
+    DetailPrint "tapinstall hwids returned: $R0"
+
+    ; If tapinstall output string contains "${TAP}" we assume
+    ; that TAP device has been previously installed,
+    ; therefore we will update, not install.
+    Push "${TAP}"
+    Call StrStr
+    Pop $R0
+
+    IntCmp $5 0 "" tapinstall_check_error tapinstall_check_error
+    IntCmp $R0 -1 tapinstall
+
+ ;tapupdate:
+    DetailPrint "TAP-Win32 UPDATE"
+    nsExec::ExecToLog '"$INSTDIR\tap32\tapinstall.exe" update "$INSTDIR\tap32\OemWin2k.inf" ${TAP}'
+    Pop $R0 # return value/error/timeout
+    Call CheckReboot
+    IntOp $5 $5 | $R0
+    DetailPrint "tapinstall update returned: $R0"
+    Goto tapinstall_check_error
+
+ tapinstall:
+    DetailPrint "TAP-Win32 REMOVE OLD TAP"
+    nsExec::ExecToLog '"$INSTDIR\tap32\tapinstall.exe" remove TAP'
+    Pop $R0 # return value/error/timeout
+    DetailPrint "tapinstall remove TAP returned: $R0"
+    nsExec::ExecToLog '"$INSTDIR\tap32\tapinstall.exe" remove TAPDEV'
+    Pop $R0 # return value/error/timeout
+    DetailPrint "tapinstall remove TAPDEV returned: $R0"
+
+    DetailPrint "TAP-Win32 INSTALL (${TAP})"
+    nsExec::ExecToLog '"$INSTDIR\tap32\tapinstall.exe" install "$INSTDIR\tap32\OemWin2k.inf" ${TAP}'
+    Pop $R0 # return value/error/timeout
+    Call CheckReboot
+    IntOp $5 $5 | $R0
+    DetailPrint "tapinstall install returned: $R0"
+
+ tapinstall_check_error:
+    DetailPrint "tapinstall cumulative status: $5"
+    IntCmp $5 0 notap
+    MessageBox MB_OK "An error occurred installing the TAP-Win32 device driver."
+
+ notap:
+    ; This step no longer needed -- TAP address set on HIP startup w/o MsgBox
+    ; setup the TAP-32 address and MTU so service doesn't get a MsgBox
+    ;ExecWait '"$INSTDIR\hip.exe" -setuptap' $0
+    ;DetailPrint "hitgen -conf returned $0"
+
+    ; Store install folder in registry
+    WriteRegStr HKLM SOFTWARE\OpenHIP "" $INSTDIR
+
+    ; install as a service if requested
+    SectionGetFlags ${SecService} $R0
+    IntOp $R0 $R0 & ${SF_SELECTED}
+    IntCmp $R0 ${SF_SELECTED} "" noserv noserv
+
+  ; set registry parameters
+;   !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\OpenHIP" "config_dir"  "${SERV_CONFIG_DIR}"
+    
+    ; install HIP as a service
+    ;!insertmacro SERVICE stop "HIP" ""
+    ;Pop $0 ; response
+    ;DetailPrint "Service STOP $0"
+    DetailPrint "Previous Service REMOVE (if exists)"
+    nsExec::ExecToLog '"$INSTDIR\hip.exe" -r'
+    Pop $R0 # return value/error/timeout
+    DetailPrint "Service INSTALL"
+    nsExec::ExecToLog '"$INSTDIR\hip.exe" -i'
+    Pop $R0 # return value/error/timeout
+
+ noserv:
+  ; store text files here if needed
+  SetOverwrite on
+  SetOutPath $INSTDIR
+  ;File "..\doc\INSTALL-win32.txt"
+  ;File "..\doc\LICENSE"
+
+  ; Create uninstaller
+  WriteUninstaller "$INSTDIR\Uninstall.exe"
+
+  ; Show up in Add/Remove programs
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayName" "${PRODUCT_NAME} ${VERSION}"
+  WriteRegExpandStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "UninstallString" "$INSTDIR\Uninstall.exe"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayIcon" "$INSTDIR\openhip.ico"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayVersion" "${VERSION}"
+
+    ; Check for Windows Firewall - ask to disable it
+    SimpleFC::IsFirewallEnabled
+    Pop $0 ; return error(1)/success(0)
+    Pop $1 ; return 1=Enabled/0=Disabled
+    ; intcmp equal less greater
+    IntCmp $1 1 askdisablefw "" ""
+    DetailPrint "Windows Firewall is not enabled."
+    Goto nodisablefw
+ askdisablefw:
+    DetailPrint "Windows Firewall is enabled."
+    MessageBox MB_YESNO|MB_ICONQUESTION \
+		"Windows Firewall is currently on. HIP is unable to operate through the firewall, would you like to turn it off?" \
+		IDNO nodisablefw
+    DetailPrint "Disabling the Windows Firewall."
+    SimpleFC::EnableDisableFirewall 0
+    Pop $0 ; return error(1)/success(0)
+    DetailPrint "disable firewall returned: $0"
+ nodisablefw:
+
+    ; check for IPSEC service
+    !insertmacro SERVICE running "PolicyAgent" ""
+    Pop $0 ; response
+    ;IntCmp $0 1 askstopipsec
+    StrCmp $0 "true" askstopipsec
+    DetailPrint "IPSEC Services is not runnning."
+    goto ipsecdone
+ askstopipsec:
+    DetailPrint "IPSEC Services is runnning."
+    MessageBox MB_YESNO|MB_ICONQUESTION \
+		"IPSEC Services is currently on. HIP is unable to operate with this service turned on, would you like to turn it off?" \
+		IDNO ipsecdone
+    !insertmacro SERVICE stop "PolicyAgent" ""
+    Pop $0 ; response
+    DetailPrint "Stop IPSEC Services $0"
+    DetailPrint "Set IPSEC Services to Manual startup"
+    # too bad servicelib doesn't let you change services...
+    nsExec::ExecToLog 'sc config PolicyAgent start= demand'
+ ipsecdone:
+
+SectionEnd
+
+;--------------------------------
+;Descriptions
+
+!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecOpenHIPbin} $(DESC_SecOpenHIPbin)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecTAP} $(DESC_SecTAP)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecService} $(DESC_SecService)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecAddShortcuts} $(DESC_SecAddShortcuts)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecHIPConf} $(DESC_SecHIPConf)
+!insertmacro MUI_FUNCTION_DESCRIPTION_END
+
+;--------------------------------
+;Uninstaller Section
+
+Function un.onInit
+  ClearErrors
+  UserInfo::GetName
+  IfErrors ok
+  Pop $R0
+  UserInfo::GetAccountType
+  Pop $R1
+  StrCmp $R1 "Admin" ok
+    Messagebox MB_OK "Administrator privileges required to uninstall OpenHIP [$R0/$R1]"
+    Abort
+  ok:
+  !insertmacro UN.SERVICE stop "HIP" ""
+  Pop $0 ; response
+  DetailPrint "Stop the HIP Service $0"
+FunctionEnd
+
+Section "Uninstall"
+  DetailPrint "Remove the HIP Service"
+  nsExec::ExecToLog '"$INSTDIR\hip.exe" -r'
+  Pop $R0 # return value/error/timeout
+  Push "$INSTDIR"
+  Sleep 2000
+
+; prompt to remove the TAP-Win32 driver
+  MessageBox MB_YESNO|MB_ICONQUESTION \
+		"Remove the TAP-Win32 virtual Ethernet adapter?" \
+		IDNO SkipTapUninstall
+  DetailPrint "TAP-Win32 REMOVE"
+  nsExec::ExecToLog '"$INSTDIR\tap32\tapinstall.exe" remove ${TAP}'
+  Pop $R0 # return value/error/timeout
+  DetailPrint "tapinstall remove returned: $R0"
+
+  Delete "$INSTDIR\tap32\${TAPDRV}"
+  Delete "$INSTDIR\tap32\OemWin2k.inf"
+  Delete "$INSTDIR\tap32\tapinstall.exe"
+  RMDir /r "$INSTDIR\tap32"
+
+SkipTapUninstall:
+
+  RMDir /r $SMPROGRAMS\OpenHIP
+
+  Delete "$INSTDIR\hip.exe"
+  Delete "$INSTDIR\hitgen.exe"
+  Delete "$INSTDIR\hipmon.exe"
+  Delete "$INSTDIR\openhip.ico"
+  Delete "$INSTDIR\doc\LICENSE"
+  Delete "$INSTDIR\doc\hipdoc.html"
+  Delete "$INSTDIR\doc\hip-arch.gif"
+  Delete "$INSTDIR\doc\hipumh-arch.gif"
+  RMDir /r "$INSTDIR\doc"
+
+  Delete "$INSTDIR}\zlib1.dll"
+  Delete "$INSTDIR}\iconv.dll"
+  Delete "$INSTDIR}\libeay32.dll"
+  Delete "$INSTDIR}\libxml2.dll"
+
+  Delete "$INSTDIR\Uinstall.exe"
+  DeleteRegKey HKLM SOFTWARE\OpenHIP
+  DeleteRegKey HKCU "Software\${PRODUCT_NAME}"
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\OpenHIP"
+
+; prompt to remove configuration
+  MessageBox MB_YESNO|MB_ICONQUESTION \
+		"Remove all configuration files and logs?" \
+		IDNO EndIt
+  Delete "$INSTDIR\hip_ipsec.log"
+  Delete "$INSTDIR\hip_ipsec_error.log"
+  Delete "$INSTDIR\hip.conf"
+  Delete "$INSTDIR\my_host_identities.xml"
+  Delete "$INSTDIR\known_host_identities.xml"
+EndIt:
+  RMDir "$INSTDIR"
+
+SectionEnd

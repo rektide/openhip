@@ -1,0 +1,66 @@
+%define version @PACKAGE_VERSION@
+Name: 		openhip
+License:	GPLv2
+Group: 		System Environment/Daemons
+Summary: 	OpenHIP Host Identity Protocol usermode for Linux
+Prefix: 	/usr/local
+Provides: 	openhip
+Release: 	1
+Source: 	openhip-%{version}.tgz
+URL:		http://www.openhip.org
+Version:	%{version}
+Buildroot:	/tmp/openhiprpm
+%description
+OpenHIP is a free, open-source implementation of the Host Identity Protocol (HIP). HIP is being developed within the Internet Engineering Task Force (IETF) and the Internet Research Task Force (IRTF) to study and experiment with HIP and related protocols.
+
+HIP is a specific proposal to decouple network identity from network location in the Internet protocol stack. Historically, IP addresses have served both functions. This dual use of IP addresses is becoming problematic, and there have been many research efforts aimed at studying the decoupling of identifier and locator in the network stack. HIP is a specific proposal that uses public/private key pairs as the host identifiers. 
+
+%prep
+
+%setup -q
+
+%build
+
+./bootstrap.sh
+./configure
+make
+
+%install
+
+rm -rf $RPM_BUILD_ROOT
+
+make DESTDIR=$RPM_BUILD_ROOT install
+
+%clean
+
+rm -rf $RPM_BUILD_ROOT
+
+%files
+
+%defattr(-,root,root)
+
+/usr/local/sbin/hip
+/usr/local/sbin/hitgen
+/usr/local/sbin/hipstatus
+%config /usr/local/etc/hip/known_host_identities.xml
+%doc README
+%doc AUTHORS
+%doc LICENSE
+
+%post
+
+# 
+# only run these commands upon first installation
+if [ "$1" = 1 ] ;
+then
+/usr/local/sbin/hitgen -conf -file /usr/local/etc/hip/hip.conf
+/usr/local/sbin/hitgen -noinput -file /usr/local/etc/hip/my_host_identities.xml
+mkdir -p /usr/local/var/log /usr/local/var/run
+fi;
+
+%changelog
+* Mon May 18 2009 Jeff Ahrenholz <siliconja@sourceforge.net> - 0.6
+- updated for 0.6 release, fix install using DESTDIR instead of changing prefix
+* Wed Jan 10 2007 Jeff Ahrenholz <siliconja@sourceforge.net> - 0.4
+- created spec file for OpenHIP 0.4 release
+- uses /usr/local/sbin for binaries

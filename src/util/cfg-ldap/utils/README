@@ -1,0 +1,18 @@
+1. openldap-2.3.43.tar.gz - only contrib/ldapc++ is used for creating C++ libraries and header files.
+   and they are used for compiling hip ldap configuration DDL
+2. install rpm packages for ldap server (tested on ebics):
+   db42-4.4.53
+   openslp-1.2.1
+   openldap2-2.3.32
+3. install and configure ldap server
+ a. install the rpm packages in 2 in that order.
+ b. edit /etc/openldap/sldapd.conf
+    change lines: rootdn, suffix, rootpw
+    add line: "include IpLegacyNodes eq"
+    add line: "include /etc/openldap/schema/endbox.schema"
+ c. copy file endbox.schema to directory /etc/openldap/schema
+ d. run sldapindex
+ e. start sldap daemon: /etc/init.d/ldap start
+ f. run load-parents.sh" to load parent entries for endbox entries.
+ g. provision endbox entries as in example endboxes.ldif, OR
+    use ldapbrowser to provision it.

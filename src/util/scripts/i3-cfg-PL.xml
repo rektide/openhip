@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<I3ConfigFile version="0.1">
+	<I3ServerDetails
+		UsePing="false"
+		UseTCP="false"
+		ServerListURL="http://infrahip.hiit.fi/hi3_status.txt"
+	>
+        <!-- If UsePing is false, you have to make sure that
+             this first hop i3 server is running.  You can
+             check the status of the i3 servers at
+             http://i3.cs.berkeley.edu
+             -->
+		<I3Server
+		    IPAddress="169.229.50.7"
+		    PortNum="6613"
+		    I3Id="64d78d472bdc0b990a4e8bc1ac480565b44cd7fa"
+		/>
+	</I3ServerDetails>
+</I3ConfigFile>
