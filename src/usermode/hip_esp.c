@@ -171,7 +171,7 @@ int build_host_mac_map();
 /* void reset_sadbentry_udp_port (__u32 spi_out); */
 int send_udp_esp_tunnel_activation (__u32 spi_out);
 
-extern __u32 get_preferred_lsi();
+extern __u32 get_preferred_lsi(struct sockaddr *lsi);
 extern int do_bcast();
 extern int maxof(int num_args, ...);
 
@@ -357,7 +357,7 @@ int ack_request(struct in_addr sa, struct in_addr da)
 
 	host_p->sa_family = AF_INET;
 	ip = inet_ntoa(sa);
-	str_to_addr(ip, host_p);
+	str_to_addr((unsigned char *)ip, host_p);
 
 	//log_(NORM, "ack_request: sender ip addr %s\n", ip);
 	if(!find_host2(sa.s_addr))
@@ -378,7 +378,7 @@ int ack_request(struct in_addr sa, struct in_addr da)
 
 	host_p->sa_family = AF_INET;
 	ip = inet_ntoa(da);
-	str_to_addr(ip, host_p);
+	str_to_addr((unsigned char *)ip, host_p);
 	eb_p->sa_family=AF_INET6;
 	rc = hipcfg_getEndboxByLegacyNode(host_p, eb_p);
 	if(rc){

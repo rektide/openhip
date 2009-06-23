@@ -262,8 +262,6 @@ int read_sc_cert(struct sc_pkcs15_card *p15card, char *outfile, u8 *out_buf)
 int 
 pcscStop()
 {
-    static const char * fnName = "pcscStop";
-
     int rc = 0;
     rc = system("/etc/init.d/pcscd stop");
     return rc;
@@ -416,7 +414,6 @@ SSL_CTX *ssl_ctx_init(ENGINE *e, const char *pin)
 
     SSL_CTX *ctx = NULL;
     EVP_PKEY *scPrivKey = NULL;
-    EVP_PKEY *scPubKey = NULL;
 
     /* Initialize SSL */
     SSL_library_init();

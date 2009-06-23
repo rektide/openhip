@@ -496,7 +496,9 @@ int main_loop(int argc, char **argv)
 		    log_(ERR, "Because there are no peer identities, you probab"
 			"ly need to run with the -a\n  (allow any) option.\n");
 	}
-
+#ifdef SMA_CRAWLER
+	}
+#endif /* SMA_CRAWLER */
 
 	if (get_preferred_hi(my_hi_head)==NULL) {
 		log_(ERR, "The preferred HI specified in %s was not found.\n",
@@ -527,7 +529,7 @@ int main_loop(int argc, char **argv)
 	struct sockaddr *lsi = (struct sockaddr*)&ss_lsi;
 	lsi->sa_family = AF_INET;
 	get_preferred_lsi(lsi);
-	char lsi_s[INET_ADDRSTRLEN];
+	unsigned char lsi_s[INET_ADDRSTRLEN];
 	addr_to_str(SA(lsi), lsi_s, INET_ADDRSTRLEN);
 	char cmd[64];
 	sprintf(cmd, "/usr/local/etc/hip/bridge_up.sh %s", lsi_s);
@@ -1664,4 +1666,3 @@ int hip_trigger_rvs(struct sockaddr *rvs, hip_hit *rsp)
 
         return(0);
 }
-

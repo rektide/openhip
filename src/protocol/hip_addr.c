@@ -77,6 +77,12 @@
 #include <hip/hip_funcs.h>
 #include <hip/hip_stun.h>
 
+#ifdef SMA_CRAWLER
+//DM: From /usr/include/net/if.h
+//DM: Added just this line because of conflicts with /usr/include/linux/if.h
+extern unsigned int if_nametoindex (__const char *__ifname) __THROW;
+#endif
+
 /* instead of including the entire netlink library here, 
  * we just implement partial functionality
  */

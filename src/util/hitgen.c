@@ -57,6 +57,7 @@
 #include <openssl/sha.h>        /* SHA1 algorithms              */
 #include <openssl/rand.h>       /* RAND_seed()                  */
 #include <openssl/err.h>        /* ERR_ functions               */
+#include <openssl/engine.h>
 /*
 #include <opensc/opensc.h>
 #include <opensc/pkcs15.h>
@@ -271,7 +272,6 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 	BIO *bp;
 	DSA *dsa=NULL;
 	RSA *rsa=NULL;
-	EVP_PKEY *pubkey = NULL;
 	EVP_PKEY *pkey = NULL;
  	char pin[12]="123456";
 	ENGINE *engine = NULL;
@@ -330,6 +330,7 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
        }
 
 /* NOT working, how to get smartcard certificate via ssl or can only be done vis open-sc? */
+	/* DM: Commented because it's not the way to get the smartcard cert anyway
         rc = SSL_get_peer_certificate(con);
 	if(rc)
         {
@@ -338,6 +339,7 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
            {
            }
         }
+	*/
     
         pkey=SSL_get_privatekey(con);
         if(pkey==NULL){

@@ -72,6 +72,9 @@
 #include "i3_hip.h"
 #endif
 
+#ifdef SMA_CRAWLER
+#include <hip/hip_cfg_api.h>
+#endif /* SMA_CRAWLER */
 
 /*
  * Forward declaration of local functions.
