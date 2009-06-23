@@ -1,5 +1,3 @@
-#include <opensc/opensc.h>
-#include <opensc/pkcs15.h>
 #include <openssl/engine.h>
 #include <hip/hip_cfg_ldap.h>
 #include "LDAPSearchResults.h"
@@ -570,10 +568,6 @@ int hipCfgLdap::loadCfg(struct hip_conf *hc)
   _hcfg = hc;
 
   if(_hcfg->use_smartcard){
-    if(getCertFromSc(cert_buf, sizeof(cert_buf)) != 0)
-      return -1;
-
-    _scCert = cert_buf;
 
     if(init_ssl_context() != 0)
       return -1;
@@ -868,270 +862,6 @@ int hipCfgLdap::getCertFromLdap(const char *url, char *buf, int size)
   return rc;
 }
 
-/*
-Reads certificate from pkcs15 smartcard with same ID as private key.
-Writes PEM encoded cert to file specified in outfile (if outfile != NULL),
-and to the bio_info output.
-returns: 0 on success, -1 on failure.
-*/
-int hipCfgLdap::read_sc_cert(struct sc_pkcs15_card *p15card, u8 *out_buf, int len)
-{
-    const char *fn_name = "read_sc_cert";
-
-    int rc;
-    struct sc_pkcs15_id id;
-    struct sc_pkcs15_object *obj;
-    u8 buf[2048];
-
-    id.len = SC_PKCS15_MAX_ID_SIZE;
-    sc_pkcs15_hex_string_to_id(_scPrivKeyID.c_str(), &id);
-    rc = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_CERT_X509, &obj, 1);
-    if (rc < 0)
-    {
-    	printf("%s: get object failed: %s\n", fn_name, sc_strerror(rc));
-	return -1;
-    }
-
-    struct sc_pkcs15_cert_info *cinfo = (struct sc_pkcs15_cert_info *)obj->data;
-    struct sc_pkcs15_cert *cert;
-
-    if (sc_pkcs15_compare_id(&id, &cinfo->id) != 1)
-    {
-    	printf("%s: Cert IDs do not match!\n", fn_name);
-	return -1;
-    }
-    /* read cert */
-    rc = sc_pkcs15_read_certificate(p15card, cinfo, &cert);
-    if (rc)
-    {
-    	printf("%s: Cert read failed: %s\n", fn_name, sc_strerror(rc));
-	return -1;
-    }
-
-    /* convert cert to base64 format */
-    rc = sc_base64_encode(cert->data, cert->data_len, buf, sizeof(buf), 64);
-    if (rc < 0)
-    {
-    	printf("%s: Base64 encoding failed: %s\n",
-		   fn_name, sc_strerror(rc));
-	return -1;
-    }
-
-    if(len<(int)(sizeof(buf) + 64)){
-	printf("%s: buffer too small", fn_name);
-        return -1;
-    }
-
-    sprintf((char *)out_buf,"-----BEGIN CERTIFICATE-----\n"
-			"%s" "-----END CERTIFICATE-----\n", buf);
-    return 0;
-}
-
-/*
-  verify_pin
-  Verifies PIN entry for PKCS15 smartcard
-  returns: 0 on success
-	 -1 on card errors
-	 -2 on invalid pin
-	 -3 on incorrect pin
-	 -4 on blocked card
-*/
-int hipCfgLdap::verify_pin(struct sc_pkcs15_card *p15card, const char *pincode)
-{
-    const char *fn_name = "verify_pin";
-
-    struct sc_pkcs15_object *key, *pin;
-    struct sc_pkcs15_id	id;
-    int rc;
-    char *usage_name = "signature";
-    int usage = SC_PKCS15_PRKEY_USAGE_SIGN;
-
-    if (pincode == NULL || *pincode == '\0')
-    	return -2;
-
-    printf("%s: Usage-name [hardcoded]: %s [0x%2X]\n",
-    	       fn_name, usage_name, usage);
-    sc_pkcs15_hex_string_to_id(_scPrivKeyID.c_str(), &id);
-    rc = sc_pkcs15_find_prkey_by_id_usage(p15card, NULL, usage, &key);
-    if (rc < 0)
-    {
-    	printf("%s: Unable to find private %s [0x%2X] key"
-			   " '%s': %s\n",
-			   fn_name, usage_name, usage, 
-			   _scPrivKeyID.c_str(), sc_strerror(rc));
-	return -1;
-    }
-
-    if (key->auth_id.len)
-    {
-    	rc = sc_pkcs15_find_pin_by_auth_id(p15card, &key->auth_id, &pin);
-	if (rc)
-	{
-	    printf("%s: Unable to find PIN code for private key: %s: %s\n",
-	    	       fn_name, _scPrivKeyID.c_str(), sc_strerror(rc));
-	    return -1;
-	}
-
-	rc = sc_pkcs15_verify_pin(p15card, 
-				  (struct sc_pkcs15_pin_info *)pin->data,
-				  (const u8 *)pincode,
-				  strlen(pincode));
-	if (rc)
-	{
-	    printf("%s: PIN code verification failed: rc: %d: %s\n",
-	    	       fn_name, rc, sc_strerror(rc));
-	    if (rc == SC_ERROR_PIN_CODE_INCORRECT)
-		return -3;
-	    else if (rc == SC_ERROR_AUTH_METHOD_BLOCKED)
-	    	return -4;
-	    else return -1;
-	}
-
-	printf("%s: PIN code correct\n", fn_name);
-    }
-    return 0;
-}
-
-/*
-  connect_card
-  Taken from opensc/util.c
-  Had to change slots[] to slot_ids[] because of QT conflict.
-  returns: 0 on success, -1 on failure.
-*/
-int hipCfgLdap::connect_card(struct sc_context *ctx, struct sc_card **cardp,
-		 int reader_id, int slot_id, int wait)
-{
-    const char *fn_name = "connect_card";
-    sc_reader_t *reader;
-    sc_card_t *card;
-    int r;
-
-    if (wait) {
-	struct sc_reader *readers[16];
-	int slot_ids[16];
-	int i, j, k, found;
-	unsigned int event;
-
-	for (i = k = 0; i < ctx->reader_count; i++) {
-	    if (reader_id >= 0 && reader_id != i)
-		continue;
-	    reader = ctx->reader[i];
-	    for (j = 0; j < reader->slot_count; j++, k++) {
-		readers[k] = reader;
-		slot_ids[k] = j;
-	    }
-	}
-
-	printf("%s: Waiting for card to be inserted...\n",
-		   fn_name);
-	r = sc_wait_for_event(readers, slot_ids, k,
-			SC_EVENT_CARD_INSERTED | SC_EVENT_CARD_REMOVED,
-			&found, &event, -1);
-	if (r < 0) {
-		printf("Error while waiting for card: %s\n",
-			   sc_strerror(r));
-		return -3;
-	}
-
-	reader = readers[found];
-	slot_id = slot_ids[found];
-    } else {
-	if (reader_id < 0)
-	    reader_id = 0;
-	if (ctx->reader_count == 0) {
-	    printf("%s: No smart card readers configured.\n",
-		       fn_name);
-	    return -1;
-	}
-	if (reader_id >= ctx->reader_count) {
-	    printf("%s: Illegal reader number. "
-		    "Only %d reader(s) configured.\n",
-		    fn_name, ctx->reader_count);
-	    return -1;
-	}
-
-	reader = ctx->reader[reader_id];
-	slot_id = 0;
-	if (sc_detect_card_presence(reader, 0) <= 0) {
-	    printf("%s: Card not present.\n", fn_name);
-	    return -3;
-	}
-    }
-
-    printf("%s: Connecting to card in reader %s...\n",
-    	       fn_name, reader->name);
-    if ((r = sc_connect_card(reader, slot_id, &card)) < 0) {
-	printf("%s: Failed to connect to card: %s\n",
-		   fn_name, sc_strerror(r));
-	return -1;
-    }
-
-    printf("%s: Using card driver %s.\n",
-    	       fn_name, card->driver->name);
-
-    if ((r = sc_lock(card)) < 0) {
-	printf("%s: Failed to lock card: %s\n",
-		   fn_name, sc_strerror(r));
-	sc_disconnect_card(card, 0);
-	return -1;
-    }
-
-    *cardp = card;
-    return 0;
-}
-
-int hipCfgLdap::getCertFromSc(char *cert_buf, int cert_buf_size)
-{
-  int rc;
-  struct sc_context *sc_ctx = NULL;
-  struct sc_card *card = NULL;
-  int reader = 0, slot = 0;
-  struct sc_pkcs15_card *p15card = NULL;
-
-  if(_hcfg->smartcard_pin==NULL)
-    _scPin = "123456";
-  else
-    _scPin = _hcfg->smartcard_pin;
- 
-  _scPrivKeyID = "45"; //get it from config?
- 
-  rc = sc_establish_context(&sc_ctx, "tcget-headless");
-  if(rc<0){
-      fprintf(stderr, "Error sc_establish_context.\n");
-      return -1;
-  }
-  rc = connect_card(sc_ctx, &card, reader, slot, 0);
-  if(rc<0){
-      fprintf(stderr, "Error calling connect_card.\n");
-      return -1;
-  }
-  rc = sc_pkcs15_bind(card, &p15card);
-  if(rc<0){
-      fprintf(stderr, "Error sc_pkcs15_bind.\n");
-      return -1;
-  }
-  rc = verify_pin(p15card, _scPin.c_str());
-  if(rc<0){
-      fprintf(stderr, "Error verify_pin.\n");
-      return -1;
-  }
-
-  memset(cert_buf, '\0', cert_buf_size);
-  rc = read_sc_cert(p15card, (u8 *)cert_buf, cert_buf_size);
-
-  if(rc<0){
-      fprintf(stderr, "Error read_sc_cert.\n");
-      return -1;
-  }
-
-  sc_pkcs15_unbind(p15card);
-  sc_unlock(card);
-  sc_disconnect_card(card, 0);
-  sc_release_context(sc_ctx);
-
-  return 0;
-}
-
 int hipCfgLdap::init_ssl_context()
 {
   ENGINE *e = NULL;
@@ -1141,14 +871,42 @@ int hipCfgLdap::init_ssl_context()
   /* Initialize OpenSC engine for OpenSSL */
     e = engine_init(_scPin.c_str());
     if (e == NULL) {
-            fprintf(stderr,"Error in engine init, restarting pcsc with ssl\n");
+            fprintf(stderr,"Error in engine init\n");
             return -1;
+    }
+
+    /* Get smartcard certificate */
+    struct {
+	const char * cert_id;
+	X509 * cert;
+    } parms;
+
+    parms.cert_id = "4:45";
+    parms.cert = NULL;
+    ENGINE_ctrl_cmd(e, "LOAD_CERT_CTRL", 0, &parms, NULL, 1);
+
+    if (parms.cert) {
+	/*
+	X509_NAME_print_ex_fp(stdout, X509_get_subject_name(parms.cert), 0,XN_FLAG_ONELINE);
+	printf("\n");
+	PEM_write_X509(stdout, parms.cert);
+	*/
+	BIO* bio = BIO_new(BIO_s_mem());
+	PEM_write_bio_X509(bio, parms.cert);
+	char *pem = NULL;
+	BIO_get_mem_data(bio,&pem);
+	//fprintf(stdout,"cert is length: %d\n%s\n", strlen(pem), pem);
+	_scCert = pem;
+	BIO_free(bio);
+
+    } else {
+        fprintf(stderr,"%s: Unable to read cert from card", fn_name);
     }
 
     /* Initialize OpenSSL context, sending PIN for smartcard */
     ctx = ssl_ctx_init(e, _scPin.c_str());
     if (ctx == NULL) {
-            fprintf(stderr,"Error in ssl init, bailing...\n");
+            fprintf(stderr,"Error in ssl init\n");
             return -1;
     }
 
@@ -1161,7 +919,7 @@ int hipCfgLdap::init_ssl_context()
 
     pkey=SSL_get_privatekey(_ssl);
     if(pkey==NULL){
-        fprintf(stderr,"Error call SSL_get_privatekey\n");
+        fprintf(stderr,"Error calling SSL_get_privatekey\n");
         return -1;
     }
    _rsa=EVP_PKEY_get1_RSA(pkey);
@@ -1415,16 +1173,27 @@ int hipCfgLdap::khi_encode_n(__u8 *in, int len, __u8 *out, int n)
 ENGINE *hipCfgLdap::engine_init(const char *pin)
 {
     const char *fn_name = "engine_init";
-    char opensc_engine[] = "/usr/lib/opensc/engine_opensc.so";
+    int pre_num = 4;
+
+    if (!_hcfg->smartcard_openssl_engine) 
+    	return NULL;
+
+    if (_hcfg->smartcard_openssl_module) {
+        pre_num = 5;
+    }
 
     ENGINE *e;
     const char *engine_id = "dynamic";
-    const char *pre_cmds[] = { "SO_PATH", opensc_engine,
-    			       "ID", "opensc",
+    const char *pre_cmds[pre_num * 2] = { "SO_PATH", _hcfg->smartcard_openssl_engine,
+    			       "ID", "pkcs11",
 			       "LIST_ADD", "1",
 			       "LOAD", NULL };
-    int pre_num = 4;
-    char *post_cmds[] = { "PIN", "123456"};
+    if (_hcfg->smartcard_openssl_module) {
+        pre_cmds[8] = "MODULE_PATH";
+	pre_cmds[9] = _hcfg->smartcard_openssl_module;
+    }
+
+    char *post_cmds[] = { "PIN", "123456"};  //Default PIN
     int post_num = 1;
 
     ENGINE_load_builtin_engines();

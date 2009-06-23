@@ -58,10 +58,6 @@
 #include <openssl/rand.h>       /* RAND_seed()                  */
 #include <openssl/err.h>        /* ERR_ functions               */
 #include <openssl/engine.h>
-/*
-#include <opensc/opensc.h>
-#include <opensc/pkcs15.h>
-*/
 #endif
 
 /* dummy globals to fix undefined variables when building */
@@ -293,10 +289,12 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 		return(-1);
 	}
 
+	/* TODO: If hitgen is regularly used with smartcard, the opensc engine and
+	 * opensc module should be parameterized in engine_init call */
         /* Initialize OpenSC engine for OpenSSL */
         engine = engine_init(pin);
         if (engine == NULL) {
-    	    fprintf(stderr,"Error in engine init, restarting pcsc with ssl\n");
+    	    fprintf(stderr,"Error in engine init\n");
     	    exit(1);
         }
     
@@ -314,33 +312,19 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
     	    exit(1);
         }
 
-       int i, j;
-       for(i=0; i<100; i++)
-	for(j=0; j<100; j++){
-	 char buff[100];
-	 sprintf(buff, "slot_%d-id_%d", i, j);
-//not working - ENGINE_ctrl_cmd
-        //parms.cert_id = "slot_0-id_45";
+        int slot, id;
+	char buff[100];
+	/* TODO: If hitgen is regularly used with smartcard, slot and id should be
+	 * parameterized */
+	slot=4;
+	id=45;
+	sprintf(buff, "%d:%d", slot, id);
         parms.cert_id = buff;
 	parms.cert = NULL;
 	rc=ENGINE_ctrl_cmd(engine, "LOAD_CERT_CTRL", 0, &parms, NULL, 1);
         if(parms.cert)
 	  printf("get cert - %s\n", buff);
-	  
-       }
 
-/* NOT working, how to get smartcard certificate via ssl or can only be done vis open-sc? */
-	/* DM: Commented because it's not the way to get the smartcard cert anyway
-        rc = SSL_get_peer_certificate(con);
-	if(rc)
-        {
-	   rc = SSL_get_verify_result(con);
-           if (rc == 0)
-           {
-           }
-        }
-	*/
-    
         pkey=SSL_get_privatekey(con);
         if(pkey==NULL){
             fprintf(stderr,"Error call SSL_get_privatekey\n");

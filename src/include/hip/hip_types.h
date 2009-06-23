@@ -877,6 +877,9 @@ struct hip_conf {
 	__u8 peer_certificate_required;
 	__u8 use_smartcard;		/* use smartcard for hostid, RSA/DSA sign and X.509 certificate */
 	char *smartcard_pin;		/* the pin */
+	char *smartcard_key_id;		/* the smartcard key to use */
+	char *smartcard_openssl_engine;	/* the smartcard openssl engine interface */
+	char *smartcard_openssl_module;	/* the smartcard openssl engine module */
 	__u8 use_local_known_identities; /* use local known_identities file or get it from a server such as Ldap */
 	char *cfg_serv_host;		/* e.g. ldaphost if using ldap for config server*/
 	__u32 cfg_serv_port;		/* e.g. ldap server port */

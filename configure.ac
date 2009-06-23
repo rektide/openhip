@@ -205,12 +205,6 @@ if test "$enable_sma_crawler" = "yes"; then
 		AC_MSG_ERROR([SMA crawler extensions requested but OpenSSL library not found.])
 	fi
 
-	AC_CHECK_LIB([opensc], [sc_connect_card])
-	if test "x$ac_cv_lib_opensc_sc_connect_card" = "xyes"; then
-		AC_MSG_RESULT([OpenSC smart card library found for SMA crawler extensions])
-	else
-		AC_MSG_ERROR([SMA crawler extensions requested but OpenSC smart card library not found.])
-	fi
 else
        want_sma_crawler=false
 fi

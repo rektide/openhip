@@ -1007,6 +1007,27 @@ int read_conf_file(char *filename)
 				log_(WARN, "Warning: HCNF.smartcard_pin malloc " "error!\n");
 			else
 				strcpy(HCNF.smartcard_pin, data);
+		/* Example: 4:45 for reader slot 4, key id 0x45 */
+		} else if (strcmp((char*)node->name, "smartcard_key_id")==0){
+			HCNF.smartcard_key_id = malloc(strlen(data)+1);
+			if (!HCNF.smartcard_key_id)
+				log_(WARN, "Warning: HCNF.smartcard_key_id malloc " "error!\n");
+			else
+				strcpy(HCNF.smartcard_key_id, data);
+		/* Example: /usr/lib64/engines/engine_pkcs11.so */
+		} else if (strcmp((char*)node->name, "smartcard_openssl_engine")==0){
+			HCNF.smartcard_openssl_engine = malloc(strlen(data)+1);
+			if (!HCNF.smartcard_openssl_engine)
+				log_(WARN, "Warning: HCNF.smartcard_openssl_engine malloc " "error!\n");
+			else
+				strcpy(HCNF.smartcard_openssl_engine, data);
+		/* Example: /usr/lib64/pkcs11/opensc-pkcs11.so */
+		} else if (strcmp((char*)node->name, "smartcard_openssl_module")==0){
+			HCNF.smartcard_openssl_module = malloc(strlen(data)+1);
+			if (!HCNF.smartcard_openssl_module)
+				log_(WARN, "Warning: HCNF.smartcard_openssl_module malloc " "error!\n");
+			else
+				strcpy(HCNF.smartcard_openssl_module, data);
 		} else if (strcmp((char*)node->name, "cfg_serv_host")==0){
 			HCNF.cfg_serv_host = malloc(strlen(data)+1);
 			if (!HCNF.cfg_serv_host)

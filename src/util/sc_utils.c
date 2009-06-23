@@ -2,9 +2,6 @@
 #include <openssl/engine.h>
 #include <openssl/err.h>
 
-#include <opensc/opensc.h>
-#include <opensc/pkcs15.h>
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
@@ -20,252 +17,6 @@
 #include <string.h>
 
 #include <hip/sc_utils.h>
-
-char scPrivKeyID[NAMELENGTH] = "45";
-
-/*******************************************************************/
-/*  connect_card2
-
-Taken from opensc/util.c
-Had to change slots[] to slot_ids[] because of QT conflict.
-
-returns: 0 on success, -1 on failure.
-*/
-int connect_card2(struct sc_context *ctx, struct sc_card **cardp,
-		 int reader_id, int slot_id, int wait)
-{
-    const char *fn_name = "connect_card2";
-    sc_reader_t *reader;
-    sc_card_t *card;
-    int r;
-
-    if (wait) {
-	struct sc_reader *readers[16];
-	int slot_ids[16];
-	int i, j, k, found;
-	unsigned int event;
-
-	for (i = k = 0; i < ctx->reader_count; i++) {
-	    if (reader_id >= 0 && reader_id != i)
-		continue;
-	    reader = ctx->reader[i];
-	    for (j = 0; j < reader->slot_count; j++, k++) {
-		readers[k] = reader;
-		slot_ids[k] = j;
-	    }
-	}
-
-	printf("%s: Waiting for card to be inserted...\n",
-		   fn_name);
-	r = sc_wait_for_event(readers, slot_ids, k,
-			SC_EVENT_CARD_INSERTED | SC_EVENT_CARD_REMOVED,
-			&found, &event, -1);
-	if (r < 0) {
-		printf("Error while waiting for card: %s\n",
-			   sc_strerror(r));
-		return -3;
-	}
-
-	reader = readers[found];
-	slot_id = slot_ids[found];
-    } else {
-	if (reader_id < 0)
-	    reader_id = 0;
-	if (ctx->reader_count == 0) {
-	    printf("%s: No smart card readers configured.\n",
-		       fn_name);
-	    return -1;
-	}
-	if (reader_id >= ctx->reader_count) {
-	    printf("%s: Illegal reader number. "
-		    "Only %d reader(s) configured.\n",
-		    fn_name, ctx->reader_count);
-	    return -1;
-	}
-
-	reader = ctx->reader[reader_id];
-	slot_id = 0;
-	if (sc_detect_card_presence(reader, 0) <= 0) {
-	    printf("%s: Card not present.\n", fn_name);
-	    return -3;
-	}
-    }
-
-    printf("%s: Connecting to card in reader %s...\n",
-    	       fn_name, reader->name);
-    if ((r = sc_connect_card(reader, slot_id, &card)) < 0) {
-	printf("%s: Failed to connect to card: %s\n",
-		   fn_name, sc_strerror(r));
-	return -1;
-    }
-
-    printf("%s: Using card driver %s.\n",
-    	       fn_name, card->driver->name);
-
-    if ((r = sc_lock(card)) < 0) {
-	printf("%s: Failed to lock card: %s\n",
-		   fn_name, sc_strerror(r));
-	sc_disconnect_card(card, 0);
-	return -1;
-    }
-
-    *cardp = card;
-    return 0;
-}
-
-/*******************************************************************/
-/*  verify_pin
-
-Verifies PIN entry for PKCS15 smartcard
-
-returns: 0 on success
-	 -1 on card errors
-	 -2 on invalid pin
-	 -3 on incorrect pin
-	 -4 on blocked card
-*/
-int verify_pin(struct sc_pkcs15_card *p15card, const char *pincode)
-{
-    const char *fn_name = "verify_pin";
-
-    struct sc_pkcs15_object *key, *pin;
-    struct sc_pkcs15_id	id;
-    int rc;
-    char usage_name[NAMELENGTH] = "signature";
-    int usage = SC_PKCS15_PRKEY_USAGE_SIGN;
-
-    if (pincode == NULL || *pincode == '\0')
-    	return -2;
-
-    if (strlen(pincode) > MAX_PINSIZE)
-    	return -2;
-
-    printf("%s: Usage-name [hardcoded]: %s [0x%2X]\n",
-    	       fn_name, usage_name, usage);
-    sc_pkcs15_hex_string_to_id(scPrivKeyID, &id);
-    rc = sc_pkcs15_find_prkey_by_id_usage(p15card, NULL, usage, &key);
-    if (rc < 0)
-    {
-    	printf("%s: Unable to find private %s [0x%2X] key"
-			   " '%s': %s\n",
-			   fn_name, usage_name, usage, 
-			   scPrivKeyID, sc_strerror(rc));
-	return -1;
-    }
-
-    if (key->auth_id.len)
-    {
-    	rc = sc_pkcs15_find_pin_by_auth_id(p15card, &key->auth_id, &pin);
-	if (rc)
-	{
-	    printf("%s: Unable to find PIN code for private key: %s: %s\n",
-	    	       fn_name, scPrivKeyID, sc_strerror(rc));
-	    return -1;
-	}
-
-	rc = sc_pkcs15_verify_pin(p15card, 
-				  (struct sc_pkcs15_pin_info *)pin->data,
-				  (const u8 *)pincode,
-				  strlen(pincode));
-	if (rc)
-	{
-	    printf("%s: PIN code verification failed: rc: %d: %s\n",
-	    	       fn_name, rc, sc_strerror(rc));
-	    if (rc == SC_ERROR_PIN_CODE_INCORRECT)
-		return -3;
-	    else if (rc == SC_ERROR_AUTH_METHOD_BLOCKED)
-	    	return -4;
-	    else return -1;
-	}
-
-	printf("%s: PIN code correct\n", fn_name);
-    }
-    return 0;
-}
-
-/*******************************************************************/
-/*  read_sc_cert
-
-Reads certificate from pkcs15 smartcard with same ID as private key.
-
-Writes PEM encoded cert to file specified in outfile (if outfile != NULL),
-and to the bio_info output.
-
-returns: 0 on success, -1 on failure.
-*/
-int read_sc_cert(struct sc_pkcs15_card *p15card, char *outfile, u8 *out_buf)
-{
-    const char *fn_name = "read_sc_cert";
-
-    int rc;
-    struct sc_pkcs15_id id;
-    struct sc_pkcs15_object *obj;
-    FILE *certfile;
-    u8 buf[2048];
-
-    id.len = SC_PKCS15_MAX_ID_SIZE;
-    sc_pkcs15_hex_string_to_id(scPrivKeyID, &id);
-    rc = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_CERT_X509, &obj, 1);
-    if (rc < 0)
-    {
-    	printf("%s: get object failed: %s\n", fn_name, sc_strerror(rc));
-	return -1;
-    }
-
-    struct sc_pkcs15_cert_info *cinfo = (struct sc_pkcs15_cert_info *)obj->data;
-    struct sc_pkcs15_cert *cert;
-
-    if (sc_pkcs15_compare_id(&id, &cinfo->id) != 1)
-    {
-    	printf("%s: Cert IDs do not match!\n", fn_name);
-	return -1;
-    }
-    /* read cert */
-    rc = sc_pkcs15_read_certificate(p15card, cinfo, &cert);
-    if (rc)
-    {
-    	printf("%s: Cert read failed: %s\n", fn_name, sc_strerror(rc));
-	return -1;
-    }
-
-    /* convert cert to base64 format */
-    rc = sc_base64_encode(cert->data, cert->data_len, buf, sizeof(buf), 64);
-    if (rc < 0)
-    {
-    	printf("%s: Base64 encoding failed: %s\n",
-		   fn_name, sc_strerror(rc));
-	return -1;
-    }
-
-    /* write cert to file if a file is specified */
-    if (outfile != NULL)
-    {
-	if ((certfile = fopen(outfile, "w")) == NULL)
-	{
-	    printf("%s: Can't open file %s\n", fn_name, outfile);
-	    return -1;
-	}
-	fprintf(certfile, "-----BEGIN CERTIFICATE-----\n"
-			 "%s"
-			 "-----END CERTIFICATE-----\n",
-			 buf);
-	fclose(certfile);
-    }
-
-    sprintf((char *)out_buf,"-----BEGIN CERTIFICATE-----\n"
-			"%s"
-			"-----END CERTIFICATE-----\n",
-			buf);
-    return 0;
-}
-
-int 
-pcscStop()
-{
-    int rc = 0;
-    rc = system("/etc/init.d/pcscd stop");
-    return rc;
-}
 
 int load_engine_fn(ENGINE *e, const char *engine_id,
 		   const char **pre_cmds, int pre_num,
@@ -334,15 +85,17 @@ int load_engine_fn(ENGINE *e, const char *engine_id,
 ENGINE *engine_init(char *pin)
 {
     const char *fn_name = "engine_init";
-    char opensc_engine[NAMELENGTH] = "/usr/lib/opensc/engine_opensc.so";
+    char opensc_engine[NAMELENGTH] = "/usr/lib64/engines/engine_pkcs11.so";
+    char opensc_module[NAMELENGTH] = "/usr/lib64/pkcs11/opensc-pkcs11.so";
 
     ENGINE *e;
     const char *engine_id = "dynamic";
     const char *pre_cmds[] = { "SO_PATH", opensc_engine,
-    			       "ID", "opensc",
+    			       "ID", "pkcs11",
 			       "LIST_ADD", "1",
-			       "LOAD", NULL };
-    int pre_num = 4;
+			       "LOAD", NULL,
+			       "MODULE_PATH", opensc_module};
+    int pre_num = 5;
     char *post_cmds[] = { "PIN", "123456"};
     int post_num = 1;
 
@@ -433,7 +186,7 @@ SSL_CTX *ssl_ctx_init(ENGINE *e, const char *pin)
     /* Allow the server cert to have a cert chain no more than 3 certs deep */
     SSL_CTX_set_verify_depth(ctx, 3);
 
-    scPrivKey =  ENGINE_load_private_key(e, "45", NULL, NULL);
+    scPrivKey =  ENGINE_load_private_key(e, "4:45", NULL, NULL);
     if (!scPrivKey)
     {
     	printf("%s: Error loading smartcard private key\n", fn_name);
