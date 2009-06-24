@@ -6,6 +6,7 @@
 
 /* hip ACL */
 int (*hipcfg_init_p)(struct hip_conf *hc) = NULL;
+int (*hipcfg_close_p)() = NULL;
 int (*hipcfg_allowed_peers_p)(const hip_hit hit1, const hip_hit hit2) = NULL;
 int (*hipcfg_peers_allowed_p)(hip_hit *hits1, hip_hit *hits2, int max_cnt) = NULL;
 
@@ -17,10 +18,10 @@ int (*hipcfg_getLlipByEndbox_p)(const struct sockaddr *eb, struct sockaddr *llip
 int (*hipcfg_getLegacyNodesByEndbox_p)(const struct sockaddr *eb, struct sockaddr_storage *hosts, int size) = NULL;
 
 int (*hipcfg_verifyCert_p)(const char *url, const hip_hit hit) = NULL;
-int (*hipcfg_getLocalCertUrl_p)(char *url, int size) = NULL;
+int (*hipcfg_getLocalCertUrl_p)(char *url, unsigned int size) = NULL;
 int (*hipcfg_postLocalCert_p)(const char *hit) = NULL;
 hi_node *(*hipcfg_getMyHostId_p)() = NULL;
-int (*hipcfg_getPeerNodes_p)(struct peer_node *peerNodes, int max_count) = NULL;
+int (*hipcfg_getPeerNodes_p)(struct peer_node *peerNodes, unsigned int max_count) = NULL;
 
 int hipcfg_init(char *dlname, struct hip_conf *hc)
 {
@@ -39,6 +40,14 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
    return -1;
   }
   printf("loading %s succeed.\n", hipcfg_init_fn);
+
+  hipcfg_close_p=dlsym(module, hipcfg_close_fn);
+  if(hipcfg_close_p==NULL)
+  {
+   fprintf(stderr, "error loading function %s: %s\n", hipcfg_close_fn, dlerror());
+   return -1;
+  }
+  printf("loading %s succeed.\n", hipcfg_close_fn);
 
   hipcfg_allowed_peers_p = dlsym(module, hipcfg_allowed_peers_fn);
   if(hipcfg_allowed_peers_p==NULL)
@@ -121,6 +130,15 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
   return (*hipcfg_init_p)(hc);
 }
 
+int hipcfg_close()
+{
+  if(hipcfg_close_p==NULL){
+    fprintf(stderr, "%s not initialized\n", hipcfg_close_fn);
+    return 0;
+  }
+  return (*hipcfg_close_p)();
+}
+
 int hipcfg_allowed_peers(const hip_hit hit1, const hip_hit hit2)
 {
   if(hipcfg_allowed_peers_p==NULL){
@@ -175,7 +193,7 @@ int hipcfg_verifyCert(const char *url, const hip_hit hit)
   return (*hipcfg_verifyCert_p)(url, hit);
 }
 
-int hipcfg_getLocalCertUrl(char *url, int size)
+int hipcfg_getLocalCertUrl(char *url, unsigned int size)
 {
   if(hipcfg_getLocalCertUrl_p == NULL) {
     fprintf(stderr, "%s not initialized\n", hipcfg_getLocalCertUrl_fn);
@@ -202,7 +220,7 @@ hi_node *hipcfg_getMyHostId()
   return (*hipcfg_getMyHostId_p)();
 }
 
-int hipcfg_getPeerNodes(struct peer_node *peerNodes, int max_count)
+int hipcfg_getPeerNodes(struct peer_node *peerNodes, unsigned int max_count)
 {
   if(hipcfg_getPeerNodes_p == NULL) {
     fprintf(stderr, "%s not initialized\n", hipcfg_getPeerNodes_fn);

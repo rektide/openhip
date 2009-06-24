@@ -39,9 +39,6 @@
 /* Define to 1 if you have the `ipsec' library (-lipsec). */
 #undef HAVE_LIBIPSEC
 
-/* Define to 1 if you have the `opensc' library (-lopensc). */
-#undef HAVE_LIBOPENSC
-
 /* Define to 1 if you have the `pthread' library (-lpthread). */
 #undef HAVE_LIBPTHREAD
 

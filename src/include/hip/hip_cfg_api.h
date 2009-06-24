@@ -13,6 +13,12 @@
 extern int (*hipcfg_init_p)(struct hip_conf *hc);
 extern int hipcfg_init(char *dlname, struct hip_conf *hc);
 
+/* Input: none
+ *   Return: 0 if succeed, non-zero if error.
+ */
+#define hipcfg_close_fn "hipcfg_close"
+extern int (*hipcfg_close_p)();
+extern int hipcfg_close();
 
 /* Input: the two peer hosts identified by their HITs
  * Return: 1 if a HIP base exchange is allowed between the peers.
@@ -97,8 +103,8 @@ extern int hipcfg_verifyCert(const char *url, const hip_hit hit1);
  * Return -1 if error,  0 if succeeded
  */
 #define hipcfg_getLocalCertUrl_fn "hipcfg_getLocalCertUrl"
-extern int (*hipcfg_getLocalCertUrl_p)(char *url, int size);
-extern int hipcfg_getLocalCertUrl(char *url, int size);
+extern int (*hipcfg_getLocalCertUrl_p)(char *url, unsigned int size);
+extern int hipcfg_getLocalCertUrl(char *url, unsigned int size);
 
 /* Post the certificate that holds host identity (public key) in PEM format indexed by hit
  * that is derived from the public key
@@ -127,7 +133,7 @@ extern hi_node *hipcfg_getMyHostId();
 */
 
 #define hipcfg_getPeerNodes_fn "hipcfg_getPeerNodes"
-extern int (*hipcfg_getPeerNodes_p)(struct peer_node *peerNodes, int max_count);
-extern int hipcfg_getPeerNodes(struct peer_node *peerNodes, int max_count);
+extern int (*hipcfg_getPeerNodes_p)(struct peer_node *peerNodes, unsigned int max_count);
+extern int hipcfg_getPeerNodes(struct peer_node *peerNodes, unsigned int max_count);
 
 #endif

@@ -162,7 +162,7 @@ typedef enum {
 #endif
 
 /* HI (signature) algorithms  */
-enum {
+typedef enum {
 	HI_ALG_RESERVED,
 	HI_ALG_DSA = 3,
 	HI_ALG_RSA = 5,
@@ -172,7 +172,7 @@ enum {
 			(a==HI_ALG_RSA) ? "RSA" : "UNKNOWN")
 
 /* HI Domain Identifier types */
-enum {
+typedef enum {
 	DIT_NONE,	/* none included */
 	DIT_FQDN,	/* Fully Qualified Domain Name, in binary format */
 	DIT_NAI,	/* Network Access Identifier, binary, login@FQDN */

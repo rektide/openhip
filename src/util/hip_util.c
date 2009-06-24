@@ -72,6 +72,9 @@
 #endif /* __WIN32__ */
 #include <hip/hip_dns.h>	/* DNS headers			*/
 #endif
+#ifdef SMA_CRAWLER
+#include <hip/hip_cfg_api.h>
+#endif
 
 #include <libxml/tree.h>
 
@@ -3055,6 +3058,8 @@ void hip_exit(int signal)
 	deinit_crypto();
 #ifdef SMA_CRAWLER
         system("/usr/local/etc/hip/bridge_down.sh");
+	//Allow config library to perform any shutdown ops
+	hipcfg_close();
 #endif
 #ifdef __UMH__
 #ifndef __WIN32__
