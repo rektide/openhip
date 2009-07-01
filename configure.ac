@@ -26,6 +26,7 @@ AC_PREREQ(2.59)
 AC_INIT(OpenHIP, 0.6, [openhip-developers@lists.sourceforge.net], openhip)
 AC_CONFIG_SRCDIR([src/protocol/hip_main.c])
 AC_CONFIG_AUX_DIR(config)
+AC_CONFIG_MACRO_DIR(config)
 AM_CONFIG_HEADER([config.h])
 AM_INIT_AUTOMAKE
 
@@ -37,8 +38,11 @@ CFLAGS="$CFLAGS -O3 -Werror -D_GNU_SOURCE"
 sysconfdir=$sysconfdir/hip
 
 # Checks for programs.
+AC_PROG_CXX
 AC_PROG_AWK
 AC_PROG_CC
+AC_PROG_CPP
+AC_PROG_LIBTOOL
 AM_PROG_CC_C_O
 
 # Checks for libraries.
@@ -85,7 +89,6 @@ AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([bzero gethostbyname gethostname gettimeofday inet_ntoa memmove memset pow select socket strchr strerror strncasecmp strrchr strstr uname])
 
 CFLAGS="$CFLAGS -Wall -DCONFIG_HIP -DSYSCONFDIR=\"\\\"\$(sysconfdir)\\\"\" -DLOCALSTATEDIR=\"\\\"\$(localstatedir)\\\"\"  "
-# -Wno-unused
 
 AC_MSG_CHECKING(if --enable-kernel-support option is specified)
 AC_ARG_ENABLE(kernel-support,
@@ -97,7 +100,7 @@ AC_ARG_ENABLE(kernel-support,
 
 AC_MSG_CHECKING(if --enable-sma-crawler option is specified)
 AC_ARG_ENABLE(sma-crawler,
-	[  --enable-sma-crawler      enable SMA crawler extensions],
+	[  --enable-sma-crawler=config  enable SMA crawler with configuration via {files, LDAP, IFMAP}],
 	[enable_sma_crawler=$enable_sma_crawler
 	 AC_MSG_RESULT(yes)],
 	[enable_sma_crawler=default
@@ -195,14 +198,35 @@ fi
 # configure option to define SMA_CRAWLER
 ################################################################################
 if test "$enable_sma_crawler" = "yes"; then
+	enable_sma_crawler="files" ;# default value
+fi
+if test "$enable_sma_crawler" = "files" -o "$enable_sma_crawler" = "LDAP" -o "$enable_sma_crawler" = "IFMAP"; then
 	want_sma_crawler=true
+	want_sma_crawler_files_cfg=false
+	want_sma_crawler_LDAP_cfg=false
+	want_sma_crawler_IFMAP_cfg=false
 	CFLAGS=" -DSMA_CRAWLER $CFLAGS"
 
 	AC_CHECK_LIB([ssl], [SSL_library_init])
 	if test "x$ac_cv_lib_ssl_SSL_library_init" = "xyes"; then
-		AC_MSG_RESULT([OpenSSL library found for SMA crawler extensions])
+		AC_MSG_RESULT(
+			[OpenSSL library found for SMA crawler extensions])
 	else
-		AC_MSG_ERROR([SMA crawler extensions requested but OpenSSL library not found.])
+		AC_MSG_ERROR(
+			[SMA crawler extensions requested but OpenSSL library not found.])
+	fi
+
+	if test "$enable_sma_crawler" = "files"; then
+		AC_MSG_RESULT([Will use file-based configuration library libhipcfgfiles.so])
+		want_sma_crawler_files_cfg=true
+	elif test "$enable_sma_crawler" = "LDAP"; then
+		AC_CHECK_LIB([ldap],ldap_add_ext,,AC_MSG_ERROR([LDAP-based configuration library requested but OpenLDAP development libraries not found. Aborting.]))
+		AC_CHECK_LIB([ldapcpp],main,,AC_MSG_ERROR([LDAP-based configuration library requested but LDAP C++ library not found. Aborting]))
+		AC_MSG_RESULT([Will use LDAP-based configuration library libhipcfgldap.so])
+		want_sma_crawler_LDAP_cfg=true
+	elif test "$enable_sma_crawler" = "IFMAP"; then
+		AC_MSG_RESULT([Will use IFMAP-based configuration library libhipcfgmap.so])
+		want_sma_crawler_IFMAP_cfg=true
 	fi
 
 else
@@ -238,13 +262,19 @@ esac
 # Automake conditionals
 ################################################################################
 AM_CONDITIONAL(WANT_KERNEL, test x$want_kernel = xtrue)
-AM_CONDITIONAL(WANT_SMA_CRAWLER, test x$want_sma_crawler = xtrue)
 AM_CONDITIONAL(WANT_MOBILE_ROUTER, test x$want_mobile_router = xtrue)
 AM_CONDITIONAL(WANT_OSX, test x$want_osx = xtrue)
+AM_CONDITIONAL(WANT_SMA_CRAWLER, test x$want_sma_crawler = xtrue)
+AM_CONDITIONAL(WANT_SMA_CRAWLER_FILES_CFG, 
+	test x$want_sma_crawler_files_cfg = xtrue)
+AM_CONDITIONAL(WANT_SMA_CRAWLER_LDAP_CFG,
+	test x$want_sma_crawler_LDAP_cfg = xtrue)
+AM_CONDITIONAL(WANT_SMA_CRAWLER_IFMAP_CFG,
+	test x$want_sma_crawler_IFMAP_cfg = xtrue)
 
 #AC_SUBST(WANT_KERNEL, $want_kernel)
 
-PKG_CHECK_MODULES(HIP, libxml-2.0)
+PKG_CHECK_MODULES(libxml2, libxml-2.0)
 
 AC_CONFIG_FILES([src/include/hip/hip_version.h
 		 src/linux/openhip.spec
@@ -253,6 +283,7 @@ AC_CONFIG_FILES([src/include/hip/hip_version.h
 		 docs/Doxyfile
 		 Makefile
                  src/Makefile
+		 src/util/Makefile
 		 docs/Makefile])
 AC_OUTPUT
 
@@ -276,6 +307,7 @@ AC_MSG_NOTICE([ ])
 
 if test $want_sma_crawler = true; then
 	AC_MSG_NOTICE([    - building HIP SMA crawler extensions])
+	AC_MSG_NOTICE([    	- will use $enable_sma_crawler-based configuration library])
 else
 	AC_MSG_NOTICE([    - NOT building HIP SMA crawler extensions])
 fi

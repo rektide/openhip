@@ -1028,6 +1028,14 @@ int read_conf_file(char *filename)
 				log_(WARN, "Warning: HCNF.smartcard_openssl_module malloc " "error!\n");
 			else
 				strcpy(HCNF.smartcard_openssl_module, data);
+#ifdef SMA_CRAWLER
+		/* Example: /usr/local/lib/libhipcfgldap.so */
+		} else if (strcmp((char*)node->name, "cfg_library")==0){
+			HCNF.cfg_library = malloc(strlen(data)+1);
+			if (!HCNF.cfg_library)
+				log_(WARN, "Warning: HCNF.cfg_library malloc " "error!\n");
+			else
+				strcpy(HCNF.cfg_library, data);
 		} else if (strcmp((char*)node->name, "cfg_serv_host")==0){
 			HCNF.cfg_serv_host = malloc(strlen(data)+1);
 			if (!HCNF.cfg_serv_host)
@@ -1054,6 +1062,7 @@ int read_conf_file(char *filename)
 				log_(WARN, "Warning: HCNF.cfg_serv_login_pwd malloc " "error!\n");
 			else
 				strcpy(HCNF.cfg_serv_login_pwd, data);
+#endif
                 } else if (strlen((char *)node->name)) {
                         log_(WARN, "Warning: unknown configuration option '%s' "
                                 "was ignored.\n", node->name);

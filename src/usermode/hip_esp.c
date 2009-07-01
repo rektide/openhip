@@ -193,7 +193,8 @@ int read_private_hosts() {
   }
   while(!feof(fp)) {
           str[0] = 0;
-          fgets(&str[0],255,fp);
+          if (fgets(&str[0],255,fp) == NULL)
+		  break;
           if(isalnum(str[0])) {
                   if(str[strlen(str)-1] == '\n')
                           str[strlen(str)-1] = '\0';

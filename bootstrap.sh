@@ -11,8 +11,10 @@ if [ `uname` = Darwin ]; then
 fi;
 
 echo "Running aclocal..." && aclocal $EXTRA_INC \
+    && echo "Running libtoolize..." && libtoolize --force --copy --automake \
     && echo "Running automake..." && automake --add-missing --copy --foreign \
     && echo "Running autoconf..." && autoconf
 
 echo ""
 echo "You are now ready to run \"./configure\"."
+

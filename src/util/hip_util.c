@@ -3057,7 +3057,7 @@ void hip_exit(int signal)
 	xmlCleanupParser();
 	deinit_crypto();
 #ifdef SMA_CRAWLER
-        system("/usr/local/etc/hip/bridge_down.sh");
+        err = system("/usr/local/etc/hip/bridge_down.sh");
 	//Allow config library to perform any shutdown ops
 	hipcfg_close();
 #endif

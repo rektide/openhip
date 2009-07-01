@@ -1,3 +1,11 @@
+Dependencies:
+libldap-2.x
+libldap2-dev
+libldapcpp
+libldapcpp-dev
+libsasl2-dev
+
+
 1. openldap-2.3.43.tar.gz - only contrib/ldapc++ is used for creating C++ libraries and header files.
    and they are used for compiling hip ldap configuration DDL
 2. install rpm packages for ldap server (tested on ebics):

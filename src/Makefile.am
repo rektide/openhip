@@ -62,14 +62,14 @@ hitgen_CFLAGS += -D__MACOSX__
 SRC_USERMODE += mac/hip_mac.c
 endif
 
-INCLUDES = -I./include @HIP_CFLAGS@
-LDADD = @HIP_LIBS@ 
+INCLUDES = -I./include @libxml2_CFLAGS@
+LDADD = @libxml2_LIBS@ 
 
 # SMA craweler support
 if WANT_SMA_CRAWLER
 SRC_UTIL +=	util/cfg-api/hip_cfg_api.c
 SRC_HITGEN +=   util/sc_utils.c
-# SUBDIRS = util/cfg-ldap
+SUBDIRS = util
 endif
 
 # i3 support

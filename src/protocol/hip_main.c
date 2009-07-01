@@ -446,8 +446,13 @@ int main_loop(int argc, char **argv)
 	my_hi_head = NULL;
 #ifdef SMA_CRAWLER
 	hi_node *my_hi;
-	if (hipcfg_init("libhipcfg.so", &HCNF)) {
-		log_(WARN, "Error loading libhipcfg.so\n");
+	if (!HCNF.cfg_library) {
+		log_(ERR, "Must specify <cfg_library> in hip.conf\n");
+		goto hip_main_error_exit;
+	}
+	if (hipcfg_init(HCNF.cfg_library, &HCNF)) {
+		log_(ERR, "Error loading configuration library: %s\n",
+			HCNF.cfg_library);
 		goto hip_main_error_exit;
 	}
 	if (HCNF.use_smartcard) {
@@ -533,7 +538,8 @@ int main_loop(int argc, char **argv)
 	addr_to_str(SA(lsi), lsi_s, INET_ADDRSTRLEN);
 	char cmd[64];
 	sprintf(cmd, "/usr/local/etc/hip/bridge_up.sh %s", lsi_s);
-	system(cmd);
+	ret = system(cmd);
+	log_(NORM, "bridge_up.sh returns %d\n", ret);
 	last_time = time(NULL);
 	ret = getrlimit(RLIMIT_CORE, &limits);
 	log_(NORM, "getrlimit returns %d\n", ret);

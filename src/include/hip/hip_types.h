@@ -881,11 +881,14 @@ struct hip_conf {
 	char *smartcard_openssl_engine;	/* the smartcard openssl engine interface */
 	char *smartcard_openssl_module;	/* the smartcard openssl engine module */
 	__u8 use_local_known_identities; /* use local known_identities file or get it from a server such as Ldap */
-	char *cfg_serv_host;		/* e.g. ldaphost if using ldap for config server*/
+#ifdef SMA_CRAWLER
+	char *cfg_library;		/* filename of configuration library */
+	char *cfg_serv_host;		/* e.g. ldap or ifmap server */
 	__u32 cfg_serv_port;		/* e.g. ldap server port */
 	char *cfg_serv_basedn;          /* e.g. ldap base dn */
 	char *cfg_serv_login_id;        /* e.g. ldap binddn */
 	char *cfg_serv_login_pwd;	/* e.g. ldap bindpw */
+#endif
 	char conf_filename[255];
 	char my_hi_filename[255];
 	char known_hi_filename[255];
