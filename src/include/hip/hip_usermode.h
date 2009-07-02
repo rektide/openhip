@@ -12,7 +12,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- *  hip_service.h
+ *  hip_usermode.h
  *
  *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  * 
@@ -66,6 +66,12 @@ int pfkey_send_acquire(struct sockaddr *target);
  */
 #ifndef CONFIG_HIP
 #define CONFIG_HIP
+#endif
+
+#ifdef SMA_CRAWLER
+#define HIP_TAP_INTERFACE_MTU 1500
+#else
+#define HIP_TAP_INTERFACE_MTU 1400
 #endif
 
 #define DNS_PORT 53

@@ -191,11 +191,7 @@ post_init_tap_retry:
 #endif
 	/* Set the link MTU and flag link UP
 	 */
-#ifdef SMA_CRAWLER
-       if (set_link_params(tap_dev_name, 1500) < 0) {
-#else
-	if (set_link_params(tap_dev_name, 1400) < 0) {
-#endif
+	if (set_link_params(tap_dev_name, HIP_TAP_INTERFACE_MTU) < 0) {
 		printf("Error setting TAP link MTU, up for %s\n", tap_dev_name);
 	}
 

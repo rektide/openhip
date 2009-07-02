@@ -831,8 +831,8 @@ struct hip_opt {
 	int rvs;
 	int entries;
 	int stun;
-  int mn;
-  int mr;
+	int mn;
+	int mr;
 };
 
 /*

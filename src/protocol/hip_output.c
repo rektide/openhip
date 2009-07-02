@@ -386,8 +386,8 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 	/* certificate */
 	location += build_tlv_cert(&data[location]);
 
-		/* reg_info */
-		location += build_tlv_reg_info(data, location);
+	/* reg_info */
+	location += build_tlv_reg_info(data, location);
 
 	/* if ECHO_REQUEST is needed, put it here */
 
@@ -782,13 +782,14 @@ int hip_send_R2(hip_assoc *hip_a)
 	location = eight_byte_align(location);
 
 	if (hip_a->reg_requested) {
-		location += build_tlv_reg_resp(buff, location, hip_a->reg_requested);
-		location += build_tlv_reg_failed(buff, location, hip_a->reg_requested);
-        location = eight_byte_align(location);
+		location += build_tlv_reg_resp(buff, location,
+				hip_a->reg_requested);
+		location += build_tlv_reg_failed(buff, location,
+				hip_a->reg_requested);
+	        location = eight_byte_align(location);
 	}
 
-        /* reg_required */
-        /* not defined yet */
+	/* reg_required not defined yet */
 
 	/* HMAC_2 */
 	hi_location = location; /* temporarily add host_id parameter */
