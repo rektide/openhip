@@ -50,8 +50,8 @@ hitgen_CFLAGS = -DHITGEN -D__MACOSX__
 hipstatus_CFLAGS = -D__UMH__ -D__MACOSX__
 #endif
 
-INCLUDES = -I./include @HIP_CFLAGS@
-LDADD = @HIP_LIBS@ 
+INCLUDES = -I./include @libxml2_CFLAGS@
+LDADD = @libxml2_LIBS@ 
 
 # different targets
 hitgen_SOURCES = $(SRC_HITGEN)
