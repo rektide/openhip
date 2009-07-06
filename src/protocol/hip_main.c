@@ -352,6 +352,13 @@ int main_loop(int argc, char **argv)
 				exit(1);
 			}
 			if (strcmp(*argv, "-mr") == 0) {
+#ifndef MOBILE_ROUTER
+				log_(ERR, "Error: mobile router option specifie"
+					"d but daemon has not been configured a"
+					"nd built with --enable-mobile-router "
+					"option.\n");
+				exit(1);
+#endif
 				OPT.mr = TRUE;
 				HCNF.reg_types[HCNF.n_reg_types++] = REG_MR;
 			} else {
