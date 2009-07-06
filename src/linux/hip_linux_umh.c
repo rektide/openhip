@@ -369,16 +369,6 @@ void init_hip(int ac, char **av)
 			exit(-1);
 		}
 	}
-#ifdef MOBILE_ROUTER
-	if (is_mobile_router()) {
-		/* XXX command-line opts may not be loaded yet */
-		pthread_mutex_init(&hip_mr_client_mutex, NULL);
-		if (pthread_create(&mr_thrd, NULL, hip_mobile_router, NULL)) {
-			printf("Error creating Mobile Router thread.\n");
-			exit(-1);
-		}
-	}
-#endif /* MOBILE_ROUTER */
 
 	/*
 	 * Thread to handle keep-alives for UDP-ESP sockets
@@ -398,6 +388,16 @@ void init_hip(int ac, char **av)
 
 
 	hip_sleep(1); /* allow thread start before printing message */
+#ifdef MOBILE_ROUTER
+	if (is_mobile_router()) {
+		/* XXX command-line opts may not be loaded yet */
+		pthread_mutex_init(&hip_mr_client_mutex, NULL);
+		if (pthread_create(&mr_thrd, NULL, hip_mobile_router, NULL)) {
+			printf("Error creating Mobile Router thread.\n");
+			exit(-1);
+		}
+	}
+#endif /* MOBILE_ROUTER */
 	gettimeofday(&time1, NULL);
 	ctime_r(&time1.tv_sec, timestr);
 	timestr[strlen(timestr)-1] = 0;
