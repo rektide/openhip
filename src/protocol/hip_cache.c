@@ -260,7 +260,7 @@ int calculate_r1_length(hi_node *hi)
 	hi_len = build_tlv_hostid_len(hi, HCNF.send_hi_name);
 	
 	if (HCNF.n_reg_types == 0)
-		len =	sizeof(hiphdr) + sizeof(tlv_esp_info) +
+		len =	sizeof(hiphdr) + sizeof(tlv_esp_info) + 2*sizeof(tlv_locator) +
 			sizeof(tlv_r1_counter) + sizeof(tlv_puzzle) + 
 			sizeof(tlv_diffie_hellman) + dhprime_len[HCNF.dh_group] + 
 			eight_byte_align(sizeof(tlv_hip_transform)-2 +
@@ -272,7 +272,7 @@ int calculate_r1_length(hi_node *hi)
 			/* if opaque is used, add its length here */
 			eight_byte_align(sizeof(tlv_hip_sig) + MAX_SIG_SIZE - 1);
 	else
-		len =	sizeof(hiphdr) + sizeof(tlv_esp_info) +
+		len =	sizeof(hiphdr) + sizeof(tlv_esp_info) + 2*sizeof(tlv_locator) +
 			sizeof(tlv_r1_counter) + sizeof(tlv_puzzle) + 
 			sizeof(tlv_diffie_hellman) + dhprime_len[HCNF.dh_group] + 
 			eight_byte_align(sizeof(tlv_hip_transform)-2 +

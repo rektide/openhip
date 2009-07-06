@@ -317,6 +317,10 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie, 
 		    dh_cache_entry *dh_entry)
 {
+	struct sockaddr *preferred_addr = NULL, *second_addr = NULL;
+	sockaddr_list *l;
+	tlv_locator *loc;
+	locator *loc1;
 	hiphdr *hiph;
 	int location=0, cookie_location=0;
 	int len;
@@ -356,6 +360,68 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 		location = eight_byte_align(location);
 	}
 	
+	/* add LOCATOR parameter for preferred address and secondary
+   * address of different address family if available
+	*/
+	for (l = my_addr_head; l; l = l->next) {
+		if (l->preferred) {
+			int index = l->if_index;
+			int family = l->addr.ss_family;
+			preferred_addr = SA(&l->addr);
+			for (l = my_addr_head; l; l = l->next) {
+				if (l->if_index == index && l->addr.ss_family != family) {
+					second_addr = SA(&l->addr);
+					break;
+				}
+			}
+			break;
+		}
+	}
+	if (preferred_addr) {
+		loc = (tlv_locator*) &data[location];
+		loc->type = htons(PARAM_LOCATOR);
+		loc->length = htons(sizeof(tlv_locator) - 4);
+		loc1 = &loc->locator1[0];
+		loc1->traffic_type = LOCATOR_TRAFFIC_TYPE_BOTH;
+		loc1->locator_type = LOCATOR_TYPE_IPV6;
+		loc1->locator_length = 4; /* (128 bits) / (8 * 4) */
+		loc1->reserved = LOCATOR_PREFERRED; /* set the P-bit */
+		loc1->locator_lifetime = htonl(HCNF.loc_lifetime);
+		memset(loc1->locator, 0, sizeof(loc1->locator));
+		if (preferred_addr->sa_family == AF_INET6) {
+			memcpy(&loc1->locator[0], SA2IP(preferred_addr),
+			    SAIPLEN(preferred_addr));
+		} else {/* IPv4-in-IPv6 address format */
+			memset(&loc1->locator[10], 0xFF, 2);
+			memcpy(&loc1->locator[12], SA2IP(preferred_addr),
+			    SAIPLEN(preferred_addr));
+		}
+		location += sizeof(tlv_locator);
+		location = eight_byte_align(location);
+	}
+
+	if (second_addr) {
+		loc = (tlv_locator*) &data[location];
+		loc->type = htons(PARAM_LOCATOR);
+		loc->length = htons(sizeof(tlv_locator) - 4);
+		loc1 = &loc->locator1[0];
+		loc1->traffic_type = LOCATOR_TRAFFIC_TYPE_BOTH;
+		loc1->locator_type = LOCATOR_TYPE_IPV6;
+		loc1->locator_length = 4; /* (128 bits) / (8 * 4) */
+		loc1->locator_lifetime = htonl(HCNF.loc_lifetime);
+		memset(loc1->locator, 0, sizeof(loc1->locator));
+		if (second_addr->sa_family == AF_INET6) {
+			memcpy(&loc1->locator[0], SA2IP(second_addr),
+			    SAIPLEN(second_addr));
+		} else {/* IPv4-in-IPv6 address format */
+			memset(&loc1->locator[10], 0xFF, 2);
+			memcpy(&loc1->locator[12], SA2IP(second_addr),
+			    SAIPLEN(second_addr));
+		}
+		location += sizeof(tlv_locator);
+		location = eight_byte_align(location);
+	}
+
 	/* build the PUZZLE TLV */
 	puzzle = (tlv_puzzle*) &data[location];
 	puzzle->type = htons(PARAM_PUZZLE);
@@ -871,7 +937,10 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 	dst = dstaddr ? dstaddr : HIPA_DST(hip_a);
 	if (dst->sa_family != src->sa_family) {
 		l2 = NULL;
+/*
 		for (l = my_addr_head; l; l = l->next) {
+*/
+		for (l = &hip_a->hi->addrs; l; l = l->next) {
 			if (l->addr.ss_family != dst->sa_family)
 				continue;
 			if (!l2) l2 = l; /* save first address in same family */
@@ -881,6 +950,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		/* use the preferred address or first one of this family */
 		src = l ? SA(&l->addr) : ( l2 ? SA(&l2->addr) : src);
 	}
+	log_(NORM, "Using source address of %s\n", logaddr(src));
 
 	/* build the HIP header */
 	hiph = (hiphdr*) buff;
@@ -922,7 +992,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		location = eight_byte_align(location);
 	}
 
-	/* 
+	/*
 	 * add LOCATOR parameter when supplied with readdressing info
 	 */
 	if (newaddr) {
@@ -993,11 +1063,11 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 	}
 
 	/* Deal with registrations */
-	
+
 	if (add_reg_info) {
-                        add_reg_info = FALSE;
-                        location += build_tlv_reg_info(buff, location);
-		}
+		add_reg_info = FALSE;
+		location += build_tlv_reg_info(buff, location);
+	}
 
 	if (hip_a->reg_offered)
 		location += build_tlv_reg_req(buff,location,
@@ -2147,26 +2217,26 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
 
 int build_tlv_reg_info(__u8 *data, int location)
 {
-        tlv_reg_info *info;
+	tlv_reg_info *info;
 	__u8 *reg_typep;
 	int len = 0, i;
 
 	if(HCNF.n_reg_types == 0)
 		return 0;
 
-        info = (tlv_reg_info*) &data[location];
+	info = (tlv_reg_info*) &data[location];
 	len += 4;
-        info->type = htons(PARAM_REG_INFO);
-	info->length = htons((__u16)(2+HCNF.n_reg_types));
+	info->type = htons(PARAM_REG_INFO);
+	info->length = htons((__u16)(2 + HCNF.n_reg_types));
 	len += 2 + HCNF.n_reg_types;
-        info->min_lifetime = HCNF.min_lifetime;
-        info->max_lifetime = HCNF.max_lifetime;
+	info->min_lifetime = HCNF.min_lifetime;
+	info->max_lifetime = HCNF.max_lifetime;
 	reg_typep = &(info->reg_type);
 	for (i=0; i<HCNF.n_reg_types; i++) {
 		*reg_typep = HCNF.reg_types[i];
 		reg_typep++;
 	}
-        
+
 	return(eight_byte_align(len));
 }
 
@@ -2182,19 +2252,18 @@ int build_tlv_reg_req(__u8 *data, int location, struct reg_entry *reg_offered)
 	while (reg) {
 		if (reg->state != REG_OFFERED  &&  reg->state != REG_CANCELLED)
 			continue;
-		if (reg->type == REG_RVS  &&  !OPT.rvs  && add_reg_request)
-		{
-			/* if reg_info received, reg_request added to I2 */
-			/* if finished lifetime, add reg_request in update packet */
-			/* reg_request parameter from a normal update, not failed registration */
-			if (!repeat_reg)
-			{
+		if (reg->type == REG_RVS  &&  !OPT.rvs  && add_reg_request) {
+			/* if reg_info received, reg_request added to I2
+			 * if finished lifetime, add reg_request in update
+			 *   packet
+			 * reg_request parameter from a normal update, not
+			 *   a failed registration */
+			if (!repeat_reg) {
 				*reg_typep = HCNF.reg_type;
-			}
-			/* if there is an error in the registration with a rvs, */
-			/* we send the reg_request parameter with the new values */
-			else
-			{	
+			/* if there is an error in the registration with a rvs,
+			 * we send the reg_request parameter with the new
+			 * values */
+			} else {
 				repeat_reg = FALSE;
 				*reg_typep = repeat_type;
 			}
@@ -2234,12 +2303,12 @@ int build_tlv_reg_req(__u8 *data, int location, struct reg_entry *reg_offered)
 	if (num) {
 		req->type = htons(PARAM_REG_REQUEST);
 		num++;
-		req->length = htons(num); /* lifetime + reg_types */
+		req->length = htons(1 + num); /* lifetime + reg_types */
 		req->lifetime = requested_lifetime;
 
 		tmp = YLIFE(req->lifetime);
 		tmp = pow(2, tmp);
-		log_(NORM, "Requested lifetime = %d (%f seconds)\n",\
+		log_(NORM, "Requested lifetime = %d (%.3f seconds)\n",\
 			req->lifetime, tmp);
 
 		return(eight_byte_align(sizeof(tlv_reg_request)-2+num));
@@ -2284,7 +2353,7 @@ int build_tlv_reg_resp(__u8 *data, int location, struct reg_entry *reg_requested
 
 		tmp = YLIFE(resp->lifetime);
 		tmp = pow(2, tmp);
-		log_(NORM, "Registered lifetime = %d (%f seconds)\n",
+		log_(NORM, "Registered lifetime = %d (%.3f seconds)\n",
 			resp->lifetime, tmp);
 
 		return (eight_byte_align(sizeof(tlv_reg_response)-2+num));

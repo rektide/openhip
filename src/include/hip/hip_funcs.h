@@ -148,6 +148,8 @@ int hip_handle_BOS(__u8 *data, struct sockaddr *src);
 int hip_handle_CER(__u8 *data, hip_assoc *hip_a);
 int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi, 
 			int in, int peer, int use_udp);
+int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
+			struct sockaddr *newdstaddr, __u32 newspi, int in, int use_udp);
 void handle_reg_info();
 void handle_reg_request(char *data, int location);
 
@@ -310,6 +312,7 @@ void delete_address_from_list(sockaddr_list **list, struct sockaddr *addr,
 void delete_address_entry_from_list(sockaddr_list **list, sockaddr_list *entry);
 void make_address_active(sockaddr_list *item);
 int update_peer_list_address(const hip_hit peer_hit, struct sockaddr *old_addr, struct sockaddr *new_addr);
+int add_other_addresses(hi_node *hi, int mine);
 
 /* hip_cache.c */
 void init_all_R1_caches();

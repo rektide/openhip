@@ -918,6 +918,8 @@ typedef struct _hip_proxy_ticket {
 typedef struct _hip_spi_nat {
 	hip_hit peer_hit;
 	struct sockaddr_storage peer_addr;
+	struct sockaddr_storage peer_ipv4_addr;
+	struct sockaddr_storage peer_ipv6_addr;
 	__u32 private_spi;
 	__u32 public_spi;
 	__u32 peer_spi;

@@ -725,6 +725,8 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 			}
 			valid_cert = TRUE;
 		    /* validate certificate */
+		} else if (type == PARAM_LOCATOR) {
+			;
 		} else {
 			if (check_tlv_unknown_critical(type, length) < 0)
 				return(-1);
@@ -1504,6 +1506,7 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 
 	clear_retransmissions(hip_a);
 	make_address_active(&hip_a->peer_hi->addrs);
+	add_other_addresses(hip_a->hi, 1);
 	/* Need to send an SPI to peer */
 	hip_a->spi_in = get_next_spi(hip_a);
 	/* build R2 and Responder's SA */
@@ -1984,7 +1987,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 
 	status = -1;
 	if (hip_a->spi_nat) {
-		printf("Received update for spinat connection\n");
+		log_(NORM, "Received update for spinat connection\n");
 	}
 
 	while (location < data_len) {
@@ -2876,8 +2879,8 @@ int handle_update_rekey(hip_assoc *hip_a)
 int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck, int use_udp)
 {
 	int need_to_send_update = FALSE;
-	sockaddr_list *l, *l_next, *peer_list;
-	struct sockaddr *pref_addr;
+	sockaddr_list *l, *l_next, *peer_list, *my_list, *new_af = NULL;
+	struct sockaddr *pref_addr, *new_af_addr = NULL;
 	__u32 nonce, new_spi, new_peer_spi;
 
 	if (!hip_a)
@@ -2903,8 +2906,32 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck, int u
 				new_peer_spi = hip_a->peer_rekey->new_spi;
 				hip_finish_rekey(hip_a, FALSE, use_udp);
 			}
-			rebuild_sa(hip_a, pref_addr, new_spi, TRUE, TRUE, use_udp);
-			rebuild_sa(hip_a, pref_addr, new_peer_spi, FALSE, TRUE, use_udp);
+			my_list = &hip_a->hi->addrs;
+			if (l->addr.ss_family != my_list->addr.ss_family) {
+				for (new_af = my_list; new_af; new_af = new_af->next)
+					if (new_af->addr.ss_family == l->addr.ss_family)
+						break;
+				if (!new_af) {
+					log_(WARN, "Could not find an address of family %d\n",
+						l->addr.ss_family);
+					return -1;
+				} else {
+					log_(NORMT, "Found new address family %s.\n",
+						logaddr((struct sockaddr*)&new_af->addr));
+				}
+			}
+			if (!new_af) {
+				rebuild_sa(hip_a, pref_addr, new_spi,
+					TRUE, TRUE, use_udp);
+				rebuild_sa(hip_a, pref_addr, new_peer_spi,
+					FALSE, TRUE, use_udp);
+			} else {
+				new_af_addr = SA(&new_af->addr);
+				rebuild_sa_x2(hip_a, pref_addr, new_af_addr,
+					new_peer_spi, TRUE, use_udp);
+				rebuild_sa_x2(hip_a, new_af_addr, pref_addr,
+					new_spi, FALSE, use_udp);
+			}
 			sadb_readdress(HIPA_DST(hip_a), pref_addr, 
 				hip_a, hip_a->spi_out);
 			log_hipa_fromto(QOUT, "Update completed (readdress)", 
@@ -2915,6 +2942,23 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck, int u
 				hip_a->peer_hi->addrs.lifetime = l->lifetime;
 				make_address_active(&hip_a->peer_hi->addrs);
 				delete_address_entry_from_list(&peer_list, l);
+			}
+			if (new_af) {
+				struct sockaddr_storage temp_addr;
+				int temp_lifetime;
+				sadb_readdress(HIPA_SRC(hip_a), new_af_addr,
+					hip_a, hip_a->spi_in);
+				log_hipa_fromto(QOUT, "Update completed (readdress)", 
+					hip_a, TRUE, FALSE);
+				/* Swap addrs instead of just overwriting */
+				memcpy(&temp_addr, HIPA_SRC(hip_a), SALEN(HIPA_SRC(hip_a)));
+				temp_lifetime = hip_a->hi->addrs.lifetime;
+				memcpy(HIPA_SRC(hip_a), new_af_addr,
+				    SALEN(new_af_addr));
+				hip_a->hi->addrs.lifetime = new_af->lifetime;
+				make_address_active(&hip_a->hi->addrs);
+				memcpy(new_af_addr, &temp_addr, SALEN(&temp_addr));
+				new_af->lifetime = temp_lifetime;
 			}
 			/* adopt new SPIs; rekey structures freed later  */
 			if (new_spi && new_peer_spi) {
@@ -4344,6 +4388,116 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 		}
 	} else {
 		if (new_policy && (sadb_delete_policy(src_old, dst_old, in) < 0)) {
+			log_(WARN, "Error removing old outgoing policy: %s.\n",
+			    strerror(errno));
+			err--;
+		}
+	}
+#endif
+	hip_a->used_bytes_in = 0;
+	hip_a->used_bytes_out = 0;
+	return(err);
+}
+
+/*
+ * rebuild_sa_x2()
+ *
+ * in:		hip_a = association containing old addresses, SPIs, keys
+ * 		src_new = the new source address
+ * 		dst_new = the new destination address
+ * 		newspi = the new SPI, or zero if readdress only
+ * 		in = TRUE for incoming, FALSE for outgoing
+ *
+ * This function takes care of rebuilding an SA and its SPD entry
+ * when readdress involves a change of address family.
+ */
+int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
+		struct sockaddr *dst_new, __u32 newspi, int in, int use_udp)
+{
+	__u32 spi;
+	int err = 0;
+	struct sockaddr *src_old, *dst_old;
+	struct sockaddr_in6 src_hit_sock, dst_hit_sock;
+	int use_udp_backup;
+
+	/* XXX TODO: clean this up
+	 * sadb_add_policy() should be atomic and should not contain special
+	 * cases for UDP mode. modify the calls to sadb_add_policy here.
+	 */
+	use_udp_backup = hip_a->use_udp ;
+
+	spi = (in) ? hip_a->spi_in : hip_a->spi_out;
+	src_old = in ? HIPA_DST(hip_a) : HIPA_SRC(hip_a);
+	dst_old = in ? HIPA_SRC(hip_a) : HIPA_DST(hip_a);
+
+	if (in) {
+		hit_to_sockaddr (&dst_hit_sock, hip_a->hi->hit);
+		hit_to_sockaddr (&src_hit_sock, hip_a->peer_hi->hit);
+	}
+	else {
+		hit_to_sockaddr (&src_hit_sock, hip_a->hi->hit);
+		hit_to_sockaddr (&dst_hit_sock, hip_a->peer_hi->hit);
+	}
+
+#ifdef __UMH__
+	/* In Windows, SAs stored based on SPI, so must delete first */
+	if (sadb_delete(hip_a, src_old, dst_old, spi) < 0) {
+		log_(WARN, "Error removing old outgoing SA: %s\n",
+		    strerror(errno));
+		err--;
+	}
+#endif
+	hip_a->use_udp = use_udp;
+
+#ifdef __UMH__
+	/* update LSI mapping for success with sadb_add() */
+	if (use_udp) { /*(HIP_ESP_OVER_UDP)*/
+		update_lsi_mapping(in ? (struct sockaddr*)&src_hit_sock : 
+					(struct sockaddr*) &dst_hit_sock,
+				   SA(&hip_a->peer_hi->lsi), 
+				   hip_a->peer_hi->hit);
+	} else {
+		update_lsi_mapping(in ? src_new : dst_new, 
+				   SA(&hip_a->peer_hi->lsi),
+				   hip_a->peer_hi->hit);
+	}
+#endif
+
+	if (sadb_add(src_new, dst_new, (struct sockaddr *) &src_hit_sock, 
+		    (struct sockaddr *) &dst_hit_sock, hip_a, 
+		    (newspi > 0) ? newspi : spi, in) < 0) {
+		log_(WARN, "Error building new outgoing SA: %s\n",
+		    strerror(errno));
+		err--;
+	}
+	/* In Linux, this adds the required SPD entry;
+	 * for Windows, this gives the SA an in/out direction. */
+	if ((sadb_add_policy(hip_a, src_new, dst_new, 
+			    (struct sockaddr *) &src_hit_sock, 
+			    (struct sockaddr *) &dst_hit_sock, in) < 0)) {
+		log_(WARN, "Error building new outgoing policy: %s.\n",
+		    strerror(errno));
+		err--;
+	}
+	hip_a->use_udp = use_udp_backup;
+
+#ifndef __UMH__
+	/* In Windows, SA is deleted earlier -- see above. */
+	if (sadb_delete(hip_a, src_old, dst_old, spi) < 0) {
+		log_(WARN, "Error removing old outgoing SA: %s\n",
+		    strerror(errno));
+		err--;
+	}
+	/* policy deletion is a NO-OP in Windows */
+	if (hip_a->use_udp) { /* (HIP_ESP_OVER_UDP) */
+		if (sadb_delete_policy((struct sockaddr*) &src_hit_sock,
+		    (struct sockaddr*) &dst_hit_sock, in) < 0) {
+			log_(WARN, "Error removing old outgoing policy: %s.\n",
+			    strerror(errno));
+			err--;
+		}
+	} else {
+		if (sadb_delete_policy(src_old, dst_old, in) < 0) {
 			log_(WARN, "Error removing old outgoing policy: %s.\n",
 			    strerror(errno));
 			err--;

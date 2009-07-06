@@ -83,12 +83,19 @@
 extern unsigned int if_nametoindex (__const char *__ifname) __THROW;
 #endif
 
+#ifdef SMA_CRAWLER
+//DM: From /usr/include/net/if.h
+//DM: Added just this line because of conflicts with /usr/include/linux/if.h
+extern unsigned int if_nametoindex (__const char *__ifname) __THROW;
+#endif
+
 /* instead of including the entire netlink library here, 
  * we just implement partial functionality
  */
 
 /* Local definitions */
 int nl_sequence_number = 0;
+int external_if_index = -1;
 
 /* Local functions */
 int read_netlink_response();
@@ -476,7 +483,7 @@ int select_preferred_address()
 			if (l->addr.ss_family != AF_INET)
 				continue;
 #ifdef SMA_CRAWLER
-                       if(l->if_index != ifindex) // not on master interface
+                       if(l->if_index != ifindex) /* not on master interface */
                                continue;
 #endif
 			ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
@@ -492,22 +499,58 @@ int select_preferred_address()
 
 	/* If mobile router, set the outbound interface index
 	 */
-	if (OPT.mr) {
-		external_if_index = -1;
-		if (HCNF.outbound_iface)
-			external_if_index = devname_to_index(HCNF.outbound_iface, NULL);
-		if (external_if_index == -1) {
-			if (preferred_iface_index != -1) {
-				external_if_index = preferred_iface_index;
-				log_(NORM, "Selected the preferred interface"
-					" as outbound interface\n");
-			} else {
-				log_(ERR, "HIP started as mobile router but "
-					"unable to set outbound interface index\n");
-			}
+	if (!OPT.mr)
+		return(0);
+	external_if_index = -1;
+	if (HCNF.outbound_iface)
+		external_if_index = devname_to_index(HCNF.outbound_iface, NULL);
+	if (external_if_index == -1) {
+		if (preferred_iface_index != -1) {
+			external_if_index = preferred_iface_index;
+			log_(NORM, "Selected the preferred interface"
+				" as outbound interface\n");
 		} else {
-			log_(NORM, "Selected %s as outbound interface\n",
-				HCNF.outbound_iface);
+			log_(ERR, "HIP started as mobile router but "
+				"unable to set outbound interface index\n");
+		}
+	} else {
+		log_(NORM, "Selected %s as outbound interface\n",
+			HCNF.outbound_iface);
+	}
+	if (external_if_index != -1) {
+		/* Use the preferred address if it is on the external interface,
+		 * otherwise use first non-local address on this interface */
+		sockaddr_list *the_address = NULL;
+		for (l = my_addr_head; l; l=l->next) {
+			if (l->if_index != external_if_index)
+				continue;
+			if (TRUE == l->preferred) {
+				the_address = l;
+				break;
+			}
+			/* skip local and multicast addresses */
+			if ((l->addr.ss_family == AF_INET6) &&
+			    (IN6_IS_ADDR_LINKLOCAL(SA2IP6(&l->addr)) ||
+			     IN6_IS_ADDR_SITELOCAL(SA2IP6(&l->addr)) ||
+			     IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr))))
+				continue;
+			if (!the_address) /* 1st non-local addr, keep looking */
+				the_address = l;
+		}
+		if (the_address) {
+			struct sockaddr *out = (struct sockaddr *)&external_address;
+			pthread_mutex_lock(&hip_mr_client_mutex);
+			out->sa_family = the_address->addr.ss_family;
+			memcpy(SA2IP(out),
+				SA2IP((struct sockaddr *)&the_address->addr),
+				SAIPLEN(out));
+			new_external_address = TRUE;
+			pthread_mutex_unlock(&hip_mr_client_mutex);
+			log_(NORM, "%s selected as the external address.\n",
+				logaddr(SA(&the_address->addr)));
+		} else {
+			log_(NORM, "Unable to find address on outbound interface %d\n",
+				external_if_index);
 		}
 	}
 	return(0);
@@ -1151,11 +1194,65 @@ void handle_local_address_change(int add, struct sockaddr *newaddr,int if_index)
 		}
 	}
 
-	if (add && if_index == external_if_index && max_hip_mr_clients > 0) {
-		pthread_mutex_lock(&hip_mr_client_mutex);
-		new_external_address = TRUE;
-		pthread_mutex_unlock(&hip_mr_client_mutex);
+	if (!OPT.mr)
+		return;
+	/* Mobile router update for the external address */
+	if (if_index != external_if_index)
+		return;
+	if (max_hip_mr_clients <= 0)
+		return;
+
+	struct sockaddr *out = (struct sockaddr *)&external_address;
+	pthread_mutex_lock(&hip_mr_client_mutex);
+	/* If there is currently not an external address, set this address to
+	 * be the external address. */
+	if (add) {
+		if (!out->sa_family) {
+			out->sa_family = newaddr->sa_family;
+			memcpy(SA2IP(out), SA2IP(newaddr), SAIPLEN(out));
+			new_external_address = TRUE;
+		}
+	/* If this was the external address, see if there is another address
+	 * on this interface. If not, zero out the variable */
+	} else {
+		sockaddr_list *the_address = NULL;
+		if (out->sa_family == newaddr->sa_family &&
+		    !memcmp(SA2IP(out), SA2IP(newaddr), SAIPLEN(out))) {
+			sockaddr_list *l;
+			for (l = my_addr_head; l; l=l->next) {
+				/* Try to use the same address family
+				 * Else use first non-local address on
+				 * this interface */
+				if (l->if_index != external_if_index)
+					continue;
+				/* skip local and multicast addresses */
+				if ((l->addr.ss_family == AF_INET6) &&
+				    (IN6_IS_ADDR_LINKLOCAL(SA2IP6(&l->addr)) ||
+				     IN6_IS_ADDR_SITELOCAL(SA2IP6(&l->addr)) ||
+				     IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr))))
+					continue;
+				if (l->addr.ss_family == out->sa_family) {
+					the_address = l;
+					break;
+				} else if (!the_address) {
+					the_address = l;
+				}
+			}
+		}
+		if (the_address) {
+			out->sa_family = the_address->addr.ss_family;
+			memcpy(SA2IP(out),
+				SA2IP((struct sockaddr *)&the_address->addr),
+				SAIPLEN(out));
+			new_external_address = TRUE;
+			log_(NORM, "Using %s as new external address\n",
+				logaddr(out));
+		} else {
+			log_(WARN, "No new external address found\n");
+			memset(out, 0, sizeof(external_address));
+		}
 	}
+	pthread_mutex_unlock(&hip_mr_client_mutex);
 }
 
 /*
@@ -1225,6 +1322,82 @@ void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
 #endif /* __UMH__ */
 }
 
+/*
+ * readdress_association_x2()
+ *
+ * Perform readdressing tasks due to local address changes with change
+ * in address family.
+ */
+void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr, 
+    struct sockaddr *newdstaddr, int if_index)
+{
+	int err=0;
+	struct sockaddr *oldaddr = HIPA_SRC(hip_a);
+
+	log_(NORMT, "Readdressing association with %s (%s) from ",
+		hip_a->peer_hi->name, logaddr(HIPA_DST(hip_a)));
+	log_(NORM, "%s to ", logaddr(oldaddr));
+	log_(NORM, "%s.\n", logaddr(newsrcaddr));
+	if (hip_a->state != ESTABLISHED) {
+		log_(NORMT, "NOT readdressing association since state=%d\n",
+			hip_a->state);
+		return;
+	}
+	log_hipa_fromto(QOUT, "Update initiated (readdress)", 
+			hip_a, FALSE, TRUE);
+
+	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, FALSE, is_behind_nat);
+	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, TRUE,  is_behind_nat);
+	err = sadb_readdress(oldaddr, newsrcaddr, hip_a, hip_a->spi_in);
+	
+	/* replace the old preferred address */
+	memcpy(&hip_a->hi->addrs.addr, newsrcaddr, SALEN(newsrcaddr));
+	hip_a->hi->addrs.if_index = if_index;
+	hip_a->hi->addrs.lifetime = 0; /* XXX need to copy from somewhere? */
+	hip_a->hi->addrs.preferred = TRUE;
+	make_address_active(&hip_a->hi->addrs);
+
+  /* Also with peer address? */
+
+	memcpy(&hip_a->peer_hi->addrs.addr, newdstaddr, SALEN(newdstaddr));
+	hip_a->peer_hi->addrs.if_index = if_index;
+	hip_a->peer_hi->addrs.lifetime = 0; /* XXX need to copy from somewhere? */
+	hip_a->peer_hi->addrs.preferred = TRUE;
+	make_address_active(&hip_a->peer_hi->addrs);
+
+	/* must send ESP_INFO with new UPDATE message */
+	if (!hip_a->rekey) {
+		if (build_rekey(hip_a) < 0)
+			log_(WARN, "readdress_association() had problem buildi"
+				"ng a new rekey structure for ESP_INFO\n");
+	}
+
+	if (OPT.stun) {
+		hip_a->next_use_udp = is_behind_nat;
+	}
+	if (is_behind_nat) { /* && hip_a->peer_dst_port==0)  */
+		hip_a->peer_dst_port = HIP_UDP_PORT;
+		hip_a->peer_esp_dst_port = HIP_ESP_UDP_PORT;
+	}
+
+	/* inform peer of new preferred address */
+	if (hip_send_update(hip_a, newsrcaddr, NULL, is_behind_nat) < 0)
+		log_(WARN, "Problem sending UPDATE(REA) for %s!\n",
+		    logaddr(newsrcaddr));
+#ifdef __UMH__
+	if (hip_a->use_udp) { /* (HIP_ESP_OVER_UDP) */
+	/* not necessary. it is just meant to update the port for 
+	  incoming packets sent before rekeying is completely finished */
+		err = send_udp_esp_tunnel_activation (hip_a->spi_out);
+		if (err<0) {
+			printf("Activation of UDP-ESP channel failed.\n");
+		} else {
+			printf("Activation of UDP-ESP channel for spi:0x%x done.\n", hip_a->spi_out);
+		}
+	}
+#endif /* __UMH__ */
+}
+
 /* 
  * association_add_address()
  *
@@ -1275,7 +1448,7 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
     int if_index)
 {
-	sockaddr_list *l, *deleted, *list;
+	sockaddr_list *l, *deleted, *list, *new_af = NULL;
 
 	/* Search this hip_a address list for deleted */
 	list = &hip_a->hi->addrs;
@@ -1302,9 +1475,11 @@ void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 	 */
 	l = NULL;
 	for (l = list->next; l; l=l->next) { /* look for same family */
-		if (newaddr->sa_family != l->addr.ss_family)
+		if (newaddr->sa_family != l->addr.ss_family) {
+			if (!new_af)
+				new_af = l;
 			continue;
-		else
+		} else
 			break;
 	}
 	/* Switch to the next address in the list. */
@@ -1320,8 +1495,11 @@ void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 			   "available in association...\n");
 		select_preferred_address();
 		for (l = my_addr_head; l; l=l->next) {
-			if (newaddr->sa_family != l->addr.ss_family)
+			if (newaddr->sa_family != l->addr.ss_family) {
+				if (!new_af)
+					new_af = l;
 				continue;
+			}
 			if (l->preferred) /* find the preferred */
 				break;
 		}
@@ -1332,6 +1510,19 @@ void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 			readdress_association(hip_a, SA(&l->addr), 
 					      if_index);
 			delete_address_entry_from_list(&list, l);
+		} else if (new_af) {
+			log_(NORMT, "Found new address family %s.\n",
+				    logaddr((struct sockaddr*)&new_af->addr));
+			for (l = &hip_a->peer_hi->addrs; l; l = l->next)
+				if (new_af->addr.ss_family == l->addr.ss_family)
+					break;
+				if (l) {
+					log_(NORMT, "Found peer address of new address family %s.\n",
+						logaddr((struct sockaddr*)&l->addr));
+					readdress_association_x2(hip_a, SA(&new_af->addr), SA(&l->addr),
+						if_index);
+					delete_address_entry_from_list(&list, new_af);
+				}
 		} else {
 			log_(NORMT, "Preferred address deleted, but could not" \
 				    " find a suitable replacement.\n");
@@ -1372,4 +1563,40 @@ int update_peer_list_address(const hip_hit peer_hit, struct sockaddr *old_addr, 
 	return ( l ? 0 : -1 );
 }
 
+/*
+ * add_other_addresses()
+ */
+int add_other_addresses(hi_node *hi, int mine)
+{
+	sockaddr_list *l, *tolist, *fromlist;
+
+	tolist = &hi->addrs;
+	if (mine) {
+		fromlist = my_addr_head;
+	} else {
+		hi_node *peer_hi = find_host_identity(peer_hi_head, hi->hit);
+		if (peer_hi) {
+			fromlist = &peer_hi->addrs;
+		} else {
+			log_(WARN, "Unable to find Peer HIT ");
+			print_hex(peer_hi->hit, HIT_SIZE);
+			return(-1);
+		}
+	}
+	for (l = fromlist; l; l = l->next) {
+		/* skip local and multicast addresses */
+		if ((l->addr.ss_family == AF_INET6) &&
+			(IN6_IS_ADDR_LINKLOCAL(SA2IP6(&l->addr)) ||
+			 IN6_IS_ADDR_SITELOCAL(SA2IP6(&l->addr)) ||
+			 IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr))))
+			continue;
+		if (l->if_index == tolist->if_index) {
+			add_address_to_list(&tolist, (struct sockaddr *)&l->addr, l->if_index);
+		}
+	}
+	for (l = tolist; l; l = l->next) {
+printf("Addr in list: %s(%d)(%d)\n", logaddr((struct sockaddr *)&l->addr), l->if_index, l->addr.ss_family);
+	}
+	return 0;
+}
 #endif /* #ifndef __MACOSX__ */

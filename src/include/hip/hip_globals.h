@@ -60,7 +60,7 @@ extern const hip_hit zero_hit;
 /* Array storing Mobile router clients */
 extern hip_mr_client hip_mr_client_table[MAX_MR_CLIENTS];
 extern int max_hip_mr_clients;
-extern int external_if_index;
+extern struct sockaddr_storage external_address;
 extern int new_external_address;
 extern hip_hit mobile_router_hit;
 extern hip_mutex_t hip_mr_client_mutex;

@@ -64,8 +64,8 @@ int max_hip_assoc=0;        /* last entry added to the table */
 /* Mobile router client table */
 hip_mr_client hip_mr_client_table[MAX_MR_CLIENTS];
 int max_hip_mr_clients = 0;
-int external_if_index = -1;
 int new_external_address = 0;
+struct sockaddr_storage external_address;
 hip_hit mobile_router_hit;
 hip_mutex_t hip_mr_client_mutex;
 

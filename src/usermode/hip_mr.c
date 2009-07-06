@@ -21,12 +21,6 @@
  *
  */
 
-#ifdef __WIN32__
-#include <win32/types.h>
-#include <winsock2.h>
-#include <iphlpapi.h>
-#include <io.h>
-#else
 #include <unistd.h>
 #include <pthread.h>            /* phread_exit() */
 #include <netinet/ip.h>         /* struct ip */
@@ -35,9 +29,6 @@
 #include <netinet/tcp.h>        /* struct tcphdr */
 #include <netinet/udp.h>        /* struct udphdr */
 #include <arpa/inet.h>
-#include <linux/netfilter.h>
-#include <libipq.h>
-#endif /* WIN32 */
 #include <stdio.h>              /* printf() */
 #include <string.h>             /* strerror() */
 #include <errno.h>              /* errno */
@@ -46,9 +37,12 @@
 #include <hip/hip_funcs.h>
 #include <hip/hip_globals.h>
 #include <openssl/rand.h>	/* RAND_bytes() */
+#include <linux/netfilter.h>    /* NF_DROP */
+#include <libipq.h>		/* ipq_create_handle() */
 
 #define INET6_ADDRSTRLEN 46
 #define BUFSIZE 2048
+#define MR_TIMEOUT_US 500000 /* microsecond timeout for mobile_router select()*/
 
 struct ip_esp_hdr {
 	__u32 spi;
@@ -58,27 +52,50 @@ struct ip_esp_hdr {
 
 extern hip_mr_client hip_mr_client_table[MAX_MR_CLIENTS];
 extern int max_hip_mr_clients;
-extern int external_if_index;
 extern int new_external_address;
+extern struct sockaddr_storage external_address;
 extern pthread_mutex_t hip_mr_client_mutex;
 
+static char *external_interface;
 static struct sockaddr_storage out_addr;
-
-struct spi_table {
-	__u32 private_spi;
-	__u32 public_spi;
-	hip_hit mn_hit;
-	hip_hit peer_hit;
-	struct sockaddr_storage mn_addr;
-	struct sockaddr_storage peer_addr;
-	struct spi_table *next;
-};
 
 int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
 			hip_hit *mn_hit, hip_hit *peer_hit,
 			hip_proxy_ticket *ticket, __u32 spi);
 int build_tlv_proxy_hmac(hip_proxy_ticket *ticket, __u8 *data, int location,
 			int type);
+
+/* Check if the given addresses are equal to the ones in the packet header */
+int addresses_are_equal(struct sockaddr *src, struct sockaddr *dst,
+                        int family, unsigned char *payload)
+{
+	int ret = FALSE;
+	struct ip *ip4h = NULL;
+	struct ip6_hdr *ip6h = NULL;
+	struct in_addr ip4_src, ip4_dst;
+	struct in6_addr ip6_src, ip6_dst;
+
+	if (src->sa_family != family || dst->sa_family != family)
+		return ret;
+
+	if (family == AF_INET) {
+		ip4h = (struct ip *) payload;
+		memcpy(&ip4_src, SA2IP(src), SAIPLEN(src));
+		memcpy(&ip4_dst, SA2IP(dst), SAIPLEN(dst));
+		if (ip4_src.s_addr == ip4h->ip_src.s_addr &&
+			ip4_dst.s_addr == ip4h->ip_dst.s_addr)
+			ret = TRUE;
+	} else {
+		ip6h = (struct ip6_hdr *) payload;
+		memcpy(&ip6_src, SA2IP(src), SAIPLEN(src));
+		memcpy(&ip6_dst, SA2IP(dst), SAIPLEN(dst));
+		if (IN6_ARE_ADDR_EQUAL(&ip6_src, &ip6h->ip6_src) &&
+			IN6_ARE_ADDR_EQUAL(&ip6_dst, &ip6h->ip6_dst))
+			ret = TRUE;
+	}
+
+	return ret;
+}
 
 /*
  *
@@ -115,38 +132,80 @@ retry_getspi:
 	return new_spi;
 }
 
+/* Look for the given hit in the mobile router client table */
+
 hip_mr_client *check_hits(hip_hit the_hit)
 {
 	int i;
 	for (i = 0; i < max_hip_mr_clients; i++) {
 		if (hits_equal(the_hit, hip_mr_client_table[i].mn_hit)) {
-struct sockaddr *src = (struct sockaddr*)&hip_mr_client_table[i].mn_addr;
-printf("This is for Mobile Router client %s\n", logaddr(src));
+/*
+			struct sockaddr *src = (struct sockaddr*)&hip_mr_client_table[i].mn_addr;
+			printf("This is for Mobile Router client %s\n", logaddr(src));
+*/
 			return &hip_mr_client_table[i];
 		}
 	}
 	return NULL;
 }
 
+/* Rewrite addresses in packet header */
+
 void adjust_addrs(struct sockaddr_storage *s, struct sockaddr_storage *d,
-		struct ip6_hdr *ip6h)
+		unsigned char *payload)
 {
 	struct sockaddr *src, *dst;
+	struct ip *ip4h = NULL;
+	struct ip6_hdr *ip6h = NULL;
+	char ipstr[INET6_ADDRSTRLEN];
 
 	src = (struct sockaddr *)s;
 	dst = (struct sockaddr *)d;
-	src->sa_family = AF_INET6;
-	dst->sa_family = AF_INET6;
-	memcpy(&ip6h->ip6_src, SA2IP(src), sizeof(struct in6_addr));
-	memcpy(&ip6h->ip6_dst, SA2IP(dst), sizeof(struct in6_addr));
+inet_ntop(src->sa_family, SA2IP(src), ipstr, sizeof(ipstr));
+printf("adjust_addrs to (%s, ", ipstr);
+inet_ntop(dst->sa_family, SA2IP(dst), ipstr, sizeof(ipstr));
+printf("%s)\n", ipstr);
+
+	if (src->sa_family != dst->sa_family)
+		return;
+
+	if (src->sa_family == PF_INET) {
+		ip4h = (struct ip *) payload;
+		memcpy(&ip4h->ip_src, SA2IP(src), SAIPLEN(src));
+		memcpy(&ip4h->ip_dst, SA2IP(dst), SAIPLEN(dst));
+		// XXX jeffa: need to recompute IPv4 checksum here
+	} else {
+		ip6h = (struct ip6_hdr *) payload;
+		memcpy(&ip6h->ip6_src, SA2IP(src), SAIPLEN(src));
+		memcpy(&ip6h->ip6_dst, SA2IP(dst), SAIPLEN(dst));
+	}
 
 }
 
-void process_I1(hip_mr_client *hip_mr_c, hiphdr *hiph,
-		struct ip6_hdr *ip6h)
+/*
+ *
+ * mr_process_I1()
+ *
+ * in: hip_mr_c pointer to the mobile node client structure
+ *     family address family of packet, either AF_INET or AF_INET6
+ *     hiph pointer to the HIP header in the packet
+ *     payload pointer to a copy of the actual packet
+ *
+ * out: Perform SPINAT on packet
+ *
+ * Process the I1 from the mobile node, create SPINAT state.
+ */
+
+void mr_process_I1(hip_mr_client *hip_mr_c, int family,
+		hiphdr *hiph, unsigned char *payload)
 {
 	struct sockaddr *dst;
+	struct ip *ip4h = NULL;
+	struct ip6_hdr *ip6h = NULL;
+
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
+
+	printf("mr_process_I1 %s\n", family==AF_INET ? "IPv4" : "IPv6");
 	while (spi_nats) {
 		if (hits_equal(hiph->hit_rcvr, spi_nats->peer_hit)) {
 			break;
@@ -155,6 +214,7 @@ void process_I1(hip_mr_client *hip_mr_c, hiphdr *hiph,
 	}
 
 	if (!spi_nats) {
+		printf("allocating new spi_nat structure\n");
 		spi_nats = malloc(sizeof(hip_spi_nat));
 		if (!spi_nats)
 			return;
@@ -167,17 +227,46 @@ void process_I1(hip_mr_client *hip_mr_c, hiphdr *hiph,
 	spi_nats->private_spi = 0;
 	spi_nats->public_spi = 0;
 	dst = (struct sockaddr *)&spi_nats->peer_addr;
-	dst->sa_family = AF_INET6;
-	memcpy(SA2IP(dst), &ip6h->ip6_dst, SAIPLEN(dst));
+	dst->sa_family = family;
+	if (family == PF_INET) {
+		ip4h = (struct ip *) payload;
+		memcpy(SA2IP(dst), &ip4h->ip_dst, SAIPLEN(dst));
+	} else {
+		ip6h = (struct ip6_hdr *) payload;
+		memcpy(SA2IP(dst), &ip6h->ip6_dst, SAIPLEN(dst));
+	}
 
-	adjust_addrs(&out_addr, &spi_nats->peer_addr, ip6h);
+	adjust_addrs(&out_addr, &spi_nats->peer_addr, payload);
 
 	return;
 }
 
-void process_R1(hip_mr_client *hip_mr_c, hiphdr *hiph,
-		struct ip6_hdr *ip6h)
+/*
+ *
+ * mr_process_R1()
+ *
+ * in: hip_mr_c pointer to the mobile node client structure
+ *     family address family of packet, either AF_INET or AF_INET6
+ *     hiph pointer to the HIP header in the packet
+ *     payload pointer to a copy of the actual packet
+ *
+ * out: Perform SPINAT on packet
+ *
+ * Process the R1 from the peer node, grab the LOCATOR info of the peer.
+ */
+
+void mr_process_R1(hip_mr_client *hip_mr_c, int family,
+		hiphdr *hiph, unsigned char *payload)
 {
+	int location = 0;
+	__u8 *data = (__u8 *)hiph;
+	int data_len;
+	int type, length;
+	tlv_head *tlv;
+	tlv_locator *loc;
+	locator *loc1;
+	__u8 *p_addr = NULL;
+
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
 	while (spi_nats) {
@@ -190,11 +279,77 @@ void process_R1(hip_mr_client *hip_mr_c, hiphdr *hiph,
 	if (!spi_nats)
 		return;
 
-	adjust_addrs(&spi_nats->peer_addr, &hip_mr_c->mn_addr, ip6h);
+	data_len = (hiph->hdr_len+1) * 8;
+	location += sizeof(hiphdr);
+
+	while (location < data_len) {
+		tlv = (tlv_head *) &data[location];
+		type = ntohs(tlv->type);
+		length = ntohs(tlv->length);
+		p_addr = NULL;
+		if (type == PARAM_LOCATOR) {
+			loc = (tlv_locator *)tlv;
+			loc1 = &loc->locator1[0];
+			if ((loc1->locator_type == LOCATOR_TYPE_IPV6) &&
+					(loc1->locator_length == 4)) {
+				p_addr = &loc1->locator[0];
+			} else if ((loc1->locator_type == LOCATOR_TYPE_SPI_IPV6) &&
+					(loc1->locator_length == 5)) {
+				p_addr = &loc1->locator[4];
+			} else {
+				log_(WARN, "Invalid locator type %d / length %d.\n",
+					loc1->locator_type, loc1->locator_length);
+			}
+    }
+		if (p_addr) {
+			/*
+			* Read in address from LOCATOR
+			*/
+			struct sockaddr *addr = NULL;
+
+			if (IN6_IS_ADDR_V4MAPPED((struct in6_addr*)p_addr)) {
+				addr = (struct sockaddr*)&spi_nats->peer_ipv4_addr;
+				addr->sa_family = AF_INET;
+				memcpy(SA2IP(addr), p_addr + 12, SAIPLEN(addr));
+				if (IN_MULTICAST(SA2IP(addr)))
+					memset(addr, 0, sizeof(struct sockaddr_storage));
+				if (((struct sockaddr_in*)addr)->sin_addr.s_addr == INADDR_BROADCAST)
+					memset(addr, 0, sizeof(struct sockaddr_storage));
+			} else {
+				addr = (struct sockaddr*)&spi_nats->peer_ipv6_addr;
+				addr->sa_family = AF_INET6;
+				memcpy(SA2IP(addr), p_addr, SAIPLEN(addr));
+				unsigned char *p = SA2IP(addr);
+				if (IN6_IS_ADDR_MULTICAST((struct in6_addr*)p))
+					memset(addr, 0, sizeof(struct sockaddr_storage));
+				/* IPv6 doesn't have broadcast addresses */
+			}
+
+		}
+
+		location += tlv_length_to_parameter_length(length);
+	}
+
+	adjust_addrs(&spi_nats->peer_addr, &hip_mr_c->mn_addr, payload);
 }
 
-__u32 process_I2(hip_mr_client *hip_mr_c, hiphdr *hiph,
-		struct ip6_hdr *ip6h)
+/*
+ *
+ * mr_process_I2()
+ *
+ * in: hip_mr_c pointer to the mobile node client structure
+ *     family address family of packet, either AF_INET or AF_INET6
+ *     hiph pointer to the HIP header in the packet
+ *     payload pointer to a copy of the actual packet
+ *
+ * out: Perform SPINAT on packet
+ *
+ * Process the I2 from the mobile node, get external SPI.
+ */
+
+
+__u32 mr_process_I2(hip_mr_client *hip_mr_c, int family,
+		hiphdr *hiph, unsigned char *payload)
 {
 	int location = 0;
 	__u8 *data = (__u8 *)hiph;
@@ -226,19 +381,33 @@ __u32 process_I2(hip_mr_client *hip_mr_c, hiphdr *hiph,
 			esp_info = (tlv_esp_info *)tlv;
 			spi_nats->private_spi = ntohl(esp_info->new_spi);
 			spi_nats->public_spi = get_next_spinat();
-printf("Private SPI 0x%x added\n", spi_nats->private_spi);
-printf("Public SPI 0x%x added\n", spi_nats->public_spi);
+			log_(NORM, "Mobile node SPI 0x%x\n", spi_nats->private_spi);
+			log_(NORM, "External SPI 0x%x added\n", spi_nats->public_spi);
 			break;
 		}
-                location += tlv_length_to_parameter_length(length);
+		location += tlv_length_to_parameter_length(length);
 	}
 
-	adjust_addrs(&out_addr, &spi_nats->peer_addr, ip6h);
+	adjust_addrs(&out_addr, &spi_nats->peer_addr, payload);
 	return spi_nats->public_spi;
 }
 
-void process_R2(hip_mr_client *hip_mr_c, hiphdr *hiph,
-		struct ip6_hdr *ip6h)
+/*
+ *
+ * mr_process_R2()
+ *
+ * in: hip_mr_c pointer to the mobile node client structure
+ *     family address family of packet, either AF_INET or AF_INET6
+ *     hiph pointer to the HIP header in the packet
+ *     payload pointer to a copy of the actual packet
+ *
+ * out: Perform SPINAT on packet
+ *
+ * Process the R2 from the peer node, grab the SPI of the peer.
+ */
+
+void mr_process_R2(hip_mr_client *hip_mr_c, int family,
+		hiphdr *hiph, unsigned char *payload)
 {
 	int location = 0;
 	__u8 *data = (__u8 *)hiph;
@@ -269,20 +438,36 @@ void process_R2(hip_mr_client *hip_mr_c, hiphdr *hiph,
 		if (type == PARAM_ESP_INFO) {
 			esp_info = (tlv_esp_info *)tlv;
 			spi_nats->peer_spi = ntohl(esp_info->new_spi);
-printf("Peer SPI 0x%x added\n", spi_nats->peer_spi);
+			log_(NORM, "Peer SPI 0x%x added\n", spi_nats->peer_spi);
 			break;
 		}
-                location += tlv_length_to_parameter_length(length);
+		location += tlv_length_to_parameter_length(length);
 	}
 
-	adjust_addrs(&spi_nats->peer_addr, &hip_mr_c->mn_addr, ip6h);
+	adjust_addrs(&spi_nats->peer_addr, &hip_mr_c->mn_addr, payload);
 }
 
-void process_CLOSE(hip_mr_client *hip_mr_c, hiphdr *hiph,
-		struct ip6_hdr *ip6h, int packet_type)
+/*
+ *
+ * mr_process_CLOSE()
+ *
+ * in: hip_mr_c pointer to the mobile node client structure
+ *     family address family of packet, either AF_INET or AF_INET6
+ *     hiph pointer to the HIP header in the packet
+ *     payload pointer to a copy of the actual packet
+ *     packet_type is either CLOSE or CLOSE_ACK.
+ *
+ * out: Perform SPINAT on packet
+ *
+ * Process the CLOSE or CLOSE_ACK.
+ */
+
+void mr_process_CLOSE(hip_mr_client *hip_mr_c, int family,
+		hiphdr *hiph, unsigned char *payload, int packet_type)
 {
 	int in_bound;
 	hip_hit *peer_hit;
+
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
 	if (hits_equal(hiph->hit_sndr, hip_mr_c->mn_hit)) {
@@ -304,12 +489,12 @@ void process_CLOSE(hip_mr_client *hip_mr_c, hiphdr *hiph,
 		return;
 
 	if (in_bound) {
-		adjust_addrs(&spi_nats->peer_addr, &hip_mr_c->mn_addr, ip6h);
+		adjust_addrs(&spi_nats->peer_addr, &hip_mr_c->mn_addr, payload);
 	} else { 
-		adjust_addrs(&out_addr, &spi_nats->peer_addr, ip6h);
+		adjust_addrs(&out_addr, &spi_nats->peer_addr, payload);
 	}
 
-	/* Remove state for SA */
+	/* TODO: Remove state for SA */
 
 	if (packet_type == CLOSE_ACK) {
 		;
@@ -317,11 +502,26 @@ void process_CLOSE(hip_mr_client *hip_mr_c, hiphdr *hiph,
 
 }
 
-unsigned char *add_tlv_spi_nat(unsigned char *payload, size_t data_len,
-			size_t *new_len, __u32 new_spi)
+/*
+ *
+ * add_tlv_spi_nat()
+ *
+ * in: hip_mr_c pointer to the mobile node client structure
+ *     family address family of packet, either AF_INET or AF_INET6
+ *     hiph pointer to the HIP header in the packet
+ *     payload pointer to a copy of the actual packet
+ *
+ * out: create new packet adding PARAM_ESP_INFO_NOSIG TLV
+ *
+ * Add a the external SPI of the mobile node to the I2.
+ */
+
+unsigned char *add_tlv_spi_nat(int family, unsigned char *payload,
+			size_t data_len, size_t *new_len, __u32 new_spi)
 {
-	struct ip6_hdr *ip6h = (struct ip6_hdr*)payload;
-	hiphdr *hiph = (hiphdr *)(payload + sizeof(struct ip6_hdr));
+	hiphdr *hiph;
+	struct ip *ip4h = NULL;
+	struct ip6_hdr *ip6h = NULL;
 	tlv_esp_info *esp_info;
 	size_t len = data_len + sizeof(tlv_esp_info);
 	int hiphdr_len;
@@ -331,27 +531,36 @@ unsigned char *add_tlv_spi_nat(unsigned char *payload, size_t data_len,
 		return buff;
 	}
 
+  /* Copy original packet */
 	memcpy(buff, payload, data_len);
-	ip6h = (struct ip6_hdr*)buff;
-	hiph = (hiphdr *)(buff + sizeof(struct ip6_hdr));
+
+	/* ESP INFO */
+	esp_info = (tlv_esp_info*) &buff[data_len];
+	esp_info->type = htons(PARAM_ESP_INFO_NOSIG);
+	esp_info->length = htons(sizeof(tlv_esp_info) - 4);
+	esp_info->reserved = 0;
+	esp_info->keymat_index = 0;
+	esp_info->old_spi = 0;
+	esp_info->new_spi = htonl(new_spi);
+
+	/* finish with new length */
+
+	if (family == PF_INET) {
+		ip4h = (struct ip *) buff;
+		hiph = (hiphdr *)(buff + sizeof(struct ip));
+	} else {
+		ip6h = (struct ip6_hdr *) buff;
+		hiph = (hiphdr *)(buff + sizeof(struct ip6_hdr));
+	}
 	hiphdr_len = (hiph->hdr_len+1) * 8;
-
-        /* ESP INFO */
-        esp_info = (tlv_esp_info*) &buff[data_len];
-        esp_info->type = htons(PARAM_ESP_INFO_NOSIG);
-        esp_info->length = htons(sizeof(tlv_esp_info) - 4);
-        esp_info->reserved = 0;
-        esp_info->keymat_index = 0;
-        esp_info->old_spi = 0;
-        esp_info->new_spi = htonl(new_spi);
-
-        /* finish with new length */
-
 	hiphdr_len += sizeof(tlv_esp_info);
-        ip6h->ip6_plen = htons((unsigned short)hiphdr_len);
-        hiph->hdr_len = (hiphdr_len/8) - 1;
+	if (family == PF_INET)
+		ip4h->ip_len = htons((unsigned short)hiphdr_len + sizeof(struct ip));
+	else
+		ip6h->ip6_plen = htons((unsigned short)hiphdr_len);
+	hiph->hdr_len = (hiphdr_len/8) - 1;
 
-printf("Adding SPI_NAT of 0x%x\n", new_spi);
+	log_(NORM, "Adding SPI_NAT of 0x%x\n", new_spi);
 	*new_len = len;
 	return buff;
 }
@@ -359,316 +568,508 @@ printf("Adding SPI_NAT of 0x%x\n", new_spi);
 void generate_hip_updates(struct sockaddr *out)
 {
 	int i;
+	struct sockaddr *dst = NULL;
+
+	if (!out->sa_family) {
+		log_(WARN, "No external address for UPDATE\n");
+		return;
+	}
 
 	for (i = 0; i < max_hip_mr_clients; i++) {
 		if (RESPONSE_SENT == hip_mr_client_table[i].state) {
 			hip_spi_nat *spi_nats;
 
-struct sockaddr *src = (struct sockaddr*)&hip_mr_client_table[i].mn_addr;
-printf("Doing UPDATE for Mobile Router client %s\n", logaddr(src));
+			struct sockaddr *src = (struct sockaddr*)&hip_mr_client_table[i].mn_addr;
+			log_(NORM, "Doing UPDATE for Mobile Router client %s\n", logaddr(src));
 
 			for (spi_nats = hip_mr_client_table[i].spi_nats;
 				spi_nats; spi_nats = spi_nats->next) {
 
-				struct sockaddr *dst =
-					(struct sockaddr*)&spi_nats->peer_addr;
-				hip_send_proxy_update(out, dst,
-					&hip_mr_client_table[i].mn_hit,
-					&spi_nats->peer_hit,
-					&spi_nats->ticket,
-					spi_nats->public_spi);
+				dst = (struct sockaddr*)&spi_nats->peer_addr;
+				if (out->sa_family == AF_INET &&
+						AF_INET ==
+							((struct sockaddr *)&spi_nats->peer_ipv4_addr)->sa_family)
+					dst = (struct sockaddr*)&spi_nats->peer_ipv4_addr;
+				if (out->sa_family == AF_INET6 &&
+						AF_INET6 ==
+							((struct sockaddr *)&spi_nats->peer_ipv6_addr)->sa_family)
+					dst = (struct sockaddr*)&spi_nats->peer_ipv6_addr;
+
+				if (dst->sa_family == out->sa_family) {
+					hip_send_proxy_update(out, dst,
+						&hip_mr_client_table[i].mn_hit,
+						&spi_nats->peer_hit,
+						&spi_nats->ticket,
+						spi_nats->public_spi);
+				} else {
+					log_(WARN,
+					"Unable to find %s external address "
+						"for destination %s\n",
+						(out->sa_family == AF_INET) ?
+						"IPv4" : "IPv6", logaddr(dst));
+				}
 			}
 		}
 	}
 }
 
+/* Periodic check to see if we have a new external address */
 void check_address_change(void)
 {
-	sockaddr_list *l;
 	struct sockaddr *out = (struct sockaddr *)&out_addr;
 
 	if (!new_external_address)
 		return;
 
-	for (l = my_addr_head; l; l=l->next) {
-		if (l->if_index == external_if_index  &&
-		    l->addr.ss_family == AF_INET6) {
-			struct in6_addr ip6_addr, ip6_old_addr;
-			memcpy(&ip6_addr, SA2IP((struct sockaddr *)&l->addr),
-				sizeof(struct in6_addr));
-			if (!IN6_IS_ADDR_LINKLOCAL(&ip6_addr)  &&
-			    !IN6_IS_ADDR_LOOPBACK(&ip6_addr)   &&
-			    !IN6_IS_ADDR_SITELOCAL(&ip6_addr)) {
-				memcpy(&ip6_old_addr, SA2IP(out),
-					sizeof(struct in6_addr));
-				if (IN6_ARE_ADDR_EQUAL(&ip6_addr,
-					&ip6_old_addr))
-						return;
-				out->sa_family = AF_INET6;
-				memcpy(SA2IP(out),
-					SA2IP((struct sockaddr *)&l->addr),
-					SAIPLEN(out));
-				pthread_mutex_lock(&hip_mr_client_mutex);
-				new_external_address = FALSE;
-printf("Need to generate UPDATE packet for new address %s\n", logaddr(out));
-				generate_hip_updates(out);
-				pthread_mutex_unlock(&hip_mr_client_mutex);
-				break;
-			}
-
-		}
+	pthread_mutex_lock(&hip_mr_client_mutex);
+	memcpy(&out_addr, &external_address, sizeof(out_addr));
+	new_external_address = FALSE;
+	if (!external_interface) {
+		external_interface = malloc(strlen(HCNF.outbound_iface) + 1);
+		if (!external_interface)
+			log_(WARN, "Warning: external_interface malloc error!\n");
+		else
+			strcpy(external_interface, HCNF.outbound_iface);
 	}
-
+	generate_hip_updates(out);
+	pthread_mutex_unlock(&hip_mr_client_mutex);
 }
 
-unsigned char *check_hip_packet(unsigned char *payload, size_t data_len,
-			size_t *new_len)
+/* Perform SPINAT and Mobiler Router service for HIP packets */
+
+unsigned char *check_hip_packet(int family, unsigned char *payload,
+			size_t data_len, size_t *new_len)
 {
 	struct sockaddr *src, *dst;
 	struct sockaddr_storage src_addr, dst_addr;
-	struct ip6_hdr *ip6h = (struct ip6_hdr*)payload;
-	hiphdr *hiph = (hiphdr *)(payload + sizeof(struct ip6_hdr));
+	struct ip *ip4h = NULL;
+	struct ip6_hdr *ip6h = NULL;
+	hiphdr *hiph;
 	hip_mr_client *hip_mr_c;
-	int length = (hiph->hdr_len+1) * 8;
-	unsigned char *buff = NULL;
+	int length;
+	unsigned char *buff = payload;
+	char ipstr[INET6_ADDRSTRLEN];
 
+	*new_len = data_len;
+	if (family == PF_INET) {
+		ip4h = (struct ip *) payload;
+		hiph = (hiphdr *) (payload + sizeof(struct ip));
+	} else {
+		ip6h = (struct ip6_hdr *) payload;
+		hiph = (hiphdr *) (payload + sizeof(struct ip6_hdr));
+	}
+	length = (hiph->hdr_len+1) * 8;
+
+/*
+	printf("HIP packet from HIT");
+	print_hex(hiph->hit_sndr, HIT_SIZE);
+	printf(" to HIT");
+	print_hex(hiph->hit_rcvr, HIT_SIZE);
+	printf("\n");
+*/
+
+// XXX jeffa: move locking here
+//            lookup here
+//     process only based on switch statement
 	switch(hiph->packet_type) {
 		case HIP_I1:
 			pthread_mutex_lock(&hip_mr_client_mutex);
 			hip_mr_c = check_hits(hiph->hit_sndr);
+			printf("HIP I1 packet of length %d. %s a client\n",
+				length, hip_mr_c ? "is" : "NOT" );
 			if (hip_mr_c) {
-				process_I1(hip_mr_c, hiph, ip6h);
+				mr_process_I1(hip_mr_c, family, hiph, payload);
 			}
 			pthread_mutex_unlock(&hip_mr_client_mutex);
-			printf("HIP I1 packet of length %d\n", length);
 			break;
 		case HIP_R1:
 			pthread_mutex_lock(&hip_mr_client_mutex);
 			hip_mr_c = check_hits(hiph->hit_rcvr);
+			printf("HIP R1 packet of length %d. %s a client\n",
+				length, hip_mr_c ? "is" : "NOT" );
 			if (hip_mr_c) {
-				process_R1(hip_mr_c, hiph, ip6h);
+				mr_process_R1(hip_mr_c, family, hiph, payload);
 			}
 			pthread_mutex_unlock(&hip_mr_client_mutex);
-			printf("HIP R1 packet of length %d\n", length);
 			break;
 		case HIP_I2:
 			pthread_mutex_lock(&hip_mr_client_mutex);
 			hip_mr_c = check_hits(hiph->hit_sndr);
+			printf("HIP I2 packet of length %d. %s a client\n",
+				length, hip_mr_c ? "is" : "NOT" );
 			if (hip_mr_c) {
 				__u32 new_spi;
-				new_spi = process_I2(hip_mr_c, hiph, ip6h);
+				new_spi = mr_process_I2(hip_mr_c, family, hiph, payload);
 				if (new_spi) {
-					buff = add_tlv_spi_nat(payload,
+					buff = add_tlv_spi_nat(family, payload,
 						data_len, new_len, new_spi);
 				}
 			}
 			pthread_mutex_unlock(&hip_mr_client_mutex);
-			printf("HIP I2 packet of length %d\n", length);
 			break;
 		case HIP_R2:
+			printf("HIP R2 packet of length %d\n", length);
 			pthread_mutex_lock(&hip_mr_client_mutex);
 			hip_mr_c = check_hits(hiph->hit_rcvr);
 			if (hip_mr_c) {
-				process_R2(hip_mr_c, hiph, ip6h);
+				mr_process_R2(hip_mr_c, family, hiph, payload);
 			}
 			pthread_mutex_unlock(&hip_mr_client_mutex);
-			printf("HIP R2 packet of length %d\n", length);
 			break;
 		case CLOSE:
 		case CLOSE_ACK:
+			printf("%s packet of length %d\n", (hiph->packet_type == CLOSE) ?
+				"HIP CLOSE" : "HIP CLOSE ACK", length);
 			pthread_mutex_lock(&hip_mr_client_mutex);
 			if ((hip_mr_c = check_hits(hiph->hit_rcvr))  ||
 			    (hip_mr_c = check_hits(hiph->hit_sndr))) {
-				process_CLOSE(hip_mr_c, hiph, ip6h,
+				mr_process_CLOSE(hip_mr_c, family, hiph, payload,
 					hiph->packet_type);
 			}
 			pthread_mutex_unlock(&hip_mr_client_mutex);
-			if (hiph->packet_type == CLOSE)
-				printf("HIP CLOSE ");
-			else
-				printf("HIP CLOSE ACK ");
-			printf("packet of length %d\n", length);
 			break;
 	}
 
-        /* finish with new checksum */
+	/* finish with new checksum */
 
-	if (buff) {
-		ip6h = (struct ip6_hdr*)buff;
-		hiph = (hiphdr *)(buff + sizeof(struct ip6_hdr));
+	if (buff != payload) {
+		if (family == PF_INET) {
+			ip4h = (struct ip *)buff;
+			hiph = (hiphdr *)(buff + sizeof(struct ip));
+		} else {
+			ip6h = (struct ip6_hdr *)buff;
+			hiph = (hiphdr *)(buff + sizeof(struct ip6_hdr));
+		}
 	}
 	src = (struct sockaddr *)&src_addr;
-	src->sa_family = AF_INET6;
 	dst = (struct sockaddr *)&dst_addr;
-	dst->sa_family = AF_INET6;
-	memcpy(SA2IP(src), &(ip6h->ip6_src), SAIPLEN(src));
-	memcpy(SA2IP(dst), &(ip6h->ip6_dst), SAIPLEN(dst));
-        hiph->checksum = 0;
-        hiph->checksum = checksum_packet((__u8 *)hiph, src, dst);
+	src->sa_family = family;
+	dst->sa_family = family;
+	if (family == PF_INET) {
+		memcpy(SA2IP(src), &(ip4h->ip_src), SAIPLEN(src));
+		memcpy(SA2IP(dst), &(ip4h->ip_dst), SAIPLEN(dst));
+	} else {
+		memcpy(SA2IP(src), &(ip6h->ip6_src), SAIPLEN(src));
+		memcpy(SA2IP(dst), &(ip6h->ip6_dst), SAIPLEN(dst));
+	}
+	memset(ipstr, 0, sizeof(ipstr));
+	inet_ntop(family, SA2IP(src), ipstr, sizeof(ipstr));
+	printf("addresses are now %s, ", ipstr);
+	memset(ipstr, 0, sizeof(ipstr));
+	inet_ntop(family, SA2IP(dst), ipstr, sizeof(ipstr));
+	printf("%s\n", ipstr);
+	hiph->checksum = 0;
+	hiph->checksum = checksum_packet((__u8 *)hiph, src, dst);
 
-	printf("  from HIT ");
-	print_hex(hiph->hit_sndr, HIT_SIZE);
-	printf("  to HIT ");
-	print_hex(hiph->hit_rcvr, HIT_SIZE);
-	printf("\n");
+	// printf("\n");
 	return buff;
 }
 
-void check_esp_packet(struct ip6_hdr *ip6h, struct ip_esp_hdr *esph)
+/* Translate packet between IPv4 and IPv6 */
+
+unsigned char * new_header(int family, unsigned char *payload)
 {
-	int i, inbound = 0;
-	struct sockaddr *out, *addr;
-	struct in6_addr ip6_dst, ip6_src;
+	__u32 tc;
+	int data_len;
+	unsigned char *data;
+	struct ip_esp_hdr *esph;
+	struct ip *ip4h;
+	struct ip6_hdr *ip6h;
 
-	printf("ESP packet with SPI 0x%x\n", ntohl(esph->spi));
-
-	out = (struct sockaddr *)&out_addr;
-	out->sa_family = AF_INET6;
-	memcpy(&ip6_dst, SA2IP(out), sizeof(struct in6_addr));
-	if (IN6_ARE_ADDR_EQUAL(&ip6h->ip6_dst, &ip6_dst)) {
-		inbound = 1;
+	if (family == AF_INET) {
+		ip4h = (struct ip *)payload;
+		esph = (struct ip_esp_hdr *) (payload + sizeof(struct ip));
+		data_len = ntohs(ip4h->ip_len) - sizeof(struct ip);
+		data = malloc(sizeof(struct ip6_hdr) + data_len);
+		if (data) {
+			ip6h = (struct ip6_hdr *)data;
+			memset(ip6h, 0, sizeof(struct ip6_hdr));
+			ip6h->ip6_flow = 0; /* zero the version (4), TC (8), flow-ID (20) */
+			ip6h->ip6_vfc = 0x60;
+			ip6h->ip6_plen = htons(data_len);
+			ip6h->ip6_nxt = ip4h->ip_p;
+			ip6h->ip6_hlim = ip4h->ip_ttl;
+			tc = ip4h->ip_tos << 20;
+			ip6h->ip6_flow |= tc;   /* 8 bits traffic class */
+			ip6h->ip6_hlim = ip4h->ip_ttl;    /* __u8 */
+			memcpy(data + sizeof(struct ip6_hdr), esph, data_len);
+		}
+	} else {
+		ip6h = (struct ip6_hdr *)payload;
+		esph = (struct ip_esp_hdr *) (payload + sizeof(struct ip6_hdr));
+		data_len = ntohs(ip6h->ip6_plen);
+		data = malloc(sizeof(struct ip) + data_len);
+		if (data) {
+			ip4h = (struct ip *)data;
+			memset(ip4h, 0, sizeof(struct ip));
+			ip4h->ip_v = 4;
+			ip4h->ip_hl = 5;
+			tc = ip6h->ip6_flow & 0x1100000;
+			ip4h->ip_tos = tc >> 20;
+			ip4h->ip_len = htons(data_len + sizeof(struct ip));
+			ip4h->ip_id  = 0;
+			ip4h->ip_off = htons(0x4000);
+			ip4h->ip_ttl = ip6h->ip6_hlim;
+			ip4h->ip_p = ip6h->ip6_nxt;
+			ip4h->ip_sum = 0;
+			memcpy(data + sizeof(struct ip), esph, data_len);
+		}
 	}
 
+	return data;
+}
+
+/* Perform SPINAT on ESP packets */
+
+unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload)
+{
+	int i;
+	unsigned char *new_payload = NULL;
+	struct sockaddr *out = (struct sockaddr *)&out_addr;
+	struct ip_esp_hdr *esph;
+
+	esph = (struct ip_esp_hdr *) (payload + ((family == AF_INET) ?
+			sizeof(struct ip) : sizeof(struct ip6_hdr)));
+
+/*
+	printf("ESP packet with SPI 0x%x\n", ntohl(esph->spi));
+*/
 	pthread_mutex_lock(&hip_mr_client_mutex);
 	for (i = 0; i < max_hip_mr_clients; i++) {
-		addr = (struct sockaddr *)&hip_mr_client_table[i].mn_addr;
-		addr->sa_family = AF_INET6;
-		memcpy(&ip6_src, SA2IP(addr), sizeof(struct in6_addr));
-		hip_spi_nat *spi_nats = hip_mr_client_table[i].spi_nats;
-		while (spi_nats) {
-			if (inbound &&
-			    (spi_nats->public_spi == ntohl(esph->spi))) {
+		struct sockaddr *addr = (struct sockaddr *)&hip_mr_client_table[i].mn_addr;
+// XXX BUGFIX
+		hip_spi_nat *spi_nats; // = hip_mr_client_table[i].spi_nats;
+//		while (spi_nats) {
+		for (spi_nats = hip_mr_client_table[i].spi_nats;
+		     spi_nats; spi_nats = spi_nats->next) {
+			if (inbound) {
+				if (spi_nats->public_spi != ntohl(esph->spi))
+					continue;
+/*
 				printf("Found the public SPI 0x%x\n", ntohl(esph->spi));
 				printf("Changing to 0x%x\n", spi_nats->private_spi);
+*/
 				esph->spi = htonl(spi_nats->private_spi);
-				adjust_addrs(&spi_nats->peer_addr,
-					     &hip_mr_client_table[i].mn_addr,
-					     ip6h);
+				if (family == addr->sa_family) {
+					new_payload = payload;
+				} else {
+					new_payload = new_header(family, payload);
+				}
+				if (new_payload) {
+					adjust_addrs(&spi_nats->peer_addr,
+						     &hip_mr_client_table[i].mn_addr, new_payload);
+				}
 				pthread_mutex_unlock(&hip_mr_client_mutex);
-				return;
-			} else if (!inbound &&
-			       (spi_nats->peer_spi == ntohl(esph->spi)) &&
-			       IN6_ARE_ADDR_EQUAL(&ip6h->ip6_src, &ip6_src)) {
-				adjust_addrs(&out_addr, &spi_nats->peer_addr,
-					     ip6h);
+				return new_payload;
+			} else if (!inbound) {
+				if (spi_nats->peer_spi != ntohl(esph->spi))
+					continue;
+				struct sockaddr *peer = (struct sockaddr *)&spi_nats->peer_addr;
+				if (!addresses_are_equal(addr, peer, family, payload))
+					continue;
+				if (family == out->sa_family) {
+					struct sockaddr_storage *dst_addr = &spi_nats->peer_addr;
+					if (family == AF_INET) {
+						if (AF_INET ==
+							((struct sockaddr *)&spi_nats->peer_ipv4_addr)->sa_family)
+							dst_addr = &spi_nats->peer_ipv4_addr;
+					} else if (family == AF_INET6) {
+						if (AF_INET6 ==
+							((struct sockaddr *)&spi_nats->peer_ipv6_addr)->sa_family)
+							dst_addr = &spi_nats->peer_ipv6_addr;
+					}
+					adjust_addrs(&out_addr, dst_addr, payload);
+					pthread_mutex_unlock(&hip_mr_client_mutex);
+					return payload;
+				} else {
+					struct sockaddr_storage *dst_addr = NULL;
+					if (family == AF_INET) {
+						if (AF_INET6 ==
+							((struct sockaddr *)&spi_nats->peer_ipv6_addr)->sa_family)
+							dst_addr = &spi_nats->peer_ipv6_addr;
+					} else if (family == AF_INET6) {
+						if (AF_INET ==
+							((struct sockaddr *)&spi_nats->peer_ipv4_addr)->sa_family)
+							dst_addr = &spi_nats->peer_ipv4_addr;
+					}
+					if (dst_addr) {
+						/* Need to do IP family translation */
+						new_payload = new_header(family, payload);
+						if (new_payload) {
+							adjust_addrs(&out_addr, dst_addr, new_payload);
+						}
+					}
+					pthread_mutex_unlock(&hip_mr_client_mutex);
+					return new_payload;
+				}
 			}
-		spi_nats = spi_nats->next;
+// BUGFIX
+//		spi_nats = spi_nats->next;
 		}
 	}
 	pthread_mutex_unlock(&hip_mr_client_mutex);
+	/* Need to determine is this packet is for this host */
+	/* Right now just accept */
+	return payload;
 }
 
-#ifdef __WIN32__
-void hip_mobile_router(void *arg)
-#else
-void *hip_mobile_router(void *arg)
-#endif
-{
-	int status, type;
-	unsigned char buf[BUFSIZE];
-	unsigned char *new_buff;
-	size_t new_len;
-	struct ipq_handle *h;
-        struct ip6_hdr *ip6h;
-	struct ip_esp_hdr *esph;
-	ipq_packet_msg_t *m;
-	char buffer[INET6_ADDRSTRLEN];
-	sockaddr_list *l;
+/* Thread for the mobile router functionality in HIP */
 
-	struct sockaddr *out = (struct sockaddr *)&out_addr;
+void *hip_mobile_router(void *arg)
+{
+	int family = PF_INET6;
+	int err, type, inbound;
+	int write_raw, raw_ip4_socket, raw_ip6_socket;
+	unsigned int verdict;
+	unsigned char buf[BUFSIZE];
+	unsigned char *output_buffer;
+	size_t output_length;
+	struct ipq_handle *h4, *h6;
+	struct ip *ip4h = NULL;
+	struct ip6_hdr *ip6h = NULL;
+	ipq_packet_msg_t *m;
+	int highest_descriptor = 0;
+	struct timeval timeout;
+	fd_set read_fdset;
+//	char buffer[INET6_ADDRSTRLEN];
 
 	printf("hip_mobile_router() thread started...\n");
 
-	/* TODO: get from interface name spec in config file to interface index
-	Also, for an address/interface UPDATE change, how to get that info
-	to this thread?
-	external_if_index = devname_to_index("eth0", NULL);
-	*/
+	/* Sockets to use when changing address family */
 
-	for (l = my_addr_head; l; l=l->next) {
-		if (l->if_index == external_if_index  &&
-		    l->addr.ss_family == AF_INET6) {
-			struct in6_addr ip6_addr;
-			memcpy(&ip6_addr, SA2IP((struct sockaddr *)&l->addr),
-				sizeof(struct in6_addr));
-			if (!IN6_IS_ADDR_LINKLOCAL(&ip6_addr)  &&
-			    !IN6_IS_ADDR_LOOPBACK(&ip6_addr)   &&
-			    !IN6_IS_ADDR_SITELOCAL(&ip6_addr)) {
-				out->sa_family = AF_INET6;
-				memcpy(SA2IP(out),
-					SA2IP((struct sockaddr *)&l->addr),
-					SAIPLEN(out));
-				break;
-			}
-
+	raw_ip4_socket = socket(PF_INET, SOCK_RAW, IPPROTO_RAW);
+	raw_ip6_socket = socket(PF_INET6, SOCK_RAW, IPPROTO_RAW);
+	if (raw_ip4_socket < 0 || raw_ip6_socket < 0) {
+		if (raw_ip4_socket < 0) {
+			perror("hip_mobile_router() - socket(PF_INET, SOCK_RAW, IPPROTO_RAW) "
+				"failed");
 		}
+		if (raw_ip6_socket < 0) {
+			perror("hip_mobile_router() - socket(PF_INET6, SOCK_RAW, IPPROTO_RAW) "
+				"failed");
+		}
+		fflush(stdout);
+		return NULL;
 	}
 
-/*
-	struct in6_addr ip6_out;
-	out = (struct sockaddr *)&out_addr;
-	out->sa_family = AF_INET6;
-	inet_pton(AF_INET6, "2002:822a:20ec:1::3", &ip6_out);
-	memcpy(SA2IP(out), &ip6_out, SAIPLEN(out));
-*/
-	h = ipq_create_handle(0, PF_INET6);
-	if (!h) {
-		printf("hip_mobile_router() - ipq_create_handle() "
-			"failed: %s\n", ipq_errstr());
+	/* IPQ sessions to get packets from iptables */
+
+	h4 = ipq_create_handle(0, PF_INET);
+	h6 = ipq_create_handle(0, PF_INET6);
+	if (!h4 || !h6) {
+		if (!h4) {
+			printf("hip_mobile_router() - ipq_create_handle(0, PF_INET) "
+				"failed: %s\n", ipq_errstr());
+		}
+		if (!h6) {
+			printf("hip_mobile_router() - ipq_create_handle(0, PF_INET6) "
+				"failed: %s\n", ipq_errstr());
+		}
 		fflush(stdout);
-#ifdef __WIN32__
-		return;
-#else
 		return NULL;
-#endif
 	}
 
-	status = ipq_set_mode(h, IPQ_COPY_PACKET, BUFSIZE);
-	if (status < 0) {
-		printf("hip_mobile_router() - ipq_set_mode() failed: %s\n", 
-			ipq_errstr());
-		ipq_destroy_handle(h);
+	err = ipq_set_mode(h4, IPQ_COPY_PACKET, BUFSIZE);
+	if (err < 0) {
+		printf("*** hip_mobile_router() - ipq_set_mode(IPV4) failed: "
+			"%s\n Are the correct kernel modules loaded "
+			"(modprobe ip_queue)?", ipq_errstr());
+		ipq_destroy_handle(h4);
+		ipq_destroy_handle(h6);
 		fflush(stdout);
-#ifdef __WIN32__
-		return;
-#else
 		return NULL;
-#endif
 	}
+
+	err = ipq_set_mode(h6, IPQ_COPY_PACKET, BUFSIZE);
+	if (err < 0) {
+		printf("*** hip_mobile_router() - ipq_set_mode(IPV6) failed: "
+			"%s\n Are the correct kernel modules loaded "
+			"(modprobe ip6_queue)?", ipq_errstr());
+		ipq_destroy_handle(h4);
+		ipq_destroy_handle(h6);
+		fflush(stdout);
+		return NULL;
+	}
+
+	/* Main loop */
 
 	while(g_state == 0) {
-		check_address_change();
-		status = ipq_read(h, buf, BUFSIZE, 5);
-		if (status < 0) {
-			printf("hip_mobile_router() - ipq_read() failed: %s\n",
+
+		verdict = NF_DROP;
+		write_raw = 0;
+		/* prepare file descriptor sets */
+		FD_ZERO(&read_fdset);
+		FD_SET(h4->fd, &read_fdset);
+		FD_SET(h6->fd, &read_fdset);
+		timeout.tv_sec = 0;
+		timeout.tv_usec = MR_TIMEOUT_US;
+		highest_descriptor = maxof(2, h4->fd, h6->fd);
+
+		err = select(highest_descriptor + 1, &read_fdset,
+			     NULL, NULL, &timeout);
+		if (err < 0) { /* select() error */
+			if (EINTR == errno)
+				continue;
+			printf("hip_mobile_router(): select() error: %s.\n",
+				strerror(errno));
+			continue;
+		} else if (err == 0) { /* idle cycle - select() timeout  */
+			check_address_change();
+			continue;
+		} else if (FD_ISSET(h4->fd, &read_fdset)) {
+			family = AF_INET;
+		} else if (FD_ISSET(h6->fd, &read_fdset)) {
+			family = AF_INET6;
+		} else {
+			printf("hip_mobile_router(): unknown socket "
+				"activity\n");
+			continue;
+		}
+		err = ipq_read( (family==AF_INET) ? h4 : h6, buf, BUFSIZE, 0);
+		if (err < 0) {
+			printf("hip_mobile_router() ipq_read(%s) error: %s\n",
+				(family==AF_INET) ? "IPV4" : "IPV6",
 				ipq_errstr());
 			continue;
-		} else if (status == 0) { /* Timed out */
-                        continue;
-                }
+		}
 
 		type = ipq_message_type(buf);
 		if (NLMSG_ERROR == type) {
-			printf("Received error message %d\n",
-				ipq_get_msgerr(buf));
+			printf("hip_mobile_router(): received error message %d"
+				"\n", ipq_get_msgerr(buf));
 			continue;
 		} else if (IPQM_PACKET != type) {
-			printf("Received unexpected type %d\n", type);
+			printf("hip_mobile_router(): received unexpected type "
+				"%d\n", type);
 			continue;
 		}
 
 		m = ipq_get_packet(buf);
-		new_buff = m->payload;
-		new_len = m->data_len;
+		output_buffer = m->payload;
+		output_length = m->data_len;
 
-		ip6h = (struct ip6_hdr*)m->payload;
-		printf("\nPacket from %s",
-			inet_ntop(AF_INET6, &(ip6h->ip6_src),
-				buffer, sizeof(buffer)));
-		printf(" to %s\n",
-			inet_ntop(AF_INET6, &(ip6h->ip6_dst),
-				buffer, sizeof(buffer)));
+		if (family == AF_INET) {
+			ip4h = (struct ip *)m->payload;
+/*
+			printf("\nPacket from %s",
+				inet_ntop(AF_INET, &(ip4h->ip_src),
+					buffer, sizeof(buffer)));
+			printf(" to %s\n",
+				inet_ntop(AF_INET, &(ip4h->ip_dst),
+					buffer, sizeof(buffer))); // */
+		} else {
+			ip6h = (struct ip6_hdr *)m->payload;
+/*
+			printf("\nPacket from %s",
+				inet_ntop(AF_INET6, &(ip6h->ip6_src),
+					buffer, sizeof(buffer)));
+			printf(" to %s\n",
+				inet_ntop(AF_INET6, &(ip6h->ip6_dst),
+					buffer, sizeof(buffer))); // */
+		}
 
+		/* Determine if packet is from external side or not */
+/*
 		if (m->indev_name[0] != 0  &&  m->outdev_name[0] == 0)
 			printf("  INPUT from %s\n\n", m->indev_name);
 		else if (m->indev_name[0] != 0  &&  m->outdev_name[0] != 0)
@@ -676,57 +1077,114 @@ void *hip_mobile_router(void *arg)
 				m->outdev_name);
 		else if (m->indev_name[0] == 0  &&  m->outdev_name[0] != 0)
 			printf("  OUTPUT to %s\n\n", m->outdev_name);
+*/
+		if (external_interface &&
+		    (strcmp(m->indev_name, external_interface) == 0))
+			inbound = TRUE;
+		else
+			inbound = FALSE;
 
-		if (ip6h->ip6_nxt == H_PROTO_HIP) {
-			unsigned char *temp_buff;
-			size_t len;
-			temp_buff = check_hip_packet(m->payload, m->data_len,
-					&len);
-			if (temp_buff) {
-				new_buff = temp_buff;
-				new_len = len;
+		/* Only process HIP and ESP packets */
+
+		if ((family == PF_INET && ip4h->ip_p == H_PROTO_HIP) ||
+			  (family == PF_INET6 && ip6h->ip6_nxt == H_PROTO_HIP)) {
+			output_buffer = check_hip_packet(family, m->payload,
+				m->data_len, &output_length);
+			verdict = NF_ACCEPT;
+		} else if ((family == PF_INET && ip4h->ip_p == IPPROTO_ESP) ||
+		           (family == PF_INET6 && ip6h->ip6_nxt == IPPROTO_ESP)) {
+			output_buffer = check_esp_packet(family, inbound, m->payload);
+			if (output_buffer == m->payload)
+				verdict = NF_ACCEPT;
+			else {
+				verdict = NF_DROP;
+				/* Change of address family */
+				if (output_buffer)
+					write_raw = (family == PF_INET) ? PF_INET6 : PF_INET;
 			}
-		} else if (ip6h->ip6_nxt == IPPROTO_ESP) {
-			esph = (struct ip_esp_hdr *)
-				(m->payload + sizeof(struct ip6_hdr));
-			check_esp_packet(ip6h, esph);
 		}
 
-		status = ipq_set_verdict(h, m->packet_id, NF_ACCEPT,
-			new_len, new_buff);
-		if (status < 0) {
-			printf("hip_mobile_router() - ipq_set_verdict() "
-				"failed: %s\n", ipq_errstr());
-			continue;
+		
+		printf("verdict=%s\n output_length=%d\n",
+			verdict==NF_ACCEPT ? "ACCEPT" : "DROP", output_length);
+		
+		/* Give verdict to IPQ */
+
+		err = ipq_set_verdict((family == PF_INET) ? h4 : h6,
+			m->packet_id, verdict, output_length, output_buffer);
+
+		if (err < 0) {
+			printf("hip_mobile_router() - ipq_set_verdict(%s) "
+				"failed: %s\n", family == PF_INET ? "IPV4" : "IPV6",
+				ipq_errstr());
 		}
 
+		/* Change of address family, write new packet to raw socket */
+
+		if (write_raw == PF_INET) {
+
+			struct sockaddr_in sendto_addr;
+			struct ip *ip4h = (struct ip *)output_buffer;
+ 
+			memset(&sendto_addr, 0, sizeof(sendto_addr));
+			sendto_addr.sin_family = AF_INET;
+			sendto_addr.sin_addr.s_addr = ip4h->ip_dst.s_addr;
+			sendto_addr.sin_port = htons(0);
+			output_length = ntohs(ip4h->ip_len);
+
+			int i = sendto(raw_ip4_socket, output_buffer, output_length, 0,
+				(const struct sockaddr *)&sendto_addr, sizeof(struct sockaddr_in));
+			if (i < 0)
+				perror("Error ");
+
+		} else if (write_raw == PF_INET6) {
+
+			struct sockaddr_in6 sendto_addr;
+			struct ip6_hdr *ip6h = (struct ip6_hdr *)output_buffer;
+ 
+			memset(&sendto_addr, 0, sizeof(sendto_addr));
+			sendto_addr.sin6_family = AF_INET6;
+			memcpy(&sendto_addr.sin6_addr.s6_addr, &ip6h->ip6_dst,
+				sizeof(struct in6_addr));
+			sendto_addr.sin6_port = htons(0);
+			output_length = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr);
+
+			int i = sendto(raw_ip6_socket, output_buffer, output_length, 0,
+				(const struct sockaddr *)&sendto_addr, sizeof(struct sockaddr_in6));
+			if (i < 0)
+				perror("Error ");
+		}
+
+		if (output_buffer != m->payload)
+			free(output_buffer);
 	}
 
 	printf("hip_mobile_router() thread shutdown.\n");
-	ipq_destroy_handle(h);
+	close(raw_ip4_socket);
+	close(raw_ip6_socket);
+	ipq_destroy_handle(h4);
+	ipq_destroy_handle(h6);
 	fflush(stdout);
-#ifndef __WIN32__
 	pthread_exit((void *) 0);
 	return(NULL);
-#endif
-
 }
 
 /*
  *
- * function hip_send_update()
+ * function hip_send_proxy_update()
  * 
- * in:		hip_a = HIP association containing valid source/destination
- * 			addresses, HITs, SPIs, key material, pub key
+ * in:		
  * 		newaddr = new preferred address to include in LOCATOR, or NULL
  * 		dstaddr = alternate destination address, if this is an address
  * 			check message, otherwise NULL
+ *		mn_hit = hit of the mobile node
+ *		peer_hit = hit of the peer node
+ *		ticket = the signed ticket using the keys from the mobile node
+ *		spi_in = the SPI from the SPINAT
  * 		
  * out:		Returns bytes sent when successful, -1 on error.
  *
  * Opens a socket and sends the UPDATE packet.
- * Packet will be scheduled for retransmission if it contains a SEQ (that
- * needs to be ACKed.)
  *
  */
 int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
@@ -835,6 +1293,8 @@ int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
 */
 	return(hip_send(buff, location, src, dst, NULL, retransmit, 0, 0));
 }
+
+/* HMAC the proxy update */
 
 int build_tlv_proxy_hmac(hip_proxy_ticket *ticket, __u8 *data, int location,
 			int type)
