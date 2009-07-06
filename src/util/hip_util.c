@@ -2065,7 +2065,7 @@ int compare_hits(hip_hit a, hip_hit b)
  * in:		num_args = number of items
  * 		... = list of integers
  * out:		Returns the integer with the largest value from the
- *              list provided.
+ *              list provided. Must have three or more values in the list.
  */
 int maxof(int num_args, ...)
 {

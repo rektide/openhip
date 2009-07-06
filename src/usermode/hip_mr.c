@@ -1,6 +1,6 @@
 /*
  * Host Identity Protocol
- * Copyright (C) 2005-08 the Boeing Company
+ * Copyright (C) 2005-09 the Boeing Company
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 
 #include <unistd.h>
 #include <pthread.h>            /* phread_exit() */
+#include <netinet/in.h>		/* INET6_ADDRSTRLEN */
 #include <netinet/ip.h>         /* struct ip */
 #include <netinet/ip6.h>        /* struct ip6_hdr */
 #include <netinet/icmp6.h>      /* struct icmp6_hdr */
@@ -40,7 +41,6 @@
 #include <linux/netfilter.h>    /* NF_DROP */
 #include <libipq.h>		/* ipq_create_handle() */
 
-#define INET6_ADDRSTRLEN 46
 #define BUFSIZE 2048
 #define MR_TIMEOUT_US 500000 /* microsecond timeout for mobile_router select()*/
 
@@ -140,8 +140,8 @@ hip_mr_client *check_hits(hip_hit the_hit)
 	for (i = 0; i < max_hip_mr_clients; i++) {
 		if (hits_equal(the_hit, hip_mr_client_table[i].mn_hit)) {
 /*
-			struct sockaddr *src = (struct sockaddr*)&hip_mr_client_table[i].mn_addr;
-			printf("This is for Mobile Router client %s\n", logaddr(src));
+struct sockaddr *src = (struct sockaddr*)&hip_mr_client_table[i].mn_addr;
+printf("This is for Mobile Router client %s\n", logaddr(src));
 */
 			return &hip_mr_client_table[i];
 		}
@@ -157,14 +157,9 @@ void adjust_addrs(struct sockaddr_storage *s, struct sockaddr_storage *d,
 	struct sockaddr *src, *dst;
 	struct ip *ip4h = NULL;
 	struct ip6_hdr *ip6h = NULL;
-	char ipstr[INET6_ADDRSTRLEN];
 
 	src = (struct sockaddr *)s;
 	dst = (struct sockaddr *)d;
-inet_ntop(src->sa_family, SA2IP(src), ipstr, sizeof(ipstr));
-printf("adjust_addrs to (%s, ", ipstr);
-inet_ntop(dst->sa_family, SA2IP(dst), ipstr, sizeof(ipstr));
-printf("%s)\n", ipstr);
 
 	if (src->sa_family != dst->sa_family)
 		return;
@@ -761,7 +756,6 @@ unsigned char *check_hip_packet(int family, unsigned char *payload,
 	hiph->checksum = 0;
 	hiph->checksum = checksum_packet((__u8 *)hiph, src, dst);
 
-	// printf("\n");
 	return buff;
 }
 
@@ -837,9 +831,7 @@ unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload)
 	pthread_mutex_lock(&hip_mr_client_mutex);
 	for (i = 0; i < max_hip_mr_clients; i++) {
 		struct sockaddr *addr = (struct sockaddr *)&hip_mr_client_table[i].mn_addr;
-// XXX BUGFIX
-		hip_spi_nat *spi_nats; // = hip_mr_client_table[i].spi_nats;
-//		while (spi_nats) {
+		hip_spi_nat *spi_nats; 
 		for (spi_nats = hip_mr_client_table[i].spi_nats;
 		     spi_nats; spi_nats = spi_nats->next) {
 			if (inbound) {
@@ -903,8 +895,6 @@ unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload)
 					return new_payload;
 				}
 			}
-// BUGFIX
-//		spi_nats = spi_nats->next;
 		}
 	}
 	pthread_mutex_unlock(&hip_mr_client_mutex);
@@ -913,12 +903,16 @@ unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload)
 	return payload;
 }
 
-/* Thread for the mobile router functionality in HIP */
 
+/*
+ * Mobile Router thread receives incoming packets from the netfilter QUEUE
+ * target (using libipq) that are HIP or ESP protocol packets, and performs
+ * SPINAT rewriting where necessary.
+ */
 void *hip_mobile_router(void *arg)
 {
 	int family = PF_INET6;
-	int err, type, inbound;
+	int err, type, inbound, protocol;
 	int write_raw, raw_ip4_socket, raw_ip6_socket;
 	unsigned int verdict;
 	unsigned char buf[BUFSIZE];
@@ -931,42 +925,28 @@ void *hip_mobile_router(void *arg)
 	int highest_descriptor = 0;
 	struct timeval timeout;
 	fd_set read_fdset;
-//	char buffer[INET6_ADDRSTRLEN];
+	/* char buffer[INET6_ADDRSTRLEN]; */
 
 	printf("hip_mobile_router() thread started...\n");
 
-	/* Sockets to use when changing address family */
-
+	/* Sockets used for change of address family */
 	raw_ip4_socket = socket(PF_INET, SOCK_RAW, IPPROTO_RAW);
 	raw_ip6_socket = socket(PF_INET6, SOCK_RAW, IPPROTO_RAW);
 	if (raw_ip4_socket < 0 || raw_ip6_socket < 0) {
-		if (raw_ip4_socket < 0) {
-			perror("hip_mobile_router() - socket(PF_INET, SOCK_RAW, IPPROTO_RAW) "
-				"failed");
-		}
-		if (raw_ip6_socket < 0) {
-			perror("hip_mobile_router() - socket(PF_INET6, SOCK_RAW, IPPROTO_RAW) "
-				"failed");
-		}
-		fflush(stdout);
-		return NULL;
+		printf("*** hip_mobile_router() error opening RAW %s socket: "
+			"%s\n",	(raw_ip4_socket < 0) ? "IPv4" : "IPv6",
+			strerror(errno));
+		return(NULL);
 	}
 
-	/* IPQ sessions to get packets from iptables */
-
+	/* IPQ handles to receive packets from netfilter QUEUE targets */
 	h4 = ipq_create_handle(0, PF_INET);
 	h6 = ipq_create_handle(0, PF_INET6);
 	if (!h4 || !h6) {
-		if (!h4) {
-			printf("hip_mobile_router() - ipq_create_handle(0, PF_INET) "
-				"failed: %s\n", ipq_errstr());
-		}
-		if (!h6) {
-			printf("hip_mobile_router() - ipq_create_handle(0, PF_INET6) "
-				"failed: %s\n", ipq_errstr());
-		}
-		fflush(stdout);
-		return NULL;
+		printf("*** hip_mobile_router() - ipq_create_handle(0, %s) "
+			"failed: %s\n",
+			h4 ? "PF_INET6" : "PF_INET", ipq_errstr());
+		return(NULL);
 	}
 
 	err = ipq_set_mode(h4, IPQ_COPY_PACKET, BUFSIZE);
@@ -974,36 +954,36 @@ void *hip_mobile_router(void *arg)
 		printf("*** hip_mobile_router() - ipq_set_mode(IPV4) failed: "
 			"%s\n Are the correct kernel modules loaded "
 			"(modprobe ip_queue)?", ipq_errstr());
-		ipq_destroy_handle(h4);
-		ipq_destroy_handle(h6);
-		fflush(stdout);
-		return NULL;
+		goto hip_mobile_router_exit;
 	}
-
 	err = ipq_set_mode(h6, IPQ_COPY_PACKET, BUFSIZE);
 	if (err < 0) {
 		printf("*** hip_mobile_router() - ipq_set_mode(IPV6) failed: "
 			"%s\n Are the correct kernel modules loaded "
 			"(modprobe ip6_queue)?", ipq_errstr());
-		ipq_destroy_handle(h4);
-		ipq_destroy_handle(h6);
-		fflush(stdout);
-		return NULL;
+		goto hip_mobile_router_exit;
 	}
 
-	/* Main loop */
+	printf("Mobile router initialized.\n");
+	fflush(stdout);
 
+	/* 
+	 * Main mobile router loop 
+	 */
 	while(g_state == 0) {
-
 		verdict = NF_DROP;
 		write_raw = 0;
-		/* prepare file descriptor sets */
+		check_address_change();
+
+		/*
+		 * select() for socket activity
+		 */
 		FD_ZERO(&read_fdset);
 		FD_SET(h4->fd, &read_fdset);
 		FD_SET(h6->fd, &read_fdset);
 		timeout.tv_sec = 0;
 		timeout.tv_usec = MR_TIMEOUT_US;
-		highest_descriptor = maxof(2, h4->fd, h6->fd);
+		highest_descriptor = (h6->fd > h4->fd) ? h6->fd : h4->fd;
 
 		err = select(highest_descriptor + 1, &read_fdset,
 			     NULL, NULL, &timeout);
@@ -1014,7 +994,6 @@ void *hip_mobile_router(void *arg)
 				strerror(errno));
 			continue;
 		} else if (err == 0) { /* idle cycle - select() timeout  */
-			check_address_change();
 			continue;
 		} else if (FD_ISSET(h4->fd, &read_fdset)) {
 			family = AF_INET;
@@ -1025,11 +1004,17 @@ void *hip_mobile_router(void *arg)
 				"activity\n");
 			continue;
 		}
+
+		/*
+		 * retrieve packets
+		 */
 		err = ipq_read( (family==AF_INET) ? h4 : h6, buf, BUFSIZE, 0);
 		if (err < 0) {
 			printf("hip_mobile_router() ipq_read(%s) error: %s\n",
 				(family==AF_INET) ? "IPV4" : "IPV6",
 				ipq_errstr());
+			continue;
+		} else if (err == 0) { /* Timed out */
 			continue;
 		}
 
@@ -1050,34 +1035,11 @@ void *hip_mobile_router(void *arg)
 
 		if (family == AF_INET) {
 			ip4h = (struct ip *)m->payload;
-/*
-			printf("\nPacket from %s",
-				inet_ntop(AF_INET, &(ip4h->ip_src),
-					buffer, sizeof(buffer)));
-			printf(" to %s\n",
-				inet_ntop(AF_INET, &(ip4h->ip_dst),
-					buffer, sizeof(buffer))); // */
 		} else {
 			ip6h = (struct ip6_hdr *)m->payload;
-/*
-			printf("\nPacket from %s",
-				inet_ntop(AF_INET6, &(ip6h->ip6_src),
-					buffer, sizeof(buffer)));
-			printf(" to %s\n",
-				inet_ntop(AF_INET6, &(ip6h->ip6_dst),
-					buffer, sizeof(buffer))); // */
 		}
 
 		/* Determine if packet is from external side or not */
-/*
-		if (m->indev_name[0] != 0  &&  m->outdev_name[0] == 0)
-			printf("  INPUT from %s\n\n", m->indev_name);
-		else if (m->indev_name[0] != 0  &&  m->outdev_name[0] != 0)
-			printf("  FORWARD from %s to %s\n\n", m->indev_name,
-				m->outdev_name);
-		else if (m->indev_name[0] == 0  &&  m->outdev_name[0] != 0)
-			printf("  OUTPUT to %s\n\n", m->outdev_name);
-*/
 		if (external_interface &&
 		    (strcmp(m->indev_name, external_interface) == 0))
 			inbound = TRUE;
@@ -1085,37 +1047,34 @@ void *hip_mobile_router(void *arg)
 			inbound = FALSE;
 
 		/* Only process HIP and ESP packets */
-
-		if ((family == PF_INET && ip4h->ip_p == H_PROTO_HIP) ||
-			  (family == PF_INET6 && ip6h->ip6_nxt == H_PROTO_HIP)) {
+		protocol = (family == PF_INET) ? ip4h->ip_p : ip6h->ip6_nxt;
+		if (protocol == H_PROTO_HIP) {
 			output_buffer = check_hip_packet(family, m->payload,
 				m->data_len, &output_length);
 			verdict = NF_ACCEPT;
-		} else if ((family == PF_INET && ip4h->ip_p == IPPROTO_ESP) ||
-		           (family == PF_INET6 && ip6h->ip6_nxt == IPPROTO_ESP)) {
-			output_buffer = check_esp_packet(family, inbound, m->payload);
+		} else if (protocol == IPPROTO_ESP) {
+			output_buffer = check_esp_packet(family, inbound, 
+				m->payload);
 			if (output_buffer == m->payload)
 				verdict = NF_ACCEPT;
 			else {
 				verdict = NF_DROP;
 				/* Change of address family */
 				if (output_buffer)
-					write_raw = (family == PF_INET) ? PF_INET6 : PF_INET;
+					write_raw = (family == PF_INET) ? \
+							PF_INET6 : PF_INET;
 			}
 		}
 
 		
-		printf("verdict=%s\n output_length=%d\n",
-			verdict==NF_ACCEPT ? "ACCEPT" : "DROP", output_length);
-		
-		/* Give verdict to IPQ */
-
+		/* Drop packets if their address family is translated or they
+		 * are not allowed. Accept packets as-is or with changes. */
 		err = ipq_set_verdict((family == PF_INET) ? h4 : h6,
 			m->packet_id, verdict, output_length, output_buffer);
-
 		if (err < 0) {
 			printf("hip_mobile_router() - ipq_set_verdict(%s) "
-				"failed: %s\n", family == PF_INET ? "IPV4" : "IPV6",
+				"failed: %s\n", 
+				family == PF_INET ? "IPV4" : "IPV6",
 				ipq_errstr());
 		}
 
@@ -1132,8 +1091,9 @@ void *hip_mobile_router(void *arg)
 			sendto_addr.sin_port = htons(0);
 			output_length = ntohs(ip4h->ip_len);
 
-			int i = sendto(raw_ip4_socket, output_buffer, output_length, 0,
-				(const struct sockaddr *)&sendto_addr, sizeof(struct sockaddr_in));
+			int i = sendto(raw_ip4_socket, output_buffer, 
+					output_length, 0,
+					SA(&sendto_addr), SALEN(&sendto_addr));
 			if (i < 0)
 				perror("Error ");
 
@@ -1147,10 +1107,12 @@ void *hip_mobile_router(void *arg)
 			memcpy(&sendto_addr.sin6_addr.s6_addr, &ip6h->ip6_dst,
 				sizeof(struct in6_addr));
 			sendto_addr.sin6_port = htons(0);
-			output_length = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr);
+			output_length = ntohs(ip6h->ip6_plen) + 
+					sizeof(struct ip6_hdr);
 
-			int i = sendto(raw_ip6_socket, output_buffer, output_length, 0,
-				(const struct sockaddr *)&sendto_addr, sizeof(struct sockaddr_in6));
+			int i = sendto(raw_ip6_socket, output_buffer,
+					output_length, 0,
+					SA(&sendto_addr), SALEN(&sendto_addr));
 			if (i < 0)
 				perror("Error ");
 		}
@@ -1162,9 +1124,10 @@ void *hip_mobile_router(void *arg)
 	printf("hip_mobile_router() thread shutdown.\n");
 	close(raw_ip4_socket);
 	close(raw_ip6_socket);
+	fflush(stdout);
+hip_mobile_router_exit:
 	ipq_destroy_handle(h4);
 	ipq_destroy_handle(h6);
-	fflush(stdout);
 	pthread_exit((void *) 0);
 	return(NULL);
 }
@@ -1272,12 +1235,10 @@ int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
 	hiph->hdr_len = (location/8) - 1; 
 	location += build_tlv_proxy_hmac(ticket, buff, location, PARAM_HMAC);
 
-#ifdef NOT
-	
+#if 0
 	/* HIP signature */
 	hiph->hdr_len = (location/8) - 1; 
 	location += build_tlv_signature(hip_a->hi, buff, location, FALSE);
-
 #endif
 	hiph->hdr_len = (location/8) - 1;
 	hiph->checksum = 0;
