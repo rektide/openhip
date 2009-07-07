@@ -2303,7 +2303,7 @@ int build_tlv_reg_req(__u8 *data, int location, struct reg_entry *reg_offered)
 	if (num) {
 		req->type = htons(PARAM_REG_REQUEST);
 		num++;
-		req->length = htons(1 + num); /* lifetime + reg_types */
+		req->length = htons((__u16)(1 + num)); /* lifetime+reg_types */
 		req->lifetime = requested_lifetime;
 
 		tmp = YLIFE(req->lifetime);

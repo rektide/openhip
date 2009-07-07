@@ -1174,6 +1174,7 @@ void handle_local_address_change(int add, struct sockaddr *newaddr,int if_index)
 {
 	int i;
 	hip_assoc *hip_a;
+	struct sockaddr *out = (struct sockaddr *)&external_address;
 
 
 	if (!VALID_FAM(newaddr))
@@ -1202,7 +1203,7 @@ void handle_local_address_change(int add, struct sockaddr *newaddr,int if_index)
 	if (max_hip_mr_clients <= 0)
 		return;
 
-	struct sockaddr *out = (struct sockaddr *)&external_address;
+	out = (struct sockaddr *)&external_address;
 	pthread_mutex_lock(&hip_mr_client_mutex);
 	/* If there is currently not an external address, set this address to
 	 * be the external address. */
