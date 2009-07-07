@@ -20,14 +20,15 @@
  * Functions that use the Netlink socket interface.
  *
  */
-#ifndef __MACOSX__
 /*
  * XXX this needs cleaned up and split into platform specific parts
  * equivalent Mac file is in ../mac/hip_mac.c 
  */
 
 #ifndef __WIN32__
+#ifndef __MACOSX__
 #define USE_LINUX_NETLINK
+#endif
 #endif
 
 #include <stdio.h>
@@ -66,9 +67,11 @@
 #include <linux/if.h>		/* set_link_params() support	*/
 #include <sys/ioctl.h>		/* set_link_params() support	*/
 #else
+#ifdef __WIN32__
 #include <windows.h>		/* Windows registry access */
 #define REG_INTERFACES_KEY "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces"
 #include <win32/rtnetlink.h>
+#endif
 #endif
 
 #include <hip/hip_proto.h>
@@ -110,6 +113,9 @@ void make_address_active(sockaddr_list *item);
 int set_preferred_address_in_list(struct sockaddr *addr);
 
 extern int send_udp_esp_tunnel_activation (__u32 spi_out);
+
+#ifndef __MACOSX__
+/* BEGIN fns implemented by ../mac/hip_mac.c */
 
 /*
  * function hip_netlink_open()
@@ -901,6 +907,9 @@ int read_netlink_response()
 	return(err);
 }
 
+/* END fns implemented by ../mac/hip_mac.c */
+#endif /* !__MACOSX__*/
+
 /*
  * function add_address_to_list()
  *
@@ -1053,6 +1062,7 @@ void print_addr_list(sockaddr_list *list)
 	log_(NORM, "]\n");
 }
 
+#ifndef __MACOSX__
 /*
  * function hip_handle_netlink()
  *
@@ -1163,6 +1173,7 @@ int hip_handle_netlink(char *data, int length)
 	}
 	return retval;
 }
+#endif /* !__MACOSX__ */
 
 /*
  * handle_local_address_change()
@@ -1600,4 +1611,3 @@ printf("Addr in list: %s(%d)(%d)\n", logaddr((struct sockaddr *)&l->addr), l->if
 	}
 	return 0;
 }
-#endif /* #ifndef __MACOSX__ */
