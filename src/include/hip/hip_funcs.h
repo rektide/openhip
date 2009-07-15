@@ -312,7 +312,7 @@ void delete_address_from_list(sockaddr_list **list, struct sockaddr *addr,
 void delete_address_entry_from_list(sockaddr_list **list, sockaddr_list *entry);
 void make_address_active(sockaddr_list *item);
 int update_peer_list_address(const hip_hit peer_hit, struct sockaddr *old_addr, struct sockaddr *new_addr);
-int add_other_addresses(hi_node *hi, int mine);
+int add_other_addresses_to_hi(hi_node *hi, int mine);
 
 /* hip_cache.c */
 void init_all_R1_caches();
@@ -338,6 +338,12 @@ int hip_dht_publish(hip_hit *hit, struct sockaddr *addr, int retry);
 int hip_dht_select_server(struct sockaddr *addr);
 int add_addresses_from_dht(hi_node *hi, int retry);
 void publish_my_hits();
+
+#ifdef MOBILE_ROUTER
+/* hip_mr.c */
+int  hip_mr_set_external_if();
+void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi);
+#endif
 
 
 /*

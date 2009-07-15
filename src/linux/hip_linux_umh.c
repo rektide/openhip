@@ -391,7 +391,6 @@ void init_hip(int ac, char **av)
 #ifdef MOBILE_ROUTER
 	if (is_mobile_router()) {
 		/* XXX command-line opts may not be loaded yet */
-		pthread_mutex_init(&hip_mr_client_mutex, NULL);
 		if (pthread_create(&mr_thrd, NULL, hip_mobile_router, NULL)) {
 			printf("Error creating Mobile Router thread.\n");
 			exit(-1);

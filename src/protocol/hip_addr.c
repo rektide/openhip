@@ -21,7 +21,7 @@
  *
  */
 /*
- * XXX this needs cleaned up and split into platform specific parts
+ * XXX this needs to be cleaned up and split into platform specific parts
  * equivalent Mac file is in ../mac/hip_mac.c 
  */
 
@@ -81,14 +81,9 @@
 #include <hip/hip_stun.h>
 
 #ifdef SMA_CRAWLER
-//DM: From /usr/include/net/if.h
-//DM: Added just this line because of conflicts with /usr/include/linux/if.h
-extern unsigned int if_nametoindex (__const char *__ifname) __THROW;
-#endif
-
-#ifdef SMA_CRAWLER
-//DM: From /usr/include/net/if.h
-//DM: Added just this line because of conflicts with /usr/include/linux/if.h
+/* From /usr/include/net/if.h - added just this line because of conflicts
+ * with /usr/include/linux/if.h
+ */
 extern unsigned int if_nametoindex (__const char *__ifname) __THROW;
 #endif
 
@@ -98,7 +93,6 @@ extern unsigned int if_nametoindex (__const char *__ifname) __THROW;
 
 /* Local definitions */
 int nl_sequence_number = 0;
-int external_if_index = -1;
 
 /* Local functions */
 int read_netlink_response();
@@ -503,62 +497,9 @@ int select_preferred_address()
 		}
 	}
 
-	/* If mobile router, set the outbound interface index
-	 */
-	if (!OPT.mr)
-		return(0);
-	external_if_index = -1;
-	if (HCNF.outbound_iface)
-		external_if_index = devname_to_index(HCNF.outbound_iface, NULL);
-	if (external_if_index == -1) {
-		if (preferred_iface_index != -1) {
-			external_if_index = preferred_iface_index;
-			log_(NORM, "Selected the preferred interface"
-				" as outbound interface\n");
-		} else {
-			log_(ERR, "HIP started as mobile router but "
-				"unable to set outbound interface index\n");
-		}
-	} else {
-		log_(NORM, "Selected %s as outbound interface\n",
-			HCNF.outbound_iface);
-	}
-	if (external_if_index != -1) {
-		/* Use the preferred address if it is on the external interface,
-		 * otherwise use first non-local address on this interface */
-		sockaddr_list *the_address = NULL;
-		for (l = my_addr_head; l; l=l->next) {
-			if (l->if_index != external_if_index)
-				continue;
-			if (TRUE == l->preferred) {
-				the_address = l;
-				break;
-			}
-			/* skip local and multicast addresses */
-			if ((l->addr.ss_family == AF_INET6) &&
-			    (IN6_IS_ADDR_LINKLOCAL(SA2IP6(&l->addr)) ||
-			     IN6_IS_ADDR_SITELOCAL(SA2IP6(&l->addr)) ||
-			     IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr))))
-				continue;
-			if (!the_address) /* 1st non-local addr, keep looking */
-				the_address = l;
-		}
-		if (the_address) {
-			struct sockaddr *out = (struct sockaddr *)&external_address;
-			pthread_mutex_lock(&hip_mr_client_mutex);
-			out->sa_family = the_address->addr.ss_family;
-			memcpy(SA2IP(out),
-				SA2IP((struct sockaddr *)&the_address->addr),
-				SAIPLEN(out));
-			new_external_address = TRUE;
-			pthread_mutex_unlock(&hip_mr_client_mutex);
-			log_(NORM, "%s selected as the external address.\n",
-				logaddr(SA(&the_address->addr)));
-		} else {
-			log_(NORM, "Unable to find address on outbound interface %d\n",
-				external_if_index);
-		}
-	}
+#ifdef MOBILE_ROUTER
+	return (hip_mr_set_external_if());
+#endif /* MOBILE_ROUTER */
 	return(0);
 }
 
@@ -1185,8 +1126,6 @@ void handle_local_address_change(int add, struct sockaddr *newaddr,int if_index)
 {
 	int i;
 	hip_assoc *hip_a;
-	struct sockaddr *out = (struct sockaddr *)&external_address;
-
 
 	if (!VALID_FAM(newaddr))
 		return;
@@ -1205,66 +1144,10 @@ void handle_local_address_change(int add, struct sockaddr *newaddr,int if_index)
 			association_del_address(hip_a, newaddr, if_index);
 		}
 	}
-
-	if (!OPT.mr)
-		return;
-	/* Mobile router update for the external address */
-	if (if_index != external_if_index)
-		return;
-	if (max_hip_mr_clients <= 0)
-		return;
-
-	out = (struct sockaddr *)&external_address;
-	pthread_mutex_lock(&hip_mr_client_mutex);
-	/* If there is currently not an external address, set this address to
-	 * be the external address. */
-	if (add) {
-		if (!out->sa_family) {
-			out->sa_family = newaddr->sa_family;
-			memcpy(SA2IP(out), SA2IP(newaddr), SAIPLEN(out));
-			new_external_address = TRUE;
-		}
-	/* If this was the external address, see if there is another address
-	 * on this interface. If not, zero out the variable */
-	} else {
-		sockaddr_list *the_address = NULL;
-		if (out->sa_family == newaddr->sa_family &&
-		    !memcmp(SA2IP(out), SA2IP(newaddr), SAIPLEN(out))) {
-			sockaddr_list *l;
-			for (l = my_addr_head; l; l=l->next) {
-				/* Try to use the same address family
-				 * Else use first non-local address on
-				 * this interface */
-				if (l->if_index != external_if_index)
-					continue;
-				/* skip local and multicast addresses */
-				if ((l->addr.ss_family == AF_INET6) &&
-				    (IN6_IS_ADDR_LINKLOCAL(SA2IP6(&l->addr)) ||
-				     IN6_IS_ADDR_SITELOCAL(SA2IP6(&l->addr)) ||
-				     IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr))))
-					continue;
-				if (l->addr.ss_family == out->sa_family) {
-					the_address = l;
-					break;
-				} else if (!the_address) {
-					the_address = l;
-				}
-			}
-		}
-		if (the_address) {
-			out->sa_family = the_address->addr.ss_family;
-			memcpy(SA2IP(out),
-				SA2IP((struct sockaddr *)&the_address->addr),
-				SAIPLEN(out));
-			new_external_address = TRUE;
-			log_(NORM, "Using %s as new external address\n",
-				logaddr(out));
-		} else {
-			log_(WARN, "No new external address found\n");
-			memset(out, 0, sizeof(external_address));
-		}
-	}
-	pthread_mutex_unlock(&hip_mr_client_mutex);
+#ifdef MOBILE_ROUTER
+	if (OPT.mr)
+		hip_mr_handle_address_change(add, newaddr, if_index);
+#endif
 }
 
 /*
@@ -1576,13 +1459,20 @@ int update_peer_list_address(const hip_hit peer_hit, struct sockaddr *old_addr, 
 }
 
 /*
- * add_other_addresses()
+ * add_other_addresses_to_hi()
+ *
+ * Add addresses from my_addr_head or peer_hi_head to the address list in the
+ * given host identity hi. The HIT from the given hi is used to locate the
+ * correct peer_hi_head entry when mine=FALSE, or my_addr_head is used when
+ * mine=TRUE.
  */
-int add_other_addresses(hi_node *hi, int mine)
+int add_other_addresses_to_hi(hi_node *hi, int mine)
 {
 	sockaddr_list *l, *tolist, *fromlist;
 
-	tolist = &hi->addrs;
+	/*
+	 * Determine to and from lists.
+	 */
 	if (mine) {
 		fromlist = my_addr_head;
 	} else {
@@ -1595,6 +1485,12 @@ int add_other_addresses(hi_node *hi, int mine)
 			return(-1);
 		}
 	}
+	tolist = &hi->addrs;
+
+	/* 
+	 * Add non-local addresses from the same interface as the preferred
+	 * address.
+	 */
 	for (l = fromlist; l; l = l->next) {
 		/* skip local and multicast addresses */
 		if ((l->addr.ss_family == AF_INET6) &&
@@ -1602,12 +1498,9 @@ int add_other_addresses(hi_node *hi, int mine)
 			 IN6_IS_ADDR_SITELOCAL(SA2IP6(&l->addr)) ||
 			 IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr))))
 			continue;
-		if (l->if_index == tolist->if_index) {
-			add_address_to_list(&tolist, (struct sockaddr *)&l->addr, l->if_index);
-		}
+		if (l->if_index != tolist->if_index)
+			continue;
+		add_address_to_list(&tolist, SA(&l->addr), l->if_index);
 	}
-	for (l = tolist; l; l = l->next) {
-printf("Addr in list: %s(%d)(%d)\n", logaddr((struct sockaddr *)&l->addr), l->if_index, l->addr.ss_family);
-	}
-	return 0;
+	return(0);
 }

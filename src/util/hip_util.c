@@ -2920,7 +2920,11 @@ void log_hipopts() {
 	log_(NORM, "     no_retransmit = %s  opportunistic = %s any = %s ",
 	    yesno(OPT.no_retransmit), yesno(OPT.opportunistic), 
 	    yesno(OPT.allow_any));
-	log_(NORM, "rvs = %s mr = %s\n", yesno(OPT.rvs), yesno(OPT.mr));
+	log_(NORM, "rvs = %s", yesno(OPT.rvs));
+#ifdef MOBILE_ROUTER
+	log_(NORM, " mr=%s", yesno(OPT.mr));
+#endif /* MOBILE_ROUTER */
+	log_(NORM, "\n");
 }
 
 #ifdef __WIN32__
@@ -3081,78 +3085,6 @@ void hip_exit(int signal)
 
 #endif /* HITGEN */
 
-hip_mr_client *init_hip_mr_client(hip_hit *peer_hit, struct sockaddr *src)
-{
-	int i, num;
-	hip_mr_client *hip_mr_c;
-
-	/* Maybe should first check to see if client already in the table
-	*/
-
-	/* Find an unused slot in the mr_client_table.
-	*/
-
-	num = -1;
-	pthread_mutex_lock(&hip_mr_client_mutex);
-	for (i = 0; i < max_hip_mr_clients; i++) {
-		if (hip_mr_client_table[i].state == CANCELLED) {
-			num = i;
-			free_hip_mr_client(&hip_mr_client_table[i]);
-			if (num == max_hip_mr_clients)
-				max_hip_mr_clients++;
-			break;
-		}
-	}
-	if (num < 0) {
-		num = max_hip_mr_clients;
-		if (num == MAX_MR_CLIENTS) {
-			log_(WARN, "Max number of Mobile Router clients "
-				"reached.\n");
-			pthread_mutex_unlock(&hip_mr_client_mutex);
-			return NULL;
-		} else {
-			max_hip_mr_clients++;
-		}
-	}
-
-	hip_mr_c = &(hip_mr_client_table[num]);
-
-	memcpy(hip_mr_c->mn_hit, peer_hit, sizeof(hip_hit));
-        memcpy((struct sockaddr *)&hip_mr_c->mn_addr, src, SALEN(src));
-	hip_mr_c->state = RESPONSE_SENT;
-	pthread_mutex_unlock(&hip_mr_client_mutex);
-	return hip_mr_c;
-}
-
-int free_hip_mr_client(hip_mr_client *hip_mr_c)
-{
-	int i;
-
-	/* locate the client in the table */
-
-	for (i = 0; i< max_hip_mr_clients; i++)
-		if (hip_mr_c == &hip_mr_client_table[i])
-			break;
-
-	/* return error if something went wrong */
-
-	if ((i > max_hip_mr_clients) || (i > MAX_MR_CLIENTS))
-		return(-1);
-
-	while(hip_mr_c->spi_nats) {
-		hip_spi_nat *temp = hip_mr_c->spi_nats;
-		hip_mr_c->spi_nats = temp->next;
-		free(temp);
-	}
-	memset(hip_mr_c, 0, sizeof(hip_mr_client));
-	hip_mr_c->state = CANCELLED;
-	if (i == (max_hip_mr_clients - 1))
-		max_hip_mr_clients--;
-
-	return(i);
-
-}
-
 /*
  * Prints out HIT for debugging
  */
@@ -3166,46 +3098,4 @@ void print_hit(const hip_hit *hit) {
 		printf("%.2x", c[i]);
 	}
 }
-
-int add_proxy_ticket(tlv_proxy_ticket *ticket)
-{
-	int i, ret = -1;
-	hip_mr_client *hip_mr_c;
-	hip_spi_nat *spi_nats;
-
-	pthread_mutex_lock(&hip_mr_client_mutex);
-	for (i = 0; i < max_hip_mr_clients; i++) {
-		hip_mr_c = &(hip_mr_client_table[i]);
-		if (hip_mr_c->state != RESPONSE_SENT)
-			continue;
-		if (!hits_equal(ticket->mn_hit, hip_mr_c->mn_hit))
-			continue;
-		for (spi_nats = hip_mr_c->spi_nats; spi_nats;
-		     spi_nats = spi_nats->next) {
-			if (!hits_equal(ticket->peer_hit, spi_nats->peer_hit))
-				continue;
-			spi_nats->ticket.hmac_key_index =
-						ntohs(ticket->hmac_key_index);
-			spi_nats->ticket.transform_type =
-						ntohs(ticket->transform_type);
-			spi_nats->ticket.action = ntohs(ticket->action);
-			spi_nats->ticket.lifetime = ntohs(ticket->lifetime);
-			memcpy(spi_nats->ticket.hmac_key, ticket->hmac_key,
-				sizeof(ticket->hmac_key));
-			memcpy(spi_nats->ticket.hmac, ticket->hmac,
-				sizeof(ticket->hmac));
-			ret = i;
-			break;
-		}
-	}
-	pthread_mutex_unlock(&hip_mr_client_mutex);
-	return ret;
-}
-
-#ifdef MOBILE_ROUTER
-int is_mobile_router()
-{
-	return(OPT.mr);
-}
-#endif
 

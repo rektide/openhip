@@ -182,7 +182,6 @@ int main_loop(int argc, char **argv)
 
 	/* Predefining global variables */
 	memset(hip_assoc_table, 0, sizeof(hip_assoc_table));
-	memset(hip_mr_client_table, 0, sizeof(hip_mr_client_table));
 	memset(hip_reg_table, 0, sizeof(hip_reg_table));
 	fr.add_from = FALSE;
 	fr2.add_via_rvs = FALSE;

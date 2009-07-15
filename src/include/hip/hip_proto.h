@@ -261,8 +261,12 @@ typedef enum {
 /*
  * Registration types
  */
-#define REG_RVS		1
-#define REG_MR		2
+typedef enum {
+	REGTYPE_RESERVED,
+	REGTYPE_RVS,		/* 1 = Rendezvous Server */
+	REGTYPE_RELAY_UDP_HIP,	/* 2 = UDP/HIP NAT Relay Server */
+	REGTYPE_MR,		/* 3 = Mobile Router */
+} HIP_REGTYPES;
 
 #endif /* !_HIP_PROTOCOL_H_ */
 

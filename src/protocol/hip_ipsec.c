@@ -1558,10 +1558,10 @@ void hip_handle_acquire(struct sockaddr *src, struct sockaddr *dst)
 	memcpy(HIPA_SRC(hip_a), src, SALEN(src));
 	hip_a->hi->addrs.if_index = is_my_address(src);
 	make_address_active(&hip_a->hi->addrs);
-	add_other_addresses(hip_a->hi, 1);
+	add_other_addresses_to_hi(hip_a->hi, TRUE);
 	memcpy(HIPA_DST(hip_a), dst, SALEN(dst));
 	memcpy(&(hip_a->peer_hi->hit), hiph.hit_sndr, sizeof(hip_hit));
-	add_other_addresses(hip_a->peer_hi, 0);
+	add_other_addresses_to_hi(hip_a->peer_hi, FALSE);
 
 	log_hipa_fromto(QOUT, "Base exchange initiated", hip_a, TRUE, TRUE);
 	print_hex(hip_a->peer_hi->hit, HIT_SIZE);

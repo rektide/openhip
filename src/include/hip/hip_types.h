@@ -76,22 +76,22 @@
 /*
  * Implementation limits
  */
-#ifdef SMA_CRAWLER
 #define MAX_HITS 255
-#define MAX_CONNECTIONS 255
-#else
-#define MAX_HITS 32
-#define MAX_CONNECTIONS 32 /* Should be == MAX_HITS */
-#endif
-#define MAX_LEGACY_HOSTS 255 /*how many legacy hosts can attached to an endbox */
+#define MAX_CONNECTIONS MAX_HITS
 #define MAX_OPAQUE_SIZE 255 /* how many bytes we may echo in response */
 #define MAX_HI_NAMESIZE 255 /* number of bytes for HI Domain Identifier */
 #define MAX_HI_BITS 2048 /* number of bits of largest HI accepted - this
 			  * may limit the time spent w/ DSA verification */
 #define MAX_LOCATORS 8	/* number of LOCATORs accepted in an UPDATE message */
-#define MAX_REGISTRATIONS 1024	/* used in rvs mode */
+
+#define MAX_REGISTRATIONS 1024
 #define MAX_REGISTRATION_TYPES 255 /* number of registration services */
+#ifdef SMA_CRAWLER
+#define MAX_LEGACY_HOSTS 255 /* how many legacy hosts can attached to endbox */
+#endif /* SMA_CRAWLER */
+#ifdef MOBILE_ROUTER
 #define MAX_MR_CLIENTS MAX_CONNECTIONS /* Number of mobile router clients */
+#endif /* MOBILE_ROUTER */
 
 /*
  * IPsec-related constants
@@ -462,6 +462,7 @@ typedef struct _hi_node {
 	int name_len;		/* use this instead of strlen()		*/
 } hi_node;
 
+#ifdef SMA_CRAWLER
 struct peer_node
 {
   hip_hit hit; 
@@ -474,6 +475,7 @@ struct peer_node
   char name[MAX_HI_NAMESIZE];
   struct sockaddr_storage rvs;
 };
+#endif /* SMA_CRAWLER */
 
 /* DH Cache
  */

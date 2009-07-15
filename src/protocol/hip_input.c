@@ -116,6 +116,11 @@ void *set_lifetime_rvs_thread(void *void_hip_reg);
 void *set_lifetime_thread(void *void_thread_arg);
 #endif
 
+/* XXX TODO: remove this global and replace with fn to check for registered
+ *            servers (RVS, NAT, MR, etc)
+ */
+hip_hit mobile_router_hit;
+
 /* XXX TODO: this breaks hitgen build. Move out of ../win32/hip_esp.c
  *		since it is called only from this file.
  */
@@ -694,14 +699,14 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 				gettimeofday(&reg->state_time, NULL);
 				reg->next = hip_a->reg_offered->regs;
 				hip_a->reg_offered->regs = reg;
-				if (*reg_typep == REG_RVS  &&  !OPT.rvs) {
+				if (*reg_typep == REGTYPE_RVS  &&  !OPT.rvs) {
 					add_reg_request = TRUE;
 				/* global variables used in case of 
 				 * failed registration */
 				min_life = info->min_lifetime;
 				max_life = info->max_lifetime;
 					reg_type = *reg_typep;
-				} else if (*reg_typep == REG_MR) {
+				} else if (*reg_typep == REGTYPE_MR) {
 					/* Request mobile routing service */
 					/* in I2 if we are a mobile node */
 				}
@@ -1347,7 +1352,8 @@ I2_ERROR:
 						fail_reg_type = *reg_typep;
 					log_(NORM,"Registration type failed\n");
 				}
- 				} else if (*reg_typep == REG_MR) {
+#ifdef MOBILE_ROUTER
+ 				} else if (*reg_typep == REGTYPE_MR) {
 					if (OPT.mr) {
 						init_hip_mr_client(
 							&hiph->hit_sndr, src);
@@ -1361,7 +1367,8 @@ I2_ERROR:
 						reg->failure_code =
 							REG_FAIL_TYPE_UNAVAIL;
 					}
-				} else { /* Unknown type */
+#endif /* MOBILE_ROUTER */
+				} else { /* Unknown or unsupported type */
 					reg->state = REG_SEND_FAILED;
 					reg->failure_code =
 						REG_FAIL_TYPE_UNAVAIL;
@@ -1506,7 +1513,7 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 
 	clear_retransmissions(hip_a);
 	make_address_active(&hip_a->peer_hi->addrs);
-	add_other_addresses(hip_a->hi, 1);
+	add_other_addresses_to_hi(hip_a->hi, TRUE);
 	/* Need to send an SPI to peer */
 	hip_a->spi_in = get_next_spi(hip_a);
 	/* build R2 and Responder's SA */
@@ -1734,7 +1741,7 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 				reg->state = REG_GRANTED;
 				reg->granted_lifetime = resp->lifetime;
 				gettimeofday(&reg->state_time, NULL);
-				if (*reg_typep == REG_RVS  &&  !OPT.rvs) {
+				if (*reg_typep == REGTYPE_RVS  &&  !OPT.rvs) {
 				arg = (thread_arg *)malloc(sizeof(thread_arg));	
 				memset(arg, 0, sizeof(thread_arg));
 				
@@ -1790,7 +1797,7 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 				reg->state = REG_FAILED;
 				reg->failure_code = fail->fail_type;
 				gettimeofday(&reg->state_time, NULL);
-				if (*reg_typep == REG_RVS && !OPT.rvs) {
+				if (*reg_typep == REGTYPE_RVS && !OPT.rvs) {
 				/* check what type of error received */
 				/* failed in the registration type */
 				if (fail->fail_type == 1)
@@ -2217,7 +2224,8 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 				hip_a->opaque->opaque_nosig = 
 					(type == PARAM_ECHO_REQUEST_NOSIG);
 			}
-		} else if (type == PARAM_PROXY_TICKET){	/*update packet */
+		} else if (type == PARAM_PROXY_TICKET) {
+#ifdef MOBILE_ROUTER
 			tlv_proxy_ticket *ticket =
 				(tlv_proxy_ticket *) &data[location];
 			if (add_proxy_ticket(ticket) < 0) {
@@ -2235,6 +2243,9 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 				print_hex(ticket->peer_hit, HIT_SIZE);
 				log_(NORM, "\n");
 			}
+#else /* MOBILE_ROUTER */
+			log_(WARN, "Ignoring proxy ticket in UPDATE packet.\n");
+#endif /* MOBILE_ROUTER */
 		} else if (type == PARAM_REG_INFO){	/*update packet */
 			int i;
 			tlv_reg_info *info = (tlv_reg_info *) &data[location];
@@ -2281,7 +2292,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 				} else {
 					continue;
 				}
-				if (*reg_typep == REG_RVS  &&  !OPT.rvs) {
+				if (*reg_typep == REGTYPE_RVS  &&  !OPT.rvs) {
 				add_reg_request = TRUE;
 				inf = (tlv_reg_info*) &data[location];
 				/* global variables used in case of 
@@ -2494,16 +2505,16 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 					need_to_send_update2 = TRUE;
 			} /* if (OPT.rvs) */
 				} else if (*reg_typep == REG_MR) {
+#ifdef MOBILE_ROUTER
 					if (OPT.mr) {
-/*
-						init_hip_mr_client();
-*/
 						reg->state = REG_SEND_RESP;
 						reg->granted_lifetime =
 							resp_lifetime;
 						gettimeofday(&reg->state_time,
 							NULL);
-					} else {
+					} else
+#endif /* MOBILE_ROUTER */
+					{
 						reg->state = REG_SEND_FAILED;
 						reg->failure_code =
 							REG_FAIL_TYPE_UNAVAIL;
@@ -2543,7 +2554,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 						*reg_typep);
 					reg->state = REG_GRANTED;
 				}
-				if (*reg_typep == REG_RVS  &&  !OPT.rvs) {
+				if (*reg_typep == REGTYPE_RVS  &&  !OPT.rvs) {
 				/* if not in the rvs mode, we wait for 
 				 * the lifetime and send update */
 				tlv_reg_response *resp;
@@ -2598,7 +2609,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 				reg->state = REG_FAILED;
 				reg->failure_code = fail->fail_type;
 				gettimeofday(&reg->state_time, NULL);
-				if (*reg_typep == REG_RVS && !OPT.rvs) {
+				if (*reg_typep == REGTYPE_RVS && !OPT.rvs) {
 				add_reg_request = TRUE;
 				/* check what type of error received */
 				/* failed in the registration type */

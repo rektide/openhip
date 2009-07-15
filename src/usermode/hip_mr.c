@@ -43,6 +43,9 @@
 
 #define BUFSIZE 2048
 #define MR_TIMEOUT_US 500000 /* microsecond timeout for mobile_router select()*/
+#define MAX_MR_CLIENTS MAX_CONNECTIONS
+
+int external_iface_index = -1;
 
 struct ip_esp_hdr {
 	__u32 spi;
@@ -50,11 +53,11 @@ struct ip_esp_hdr {
 	__u8 enc_data[0];
 };
 
-extern hip_mr_client hip_mr_client_table[MAX_MR_CLIENTS];
-extern int max_hip_mr_clients;
-extern int new_external_address;
-extern struct sockaddr_storage external_address;
-extern pthread_mutex_t hip_mr_client_mutex;
+hip_mr_client hip_mr_client_table[MAX_MR_CLIENTS];
+hip_mutex_t hip_mr_client_mutex;
+int max_hip_mr_clients;
+int new_external_address;
+struct sockaddr_storage external_address;
 
 static char *external_interface;
 static struct sockaddr_storage out_addr;
@@ -66,7 +69,7 @@ int build_tlv_proxy_hmac(hip_proxy_ticket *ticket, __u8 *data, int location,
 			int type);
 
 /* Check if the given addresses are equal to the ones in the packet header */
-int addresses_are_equal(struct sockaddr *src, struct sockaddr *dst,
+int addr_match_payload(struct sockaddr *src, struct sockaddr *dst,
                         int family, unsigned char *payload)
 {
 	int ret = FALSE;
@@ -108,7 +111,6 @@ int addresses_are_equal(struct sockaddr *src, struct sockaddr *dst,
  * Obtains new random SPI for SPINAT, checks that it is not being used.
  * TODO: Should also check that it is not being used for mobile router SAs.
  */
-
 __u32 get_next_spinat(void)
 {
 	int i;
@@ -132,17 +134,14 @@ retry_getspi:
 	return new_spi;
 }
 
-/* Look for the given hit in the mobile router client table */
-
-hip_mr_client *check_hits(hip_hit the_hit)
+/* 
+ * Search for a mobile router client table entry using the given HIT
+ */
+hip_mr_client *mr_client_lookup(hip_hit hit)
 {
 	int i;
 	for (i = 0; i < max_hip_mr_clients; i++) {
-		if (hits_equal(the_hit, hip_mr_client_table[i].mn_hit)) {
-/*
-struct sockaddr *src = (struct sockaddr*)&hip_mr_client_table[i].mn_addr;
-printf("This is for Mobile Router client %s\n", logaddr(src));
-*/
+		if (hits_equal(hit, hip_mr_client_table[i].mn_hit)) {
 			return &hip_mr_client_table[i];
 		}
 	}
@@ -640,7 +639,8 @@ unsigned char *check_hip_packet(int family, unsigned char *payload,
 	struct ip *ip4h = NULL;
 	struct ip6_hdr *ip6h = NULL;
 	hiphdr *hiph;
-	hip_mr_client *hip_mr_c;
+	hip_mr_client *client;
+	__u32 new_spi;
 	int length;
 	unsigned char *buff = payload;
 	char ipstr[INET6_ADDRSTRLEN];
@@ -654,76 +654,66 @@ unsigned char *check_hip_packet(int family, unsigned char *payload,
 		hiph = (hiphdr *) (payload + sizeof(struct ip6_hdr));
 	}
 	length = (hiph->hdr_len+1) * 8;
+	/* TODO: validate this length against received length */
 
-/*
-	printf("HIP packet from HIT");
-	print_hex(hiph->hit_sndr, HIT_SIZE);
-	printf(" to HIT");
-	print_hex(hiph->hit_rcvr, HIT_SIZE);
-	printf("\n");
-*/
-
-// XXX jeffa: move locking here
-//            lookup here
-//     process only based on switch statement
+	/* 
+	 * check HITs in HIP header against client table
+	 */
+	pthread_mutex_lock(&hip_mr_client_mutex);
 	switch(hiph->packet_type) {
 		case HIP_I1:
-			pthread_mutex_lock(&hip_mr_client_mutex);
-			hip_mr_c = check_hits(hiph->hit_sndr);
-			printf("HIP I1 packet of length %d. %s a client\n",
-				length, hip_mr_c ? "is" : "NOT" );
-			if (hip_mr_c) {
-				mr_process_I1(hip_mr_c, family, hiph, payload);
-			}
-			pthread_mutex_unlock(&hip_mr_client_mutex);
+		case HIP_I2: /* source HIT lookup */
+			client = mr_client_lookup(hiph->hit_sndr);
 			break;
 		case HIP_R1:
-			pthread_mutex_lock(&hip_mr_client_mutex);
-			hip_mr_c = check_hits(hiph->hit_rcvr);
-			printf("HIP R1 packet of length %d. %s a client\n",
-				length, hip_mr_c ? "is" : "NOT" );
-			if (hip_mr_c) {
-				mr_process_R1(hip_mr_c, family, hiph, payload);
-			}
-			pthread_mutex_unlock(&hip_mr_client_mutex);
+		case HIP_R2: /* destination HIT lookup */
+			client = mr_client_lookup(hiph->hit_rcvr);
+			break;
+		case CLOSE:
+		case CLOSE_ACK: /* source or destination HIT lookup */
+			client = mr_client_lookup(hiph->hit_sndr);
+			if (!client)
+				client = mr_client_lookup(hiph->hit_rcvr);
+			break;
+		/* TODO: handle UPDATE packets here */
+		default:
+			client = NULL;
+	}
+
+	/* not a client, no further processing */
+	if (!client) {
+		pthread_mutex_unlock(&hip_mr_client_mutex);
+		return(buff);
+	}
+
+
+	/*
+	 * process HIP packets for clients
+	 */
+	switch(hiph->packet_type) {
+		case HIP_I1:
+			mr_process_I1(client, family, hiph, payload);
+			break;
+		case HIP_R1:
+			mr_process_R1(client, family, hiph, payload);
 			break;
 		case HIP_I2:
-			pthread_mutex_lock(&hip_mr_client_mutex);
-			hip_mr_c = check_hits(hiph->hit_sndr);
-			printf("HIP I2 packet of length %d. %s a client\n",
-				length, hip_mr_c ? "is" : "NOT" );
-			if (hip_mr_c) {
-				__u32 new_spi;
-				new_spi = mr_process_I2(hip_mr_c, family, hiph, payload);
-				if (new_spi) {
-					buff = add_tlv_spi_nat(family, payload,
+			new_spi = mr_process_I2(client, family, hiph, payload);
+			if (new_spi) {
+				buff = add_tlv_spi_nat(family, payload,
 						data_len, new_len, new_spi);
-				}
 			}
-			pthread_mutex_unlock(&hip_mr_client_mutex);
 			break;
 		case HIP_R2:
-			printf("HIP R2 packet of length %d\n", length);
-			pthread_mutex_lock(&hip_mr_client_mutex);
-			hip_mr_c = check_hits(hiph->hit_rcvr);
-			if (hip_mr_c) {
-				mr_process_R2(hip_mr_c, family, hiph, payload);
-			}
-			pthread_mutex_unlock(&hip_mr_client_mutex);
+			mr_process_R2(client, family, hiph, payload);
 			break;
 		case CLOSE:
 		case CLOSE_ACK:
-			printf("%s packet of length %d\n", (hiph->packet_type == CLOSE) ?
-				"HIP CLOSE" : "HIP CLOSE ACK", length);
-			pthread_mutex_lock(&hip_mr_client_mutex);
-			if ((hip_mr_c = check_hits(hiph->hit_rcvr))  ||
-			    (hip_mr_c = check_hits(hiph->hit_sndr))) {
-				mr_process_CLOSE(hip_mr_c, family, hiph, payload,
+			mr_process_CLOSE(client, family, hiph, payload,
 					hiph->packet_type);
-			}
-			pthread_mutex_unlock(&hip_mr_client_mutex);
 			break;
 	}
+	pthread_mutex_unlock(&hip_mr_client_mutex);
 
 	/* finish with new checksum */
 
@@ -857,7 +847,7 @@ unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload)
 				if (spi_nats->peer_spi != ntohl(esph->spi))
 					continue;
 				struct sockaddr *peer = (struct sockaddr *)&spi_nats->peer_addr;
-				if (!addresses_are_equal(addr, peer, family, payload))
+				if (!addr_match_payload(addr, peer, family, payload))
 					continue;
 				if (family == out->sa_family) {
 					struct sockaddr_storage *dst_addr = &spi_nats->peer_addr;
@@ -925,9 +915,13 @@ void *hip_mobile_router(void *arg)
 	int highest_descriptor = 0;
 	struct timeval timeout;
 	fd_set read_fdset;
-	/* char buffer[INET6_ADDRSTRLEN]; */
 
 	printf("hip_mobile_router() thread started...\n");
+
+	pthread_mutex_init(&hip_mr_client_mutex, NULL);
+	pthread_mutex_lock(&hip_mr_client_mutex);
+	memset(hip_mr_client_table, 0, sizeof(hip_mr_client_table));
+	pthread_mutex_unlock(&hip_mr_client_mutex);
 
 	/* Sockets used for change of address family */
 	raw_ip4_socket = socket(PF_INET, SOCK_RAW, IPPROTO_RAW);
@@ -1309,4 +1303,264 @@ int build_tlv_proxy_hmac(hip_proxy_ticket *ticket, __u8 *data, int location,
 
 	return(eight_byte_align(sizeof(tlv_hmac)));
 }
+
+/* 
+ * If mobile router, set the outbound interface index. This is invoked from
+ * select_preferred_address() after the preferred address has changed.
+ */
+int hip_mr_set_external_if()
+{
+	sockaddr_list *l, *l_new_external = NULL;
+	int preferred_iface_index = -1;
+	if (!OPT.mr)
+		return(0);
+	external_iface_index = -1;
+	if (HCNF.outbound_iface)
+		external_iface_index = devname_to_index(HCNF.outbound_iface,
+							NULL);
+	if (external_iface_index == -1) {
+		if (HCNF.preferred_iface)
+			preferred_iface_index = devname_to_index(
+							HCNF.preferred_iface,
+							NULL);
+		if (preferred_iface_index != -1) {
+			external_iface_index = preferred_iface_index;
+			log_(NORM, "Selected the preferred interface as the "
+				"outbound interface\n");
+		} else {
+			log_(ERR, "HIP started as mobile router but unable to "
+				"set outbound interface index\n");
+		}
+	} else {
+		log_(NORM, "Selected %s as outbound interface\n",
+			HCNF.outbound_iface);
+	}
+	if (external_iface_index != -1) {
+		/* Use the preferred address if it is on the external interface,
+		 * otherwise use first non-local address on this interface */
+		for (l = my_addr_head; l; l=l->next) {
+			if (l->if_index != external_iface_index)
+				continue;
+			if (TRUE == l->preferred) {
+				l_new_external = l;
+				break;
+			}
+			/* skip local and multicast addresses */
+			if ((l->addr.ss_family == AF_INET6) &&
+			    (IN6_IS_ADDR_LINKLOCAL(SA2IP6(&l->addr)) ||
+			     IN6_IS_ADDR_SITELOCAL(SA2IP6(&l->addr)) ||
+			     IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr))))
+				continue;
+			if (!l_new_external)
+				l_new_external = l;
+		}
+		if (l_new_external) {
+			struct sockaddr *out = SA(&external_address);
+			pthread_mutex_lock(&hip_mr_client_mutex);
+			out->sa_family = l_new_external->addr.ss_family;
+			memcpy(SA2IP(out), SA2IP(&l_new_external->addr),
+				SAIPLEN(out));
+			new_external_address = TRUE;
+			pthread_mutex_unlock(&hip_mr_client_mutex);
+			log_(NORM, "%s selected as the external address.\n",
+				logaddr(SA(&l_new_external->addr)));
+		} else {
+			log_(NORM, "Unable to find address on outbound "
+				"interface %d\n", external_iface_index);
+		}
+	}
+	return(0);
+}
+
+/* 
+ * Mobile router update for the external address
+ */
+void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi)
+{
+	struct sockaddr *out;
+	sockaddr_list *l, *l_new_external;
+
+	if (!OPT.mr)
+		return;
+	if (ifi != external_iface_index)
+		return;
+	if (max_hip_mr_clients <= 0)
+		return;
+
+	out = SA(&external_address);
+	pthread_mutex_lock(&hip_mr_client_mutex);
+
+	/*
+	 * Address added to external interface
+	 */
+	if (add) {
+		/* There is no external address, set the new address to be the
+		 * external address */
+		if (!out->sa_family) {
+			out->sa_family = newaddr->sa_family;
+			memcpy(SA2IP(out), SA2IP(newaddr), SAIPLEN(out));
+			new_external_address = TRUE;
+		}
+		goto hip_mr_handle_address_change_exit;
+	}
+
+	/*
+	 * Address removed from external interface
+	 */
+	/* Is the deleted address the external address? */
+	if ((out->sa_family != newaddr->sa_family) ||
+	    (memcmp(SA2IP(out), SA2IP(newaddr), SAIPLEN(out))))
+		goto hip_mr_handle_address_change_exit; /* other addr removed */
+	/* Try to find a new external address on the interface. Zero the
+	 * variable if none found.*/
+	l_new_external = NULL;
+	for (l = my_addr_head; l; l=l->next) {
+		/* Try to use the same address family, otherwise use the first
+		 * non-local address on this interface */
+		if (l->if_index != external_iface_index)
+			continue;
+		/* skip local and multicast addresses */
+		if ((l->addr.ss_family == AF_INET6) &&
+		    (IN6_IS_ADDR_LINKLOCAL(SA2IP6(&l->addr)) ||
+		     IN6_IS_ADDR_SITELOCAL(SA2IP6(&l->addr)) ||
+		     IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr))))
+			continue;
+		if (l->addr.ss_family == out->sa_family) {
+			l_new_external = l; /* prefer the same address family */
+			break;
+		} else if (!l_new_external) {
+			l_new_external = l;
+		}
+	}
+	if (l_new_external) {
+		out->sa_family = l_new_external->addr.ss_family;
+		memcpy(SA2IP(out), SA2IP(&l_new_external->addr), SAIPLEN(out));
+		new_external_address = TRUE;
+		log_(NORM, "Using %s as new external address\n",
+			logaddr(out));
+	} else {
+		log_(WARN, "No new external address found\n");
+		memset(out, 0, sizeof(external_address));
+	}
+
+hip_mr_handle_address_change_exit:
+	pthread_mutex_unlock(&hip_mr_client_mutex);
+}
+
+hip_mr_client *init_hip_mr_client(hip_hit *peer_hit, struct sockaddr *src)
+{
+	int i, num;
+	hip_mr_client *hip_mr_c;
+
+	/* Maybe should first check to see if client already in the table
+	*/
+
+	/* Find an unused slot in the mr_client_table.
+	*/
+
+	num = -1;
+	pthread_mutex_lock(&hip_mr_client_mutex);
+	for (i = 0; i < max_hip_mr_clients; i++) {
+		if (hip_mr_client_table[i].state == CANCELLED) {
+			num = i;
+			free_hip_mr_client(&hip_mr_client_table[i]);
+			if (num == max_hip_mr_clients)
+				max_hip_mr_clients++;
+			break;
+		}
+	}
+	if (num < 0) {
+		num = max_hip_mr_clients;
+		if (num == MAX_MR_CLIENTS) {
+			log_(WARN, "Max number of Mobile Router clients "
+				"reached.\n");
+			pthread_mutex_unlock(&hip_mr_client_mutex);
+			return NULL;
+		} else {
+			max_hip_mr_clients++;
+		}
+	}
+
+	hip_mr_c = &(hip_mr_client_table[num]);
+
+	memcpy(hip_mr_c->mn_hit, peer_hit, sizeof(hip_hit));
+        memcpy((struct sockaddr *)&hip_mr_c->mn_addr, src, SALEN(src));
+	hip_mr_c->state = RESPONSE_SENT;
+	pthread_mutex_unlock(&hip_mr_client_mutex);
+	return hip_mr_c;
+}
+
+int free_hip_mr_client(hip_mr_client *hip_mr_c)
+{
+	int i;
+
+	/* locate the client in the table */
+
+	for (i = 0; i< max_hip_mr_clients; i++)
+		if (hip_mr_c == &hip_mr_client_table[i])
+			break;
+
+	/* return error if something went wrong */
+
+	if ((i > max_hip_mr_clients) || (i > MAX_MR_CLIENTS))
+		return(-1);
+
+	while(hip_mr_c->spi_nats) {
+		hip_spi_nat *temp = hip_mr_c->spi_nats;
+		hip_mr_c->spi_nats = temp->next;
+		free(temp);
+	}
+	memset(hip_mr_c, 0, sizeof(hip_mr_client));
+	hip_mr_c->state = CANCELLED;
+	if (i == (max_hip_mr_clients - 1))
+		max_hip_mr_clients--;
+
+	return(i);
+
+}
+
+/*
+ * Add proxy ticket data to the mobile router client table.
+ */
+int add_proxy_ticket(tlv_proxy_ticket *ticket)
+{
+	int i, ret = -1;
+	hip_mr_client *hip_mr_c;
+	hip_spi_nat *spi_nats;
+
+	pthread_mutex_lock(&hip_mr_client_mutex);
+	for (i = 0; i < max_hip_mr_clients; i++) {
+		hip_mr_c = &(hip_mr_client_table[i]);
+		if (hip_mr_c->state != RESPONSE_SENT)
+			continue;
+		if (!hits_equal(ticket->mn_hit, hip_mr_c->mn_hit))
+			continue;
+		for (spi_nats = hip_mr_c->spi_nats; spi_nats;
+		     spi_nats = spi_nats->next) {
+			if (!hits_equal(ticket->peer_hit, spi_nats->peer_hit))
+				continue;
+			spi_nats->ticket.hmac_key_index =
+						ntohs(ticket->hmac_key_index);
+			spi_nats->ticket.transform_type =
+						ntohs(ticket->transform_type);
+			spi_nats->ticket.action = ntohs(ticket->action);
+			spi_nats->ticket.lifetime = ntohs(ticket->lifetime);
+			memcpy(spi_nats->ticket.hmac_key, ticket->hmac_key,
+				sizeof(ticket->hmac_key));
+			memcpy(spi_nats->ticket.hmac, ticket->hmac,
+				sizeof(ticket->hmac));
+			ret = i;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&hip_mr_client_mutex);
+	return ret;
+}
+
+#ifdef MOBILE_ROUTER
+int is_mobile_router()
+{
+	return(OPT.mr);
+}
+#endif
 
