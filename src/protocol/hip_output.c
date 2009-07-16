@@ -2252,7 +2252,7 @@ int build_tlv_reg_req(__u8 *data, int location, struct reg_entry *reg_offered)
 	while (reg) {
 		if (reg->state != REG_OFFERED  &&  reg->state != REG_CANCELLED)
 			continue;
-		if (reg->type == REG_RVS  &&  !OPT.rvs  && add_reg_request) {
+		if (reg->type == REGTYPE_RVS  && !OPT.rvs  && add_reg_request) {
 			/* if reg_info received, reg_request added to I2
 			 * if finished lifetime, add reg_request in update
 			 *   packet
@@ -2281,8 +2281,8 @@ int build_tlv_reg_req(__u8 *data, int location, struct reg_entry *reg_offered)
 			add_reg_request = FALSE;
 			num++;
 			reg_typep++;
-		} else if (reg->type == REG_MR  &&  OPT.mn) {
-			*reg_typep = REG_MR;
+		} else if (reg->type == REGTYPE_MR  &&  OPT.mn) {
+			*reg_typep = REGTYPE_MR;
 			if (reg->state == REG_CANCELLED) {
 				requested_lifetime = 0;
 				log_(NORM,"Cancelling registration with "

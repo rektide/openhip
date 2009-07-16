@@ -1769,7 +1769,8 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 				pthread_create(&thr, &attr, 
 					set_lifetime_thread, arg);
 #endif /* __WIN32__ */
-				} else if (*reg_typep == REG_MR  &&  OPT.mn) {
+				} else if (*reg_typep == REGTYPE_MR  &&
+						OPT.mn) {
 				memcpy(mobile_router_hit, hip_a->peer_hi->hit,
 					sizeof(hip_hit));
 				log_(NORM, "Registered with Mobile Router\n");
@@ -1812,7 +1813,8 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 						repeat_type);
 					need_to_send_update2= TRUE;
 				}
-				} else if (*reg_typep == REG_MR  &&  OPT.mn) {
+				} else if (*reg_typep == REGTYPE_MR  &&
+						OPT.mn) {
 				}
 			}
 		} else {
@@ -2302,7 +2304,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 					reg_type = *reg_typep;
 				
 				need_to_send_update2 = TRUE;
-				} else if (*reg_typep == REG_MR) {
+				} else if (*reg_typep == REGTYPE_MR) {
 					/* Request mobile routing service */
 					/* in I2 if we are a mobile node */
 				}
@@ -2504,7 +2506,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 					 * reg_failed included */
 					need_to_send_update2 = TRUE;
 			} /* if (OPT.rvs) */
-				} else if (*reg_typep == REG_MR) {
+				} else if (*reg_typep == REGTYPE_MR) {
 #ifdef MOBILE_ROUTER
 					if (OPT.mr) {
 						reg->state = REG_SEND_RESP;
@@ -2583,7 +2585,8 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 				pthread_create(&thr, &attr, 
 					set_lifetime_thread, arg);
 #endif /* __WIN32__ */
-				} else if (*reg_typep == REG_MR  &&  OPT.mn) {
+				} else if (*reg_typep == REGTYPE_MR  &&
+					OPT.mn) {
 				log_(NORM, "Registered with Mobile Router\n");
 				}
 			}
@@ -2624,7 +2627,8 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 						repeat_type);
 					need_to_send_update2 = TRUE;
 				}
-				} else if (*reg_typep == REG_MR  &&  OPT.mn) {
+				} else if (*reg_typep == REGTYPE_MR  &&
+						OPT.mn) {
 				}
 			}
 		} else if ((type == PARAM_HMAC) || 

@@ -241,9 +241,9 @@ int main_loop(int argc, char **argv)
 #endif
 	HCNF.min_lifetime = 96;  /* min lt offered by rvs: 2^((96-64)/8) = s */
 	HCNF.max_lifetime = 255; /* max lt offered by rvs: 2^((255-64)/8) = s */
-	HCNF.reg_type_rvs = REG_RVS;   /* registration type offered by the rvs */
+	HCNF.reg_type_rvs = REGTYPE_RVS;   /* registration type offered by the rvs */
 	HCNF.lifetime = 255;     /* lt req by non rvs node: 2^((255-64)/8) = s*/
-	HCNF.reg_type = REG_RVS;
+	HCNF.reg_type = REGTYPE_RVS;
 	HCNF.preferred_iface = NULL;
 	HCNF.outbound_iface = NULL;
 	HCNF.save_known_identities = TRUE;
@@ -359,10 +359,10 @@ int main_loop(int argc, char **argv)
 				exit(1);
 #endif
 				OPT.mr = TRUE;
-				HCNF.reg_types[HCNF.n_reg_types++] = REG_MR;
+				HCNF.reg_types[HCNF.n_reg_types++] = REGTYPE_MR;
 			} else {
 				OPT.rvs = TRUE;
-				HCNF.reg_types[HCNF.n_reg_types++] = REG_RVS;
+				HCNF.reg_types[HCNF.n_reg_types++] =REGTYPE_RVS;
 			}
 			argv++,argc--;
 			continue;
@@ -1456,7 +1456,7 @@ void hip_handle_registrations(struct timeval *time1)
 		if (hip_a->reg_offered) {
 			struct reg_info *reg = hip_a->reg_offered->regs;
 			while (reg) {
-				if (reg->type == REG_RVS)
+				if (reg->type == REGTYPE_RVS)
 					continue;
 				if (reg->state == REG_REQUESTED) {
 					if (TDIFF(*time1, reg->state_time) > 
