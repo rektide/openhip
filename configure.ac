@@ -31,8 +31,10 @@ AM_CONFIG_HEADER([config.h])
 AM_INIT_AUTOMAKE
 
 # Default compiler flags, to avoid using -g with release files.
+# GNU_SOURCE is defined so we have the IPv6 pktinfo structure
+# -fno-strict-aliasing fixes gcc 4.4 problems with macros such as SA2IP
 AC_GNU_SOURCE
-CFLAGS="$CFLAGS -O3 -Werror -D_GNU_SOURCE"
+CFLAGS="$CFLAGS -O3 -Werror -D_GNU_SOURCE -fno-strict-aliasing"
 
 # HIP files go in /etc/hip or /usr/local/etc/hip
 sysconfdir=$sysconfdir/hip
