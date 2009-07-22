@@ -528,11 +528,6 @@ int main_loop(int argc, char **argv)
 		print_reg_table(hip_reg_table);	
 	}
 
-	/* Precompute R1s, cookies, DH material */
-	init_dh_cache();
-	init_all_R1_caches();
-	gettimeofday(&time1, NULL);
-	last_expire = time1.tv_sec;
 #ifdef SMA_CRAWLER
 	endbox_init();
 	log_(NORM,"Initializing SMA bridge\n");
@@ -574,6 +569,11 @@ int main_loop(int argc, char **argv)
 	}
 	get_my_addresses();
 	select_preferred_address();
+	/* Precompute R1s, cookies, DH material */
+	init_dh_cache();
+	init_all_R1_caches();
+	gettimeofday(&time1, NULL);
+	last_expire = time1.tv_sec;
 	publish_my_hits();
 #ifdef __UMH__
 #ifndef __WIN32__
@@ -791,6 +791,7 @@ int main_loop(int argc, char **argv)
 			/* idle cycle - select() timeout */
 			/* retransmit any waiting packets */
 			hip_check_pfkey_buffer();
+			gettimeofday(&time1, NULL);
 			hip_retransmit_waiting_packets(&time1);
 			hip_handle_state_timeouts(&time1);
 			hip_handle_registrations(&time1);
@@ -988,16 +989,9 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family, int use_udp
 {
 	__u8 *buff;
 	struct sockaddr *src;
-#endif
-#ifdef __CYGWIN__
-	hi_node *hi;
-	sockaddr_list *a;
-#else
-#ifndef __WIN32__
 	struct cmsghdr *cmsg;
 #endif
 	struct in6_pktinfo *pktinfo = NULL;
-#endif
 	char typestr[12];
 	hiphdr* hiph = NULL;
 	hip_assoc* hip_a = NULL;
@@ -1009,8 +1003,8 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family, int use_udp
 	struct in_pktinfo *pktinfo_v4 = NULL;
 #endif
 
-	struct sockaddr_storage dst_ss;
 	struct sockaddr *dst;
+	struct sockaddr_storage dst_ss;
 
 #ifndef __WIN32__
 	struct sockaddr_storage src_ss;
@@ -1226,7 +1220,6 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 	hiphdr *hiph;
 	char typestr[12];
 
-	gettimeofday(time1, NULL);
 	for (i=0; i < max_hip_assoc; i++) {
 		hip_a = &hip_assoc_table[i];
 		if ((hip_a->rexmt_cache.len < 1) ||
@@ -1308,8 +1301,6 @@ void hip_handle_state_timeouts(struct timeval *time1)
 {
 	int i, remove_rxmt, do_close, err;
 	hip_assoc *hip_a;
-	
-	gettimeofday(time1, NULL);
 	
 	for (i = 0; i < max_hip_assoc; i++) {
 		do_close = FALSE;
@@ -1445,38 +1436,33 @@ void hip_handle_registrations(struct timeval *time1)
 {
 	int i, do_update = 0;
 	hip_assoc *hip_a;
-	
-	gettimeofday(time1, NULL);
+	struct reg_info *reg;
+	double tmp;
 	
 	for (i = 0; i < max_hip_assoc; i++) {
 		do_update = 0;
 		hip_a = &hip_assoc_table[i];
 		if (hip_a->state != ESTABLISHED)
 			continue;
-		if (hip_a->reg_offered) {
-			struct reg_info *reg = hip_a->reg_offered->regs;
-			while (reg) {
-				if (reg->type == REGTYPE_RVS)
-					continue;
-				if (reg->state == REG_REQUESTED) {
-					if (TDIFF(*time1, reg->state_time) > 
-							(int)HCNF.ual) {
-						reg->state = REG_OFFERED;
-						do_update = 1;
-					}
+		if (!hip_a->reg_offered)
+			continue;
+		for (reg = hip_a->reg_offered->regs; reg; reg = reg->next) {
+			if (reg->type == REGTYPE_RVS)
+				continue;
+			if (reg->state == REG_REQUESTED) {
+				if (TDIFF(*time1, reg->state_time) > 
+						(int)HCNF.ual) {
+					reg->state = REG_OFFERED;
+					do_update = 1;
 				}
-				if (reg->state == REG_GRANTED) {
-					double tmp;
-					tmp = YLIFE (reg->granted_lifetime);
-					tmp = pow (2, tmp);
-					tmp = 0.9*tmp;
-					if (TDIFF(*time1, reg->state_time) > 
-							(int)tmp) {
-						reg->state = REG_OFFERED;
-						do_update = 1;
-					}
+			} else if (reg->state == REG_GRANTED) {
+				tmp = YLIFE (reg->granted_lifetime);
+				tmp = pow (2, tmp);
+				tmp = 0.9*tmp;
+				if (TDIFF(*time1, reg->state_time) > (int)tmp) {
+					reg->state = REG_OFFERED;
+					do_update = 1;
 				}
-				reg = reg->next;
 			}
 		}
 		if (do_update)

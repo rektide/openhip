@@ -174,6 +174,10 @@ typedef enum {
 	sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6)
 /* get IP address length in bytes */
 #define SAIPLEN(x) (((struct sockaddr*)x)->sa_family==AF_INET) ? 4 : 16
+/* get (__u16) port from socket address */
+#define SA2PORT(x) (((struct sockaddr*)x)->sa_family==AF_INET) ? \
+	((struct sockaddr_in*)x)->sin_port : \
+	((struct sockaddr_in6*)x)->sin6_port
 /* cast to sockaddr */
 #define SA(x) ((struct sockaddr*)x)
 
@@ -898,43 +902,6 @@ struct hip_conf {
 
 extern RSA *hip_rsa_new();
 extern void hip_rsa_free(RSA *rsa);
-
-/*
- * Mobile router registration extension
- */
-typedef enum{
-	CANCELLED = 0,
-	RESPONSE_SENT,
-	TIMED_OUT
-} MR_STATES;
-
-typedef struct _hip_proxy_ticket {
-	__u8 hmac_key[20];
-	__u16 hmac_key_index;
-	__u16 transform_type;
-	__u16 action;
-	__u16 lifetime;
-	__u8 hmac[20];
-} hip_proxy_ticket;
-
-typedef struct _hip_spi_nat {
-	hip_hit peer_hit;
-	struct sockaddr_storage peer_addr;
-	struct sockaddr_storage peer_ipv4_addr;
-	struct sockaddr_storage peer_ipv6_addr;
-	__u32 private_spi;
-	__u32 public_spi;
-	__u32 peer_spi;
-	hip_proxy_ticket ticket;
-	struct _hip_spi_nat *next;
-} hip_spi_nat;
-
-typedef struct _hip_mr_client {
-	hip_hit mn_hit;
-	struct sockaddr_storage mn_addr;
-	MR_STATES state;
-	hip_spi_nat *spi_nats;
-} hip_mr_client;
 
 #endif /* _HIP_TYPES_H_*/
 

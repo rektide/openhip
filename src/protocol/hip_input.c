@@ -1355,8 +1355,12 @@ I2_ERROR:
 #ifdef MOBILE_ROUTER
  				} else if (*reg_typep == REGTYPE_MR) {
 					if (OPT.mr) {
-						init_hip_mr_client(
-							&hiph->hit_sndr, src);
+						if (init_hip_mr_client(
+							hiph->hit_sndr,
+							src) < 0) {
+						log_(WARN,"Error initializing "
+						    "mobile router client\n");
+						}
 						reg->state = REG_SEND_RESP;
 						reg->granted_lifetime =
 							resp_lifetime;
@@ -2228,23 +2232,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 			}
 		} else if (type == PARAM_PROXY_TICKET) {
 #ifdef MOBILE_ROUTER
-			tlv_proxy_ticket *ticket =
-				(tlv_proxy_ticket *) &data[location];
-			if (add_proxy_ticket(ticket) < 0) {
-				log_(WARN, "Unable to find mobile router "
-					"client ");
-				print_hex(ticket->mn_hit, HIT_SIZE);
-				log_(WARN, " to peer ");
-				print_hex(ticket->peer_hit, HIT_SIZE);
-				log_(WARN, "\n");
-			} else {
-				log_(NORM, "Adding proxy ticket for mobile "
-					"router client ");
-				print_hex(ticket->mn_hit, HIT_SIZE);
-				log_(NORM, " to peer ");
-				print_hex(ticket->peer_hit, HIT_SIZE);
-				log_(NORM, "\n");
-			}
+			add_proxy_ticket(&data[location]);
 #else /* MOBILE_ROUTER */
 			log_(WARN, "Ignoring proxy ticket in UPDATE packet.\n");
 #endif /* MOBILE_ROUTER */

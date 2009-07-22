@@ -283,9 +283,6 @@ int do_bcast();
 void hip_sleep(int seconds);
 void hip_writelock();
 void hip_exit(int signal);
-hip_mr_client *init_hip_mr_client(hip_hit *peer_hit, struct sockaddr *src);
-int  free_hip_mr_client(hip_mr_client *hip_mr_c);
-int  add_proxy_ticket(tlv_proxy_ticket *ticket);
 
 /* hip_xml.c */
 int locate_config_file(char *filename, int filename_size, char *default_name);
@@ -343,6 +340,8 @@ void publish_my_hits();
 /* hip_mr.c */
 int  hip_mr_set_external_if();
 void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi);
+int  init_hip_mr_client(hip_hit peer_hit, struct sockaddr *src);
+int  add_proxy_ticket(const __u8 *data);
 #endif
 
 

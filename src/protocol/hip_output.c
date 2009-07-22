@@ -167,7 +167,7 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
 		log_(NORMT, "relaying HIP_I1 packet (%d bytes)...\n", location);
 		
 		return(hip_send(buff, location, src, dst, hip_a,
-		     		TRUE, hip_a->peer_dst_port, hip_a->use_udp));
+		     		FALSE, hip_a->peer_dst_port, hip_a->use_udp));
 	} else { /* normal mode -- not an RVS relay */
 		/* XXX this line seems extraneous */
 		hip_a->peer_dst_port = HIP_UDP_PORT;
@@ -361,8 +361,8 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 	}
 	
 	/* add LOCATOR parameter for preferred address and secondary
-   * address of different address family if available
-	*/
+	 * address of different address family if available
+	 */
 	for (l = my_addr_head; l; l = l->next) {
 		if (l->preferred) {
 			int index = l->if_index;
@@ -500,8 +500,8 @@ int hip_send_I2(hip_assoc *hip_a)
 		    sizeof(tlv_esp_transform) + sizeof(tlv_encrypted) +
 		    sizeof(tlv_host_id)       + 1 + DSA_PRIV +
 		    3*(MAX_HI_BITS/8)         + MAX_HI_NAMESIZE +
-				sizeof(tlv_echo)          + MAX_OPAQUE_SIZE +
-				sizeof(tlv_reg_request)		+ MAX_REGISTRATION_TYPES +
+		    sizeof(tlv_echo)          + MAX_OPAQUE_SIZE +
+		    sizeof(tlv_reg_request)   + MAX_REGISTRATION_TYPES +
 		    sizeof(tlv_hmac)          +
 		    sizeof(tlv_hip_sig)       + MAX_SIG_SIZE + 2];
 	__u8 *unenc_data, *enc_data;
@@ -535,7 +535,8 @@ int hip_send_I2(hip_assoc *hip_a)
 	memcpy(&cookie, &hip_a->cookie_r, sizeof(hipcookie));
 	src = HIPA_SRC(hip_a);
 	dst = HIPA_DST(hip_a);
-/* destination port should already have been defined when I1 has been sent... anyway ... */
+	/* destination port should already have been defined when I1 has 
+	 * been sent... anyway ... */
 	hip_a->peer_dst_port = HIP_UDP_PORT ;
 
 	if (!ENCR_NULL(hip_a->hip_transform))
@@ -950,7 +951,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		/* use the preferred address or first one of this family */
 		src = l ? SA(&l->addr) : ( l2 ? SA(&l2->addr) : src);
 	}
-	log_(NORM, "Using source address of %s\n", logaddr(src));
+	log_(NORM, "Sending UPDATE from source address %s\n", logaddr(src));
 
 	/* build the HIP header */
 	hiph = (hiphdr*) buff;
