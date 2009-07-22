@@ -479,7 +479,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 	tlv_puzzle *tlv_pz=NULL;
 	dh_cache_entry *dh_entry;
 	hi_node saved_peer_hi;
-	hipcookie cookie_tmp;
+	hipcookie cookie_tmp = {0, 0, 0, 0};
 	tlv_reg_info *info;
 	__u64 gen;
 	__u8 valid_cert = FALSE;
