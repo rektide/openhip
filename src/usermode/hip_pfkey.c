@@ -43,7 +43,7 @@
 /*
  * Globals
  */
-int pfkeysp[2];
+int pfkeysp[2] = {-1, -1};
 static int pfk_seqno=0;
 #define PFKEY_UNIT64(a) ((a) >> 3)
 #define PFKEY_ALIGN8(a) (1 + (((a) - 1) | (8 - 1)))
@@ -66,6 +66,7 @@ int pfkey_handle_spddelete(int sock, char *data, int len);
 int pfkey_handle_readdress(int sock, char *data, int len);
 int pfkey_handle_acquire(char *data, int len);
 int pfkey_send_acquire(struct sockaddr *target);
+int pfkey_send_hip_packet(char *data, int len);
 extern int get_preferred_lsi(struct sockaddr *lsi);
 
 /*
@@ -829,6 +830,52 @@ int pfkey_send_acquire(struct sockaddr *target)
 	}
 #endif
 
+	return(0);
+}
+
+
+/*
+ * pfkey_send_hip_packet()
+ *
+ * Sends a SADB_HIP_PACKET message, which is simply a way to feed HIP control
+ * packets to the hipd thread as they are demuxed from the single UDP port.
+ */
+int pfkey_send_hip_packet(char *data, int len)
+{
+	char buff[2048];
+	struct sadb_msg *msg = (struct sadb_msg*) buff;
+	int pf_len;
+
+	pf_len = sizeof(struct sadb_msg) + len;
+	if (pf_len > sizeof(buff))
+		return(-1); /* TODO: dynamically allocate large HIP packets */
+
+	memset(buff, 0, pf_len);
+
+	msg->sadb_msg_version = PF_KEY_V2;
+	msg->sadb_msg_type = SADB_HIP_PACKET;
+	msg->sadb_msg_errno = 0;
+	msg->sadb_msg_satype = 0;
+	msg->sadb_msg_len = PFKEY_UNIT64(pf_len);
+	msg->sadb_msg_reserved = 0;
+	msg->sadb_msg_seq = ++pfk_seqno;
+	msg->sadb_msg_pid = 0;
+
+	memcpy(&buff[sizeof(struct sadb_msg)], data, len);
+
+#ifdef __WIN32__
+	if (send(pfkeysp[0], buff, pf_len, 0) < 0) {
+		printf("pfkey_send_hip_packet() write error: %s",
+			strerror(errno));
+		return(-1);
+	}
+#else
+	if (write(pfkeysp[0], buff, pf_len) != len) {
+		printf("pfkey_send_hip_packet() write error: %s",
+			strerror(errno));
+		return(-1);
+	}
+#endif
 	return(0);
 }
 

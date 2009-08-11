@@ -55,11 +55,12 @@ void *hip_mobile_router(void *arg);
 #define RETNULL NULL;
 #endif
 
-int init_esp_input(int family, int proto);
+int init_esp_input(int family, int type, int proto, int port, char *msg);
 int main_loop(int argc, char **argv);
 int str_to_addr(unsigned char *data, struct sockaddr *addr);
 
 int pfkey_send_acquire(struct sockaddr *target);
+int pfkey_send_hip_packet(char *data, int len);
 
 /*
  * Global definitions
@@ -115,4 +116,37 @@ extern int g_state;
 
 #define TRUE 1
 #define FALSE 0
+
+/* 
+ * Local data types 
+ */
+struct ip_esp_hdr {
+	__u32 spi;
+	__u32 seq_no;
+	__u8 enc_data[0];
+};
+
+struct ip_esp_padinfo {
+	__u8 pad_length;
+	__u8 next_hdr;
+};
+
+struct eth_hdr {
+	__u8 dst[6];
+	__u8 src[6];
+	__u16 type;
+};
+
+/* ARP header - RFC 826, STD 37 */
+struct arp_hdr {
+	__u16 ar_hrd;
+	__u16 ar_pro;
+	__u8 ar_hln;
+	__u8 ar_pln;
+	__u16 ar_op;
+};
+
+
+#define ARPOP_REQUEST 1
+#define ARPOP_REPLY 2
 

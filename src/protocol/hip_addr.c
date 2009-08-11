@@ -78,7 +78,6 @@
 #include <hip/hip_types.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
-#include <hip/hip_stun.h>
 
 #ifdef SMA_CRAWLER
 /* From /usr/include/net/if.h - added just this line because of conflicts
@@ -105,8 +104,6 @@ void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
     int if_index);
 void make_address_active(sockaddr_list *item);
 int set_preferred_address_in_list(struct sockaddr *addr);
-
-extern int send_udp_esp_tunnel_activation (__u32 spi_out);
 
 #ifndef __MACOSX__
 /* BEGIN fns implemented by ../mac/hip_mac.c */
@@ -138,6 +135,9 @@ int hip_netlink_open()
 	
 	nl_sequence_number = time(NULL);
 #else
+	while (netlsp[1] < 0) {
+		hip_sleep(1); /* wait for the netlink thread to start up */
+	}
 	s_net = netlsp[1];
 #endif
 	return(0);
@@ -1021,8 +1021,6 @@ int hip_handle_netlink(char *data, int length)
 	struct sockaddr *addr;
 	sockaddr_list *l;
 	
-	NatType nattype;
-
 	addr = (struct sockaddr*) &ss_addr;
 
 	for (msg = (struct nlmsghdr*)data; NLMSG_OK(msg, (__u32)length);
@@ -1056,7 +1054,7 @@ int hip_handle_netlink(char *data, int length)
 				if (rta->rta_type <= IFA_MAX)
 					tb[rta->rta_type] = rta;
 				rta = RTA_NEXT(rta,len);
-		}
+			}
 			/* fix tb entry for inet6 */
 			if (!tb[IFA_LOCAL]) 
 				tb[IFA_LOCAL] = tb[IFA_ADDRESS];
@@ -1070,23 +1068,6 @@ int hip_handle_netlink(char *data, int length)
 				RTA_PAYLOAD(tb[IFA_LOCAL]) );
 			log_(NORM, "Address %s: (%d)%s \n", (is_add) ? "added" :
 			    "deleted", ifa->ifa_index, logaddr(addr));
-
-#ifndef __MACOSX__
-			/* NAT detection */
-			if (OPT.stun && is_add) {
-				log_(NORMT, "STUN: NAT detection with server ");
-				printIPv4Addr (&STUN_server_addr);
-				log_(NORM, "\n");
-				nattype = stunNatType( &STUN_server_addr,FALSE, NULL, NULL, 0, NULL) ;
-				if (nattype == StunTypeOpen || nattype == StunTypeFirewall) {
-					is_behind_nat = FALSE ;
-					log_(NORM, "STUN: No NAT detected.\n");
-				} else {
-					is_behind_nat = TRUE ;
-					log_(NORM, "STUN: NAT detected, UDP encapsulation activated.\n");
-				}
-			}
-#endif
 
 			/* update our global address list */
 			if (is_add) {
@@ -1173,8 +1154,8 @@ void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
 	log_hipa_fromto(QOUT, "Update initiated (readdress)", 
 			hip_a, FALSE, TRUE);
 
-	rebuild_sa(hip_a, newaddr, 0, FALSE, FALSE, is_behind_nat);
-	rebuild_sa(hip_a, newaddr, 0, TRUE, FALSE, is_behind_nat);
+	rebuild_sa(hip_a, newaddr, 0, FALSE, FALSE);
+	rebuild_sa(hip_a, newaddr, 0, TRUE, FALSE);
 	err = sadb_readdress(oldaddr, newaddr, hip_a, hip_a->spi_in);
 	
 	/* replace the old preferred address */
@@ -1191,30 +1172,10 @@ void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
 				"ng a new rekey structure for ESP_INFO\n");
 	}
 
-	if (OPT.stun) {
-		hip_a->next_use_udp = is_behind_nat;
-	}
-	if (is_behind_nat) { /* && hip_a->peer_dst_port==0)  */
-		hip_a->peer_dst_port = HIP_UDP_PORT;
-		hip_a->peer_esp_dst_port = HIP_ESP_UDP_PORT;
-	}
-
 	/* inform peer of new preferred address */
-	if (hip_send_update(hip_a, newaddr, NULL, is_behind_nat) < 0)
+	if (hip_send_update(hip_a, newaddr, NULL) < 0)
 		log_(WARN, "Problem sending UPDATE(REA) for %s!\n",
 		    logaddr(newaddr));
-#ifdef __UMH__
-	if (hip_a->use_udp) { /* (HIP_ESP_OVER_UDP) */
-	/* not necessary. it is just meant to update the port for 
-	  incoming packets sent before rekeying is completely finished */
-		err = send_udp_esp_tunnel_activation (hip_a->spi_out);
-		if (err<0) {
-			printf("Activation of UDP-ESP channel failed.\n");
-		} else {
-			printf("Activation of UDP-ESP channel for spi:0x%x done.\n", hip_a->spi_out);
-		}
-	}
-#endif /* __UMH__ */
 }
 
 /*
@@ -1241,8 +1202,8 @@ void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
 	log_hipa_fromto(QOUT, "Update initiated (readdress)", 
 			hip_a, FALSE, TRUE);
 
-	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, FALSE, is_behind_nat);
-	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, TRUE,  is_behind_nat);
+	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, FALSE);
+	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, TRUE);
 	err = sadb_readdress(oldaddr, newsrcaddr, hip_a, hip_a->spi_in);
 	
 	/* replace the old preferred address */
@@ -1252,8 +1213,7 @@ void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
 	hip_a->hi->addrs.preferred = TRUE;
 	make_address_active(&hip_a->hi->addrs);
 
-  /* Also with peer address? */
-
+	/* Also with peer address? */
 	memcpy(&hip_a->peer_hi->addrs.addr, newdstaddr, SALEN(newdstaddr));
 	hip_a->peer_hi->addrs.if_index = if_index;
 	hip_a->peer_hi->addrs.lifetime = 0; /* XXX need to copy from somewhere? */
@@ -1267,30 +1227,10 @@ void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
 				"ng a new rekey structure for ESP_INFO\n");
 	}
 
-	if (OPT.stun) {
-		hip_a->next_use_udp = is_behind_nat;
-	}
-	if (is_behind_nat) { /* && hip_a->peer_dst_port==0)  */
-		hip_a->peer_dst_port = HIP_UDP_PORT;
-		hip_a->peer_esp_dst_port = HIP_ESP_UDP_PORT;
-	}
-
 	/* inform peer of new preferred address */
-	if (hip_send_update(hip_a, newsrcaddr, NULL, is_behind_nat) < 0)
+	if (hip_send_update(hip_a, newsrcaddr, NULL) < 0)
 		log_(WARN, "Problem sending UPDATE(REA) for %s!\n",
 		    logaddr(newsrcaddr));
-#ifdef __UMH__
-	if (hip_a->use_udp) { /* (HIP_ESP_OVER_UDP) */
-	/* not necessary. it is just meant to update the port for 
-	  incoming packets sent before rekeying is completely finished */
-		err = send_udp_esp_tunnel_activation (hip_a->spi_out);
-		if (err<0) {
-			printf("Activation of UDP-ESP channel failed.\n");
-		} else {
-			printf("Activation of UDP-ESP channel for spi:0x%x done.\n", hip_a->spi_out);
-		}
-	}
-#endif /* __UMH__ */
 }
 
 /* 

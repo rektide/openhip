@@ -20,10 +20,6 @@
  *
  */
 
-#ifdef __CYGWIN__
-#include <windows.h>
-#include <w32api/iphlpapi.h>
-#endif
 #include <stdio.h>		/* printf() */
 #ifdef __WIN32__
 #include <win32/types.h>
@@ -69,11 +65,7 @@ void *hip_status(void *arg)
 #endif
 {
 	int err, s, len;
-#ifdef __CYGWIN__
-	int from_len;
-#else
 	socklen_t from_len;
-#endif
 	char buff[STATBUFSIZE];
 	fd_set read_fdset;
 	struct timeval timeout;

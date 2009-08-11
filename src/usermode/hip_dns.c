@@ -615,10 +615,8 @@ int send_dns_response(char *buff, int namelen, struct sockaddr *to, int anstype,
 	return(0);
 }
 
-#ifndef __CYGWIN__
 #ifndef __WIN32__
 #define USE_LINUX
-#endif
 #endif
 /*
  * get_current_dns_server()

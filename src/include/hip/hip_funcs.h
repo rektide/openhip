@@ -98,20 +98,18 @@
 /* hip_output.c */
 int hip_send_I1(hip_hit* hit, hip_assoc *hip_a, int pos);
 int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
-			hi_node *hi, __u16 dst_port, int use_udp);
+			hi_node *hi);
 int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 			dh_cache_entry *dh_entry);
 int hip_send_I2(hip_assoc *hip_a);
 int hip_send_R2(hip_assoc *hip_a);
 int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
-			struct sockaddr *dstaddr, int use_udp);
-int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a,
-			int use_udp);
+			struct sockaddr *dstaddr);
+int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a);
 int hip_send_close(hip_assoc *hip_a, int send_ack);
 int hip_send_notify(hip_assoc *hip_a, int code, __u8 *data, int data_len);
 int hip_send(__u8 *data, int len, struct sockaddr *src, struct sockaddr *dst,
-			hip_assoc *hip_a, int retransmit, __u16 dst_port,
-			int use_udp);
+			hip_assoc *hip_a, int retransmit);
 int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len, struct sockaddr *src, 
 			struct sockaddr *dst);
 #ifdef __WIN32__
@@ -132,39 +130,36 @@ int build_tlv_cert(__u8 *buff);
 
 /* hip_input.c */
 int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src, 
-			struct sockaddr *dst, __u16 family, hiphdr **hdr, int use_udp);
+			struct sockaddr *dst, __u16 family, hiphdr **hdr);
 int hip_handle_I1(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
-			struct sockaddr *dst, __u16 *dst_port, int use_udp);
-int hip_handle_R1(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
-			__u16 *dst_port, int use_udp);
+			struct sockaddr *dst);
+int hip_handle_R1(__u8 *data, hip_assoc *hip_a, struct sockaddr *src);
 int hip_handle_I2(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
-			struct sockaddr *dst, __u16 *dst_port, int use_udp);
-int hip_handle_R2(__u8 *data, hip_assoc *hip_a, __u16 *dst_port, int use_udp);
-int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src, __u16 *dst_port, int use_udp);
-int hip_handle_close(__u8 *data, hip_assoc *hip_a, __u16 *dst_port, int use_udp);
-int hip_handle_notify(__u8 *buff, hip_assoc *hip_a, __u16 *dst_port, int use_udp);
-int hip_finish_rekey(hip_assoc *hip_a, int rebuild, int use_udp);
+			struct sockaddr *dst);
+int hip_handle_R2(__u8 *data, hip_assoc *hip_a);
+int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src);
+int hip_handle_close(__u8 *data, hip_assoc *hip_a);
+int hip_handle_notify(__u8 *buff, hip_assoc *hip_a);
+int hip_finish_rekey(hip_assoc *hip_a, int rebuild);
 int hip_handle_BOS(__u8 *data, struct sockaddr *src);
 int hip_handle_CER(__u8 *data, hip_assoc *hip_a);
 int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi, 
-			int in, int peer, int use_udp);
+			int in, int peer);
 int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
-			struct sockaddr *newdstaddr, __u32 newspi, int in, int use_udp);
+			struct sockaddr *newdstaddr, __u32 newspi, int in);
 void handle_reg_info();
 void handle_reg_request(char *data, int location);
 
 /* hip_ipsec.c */
 __u32 get_next_spi(hip_assoc *hip_a);
-int sadb_add(struct sockaddr *src, struct sockaddr *dst, struct sockaddr *inner_src,
-		struct sockaddr *inner_dst, hip_assoc *hip_a, __u32 spi, int direction);
-/*int sadb_add(struct sockaddr *src, struct sockaddr *dst, hip_assoc *hip_a, 
-			__u32 spi, int direction);*/
+int sadb_add(struct sockaddr *src, struct sockaddr *dst, hip_assoc *hip_a,
+	__u32 spi, int direction);
 int sadb_readdress(struct sockaddr *src, struct sockaddr *dst, hip_assoc *hip_a,
-			__u32 spi);
-int sadb_add_policy(hip_assoc *hip_a, struct sockaddr *out_src, struct sockaddr *out_dst,
-		struct sockaddr *in_src, struct sockaddr *in_dst, int direction);
-/*int sadb_add_policy(struct sockaddr *src, struct sockaddr *dst, int direction);*/
-int sadb_delete(hip_assoc *hip_a, struct sockaddr *src, struct sockaddr *dst, __u32 spi);
+	__u32 spi);
+int sadb_add_policy(hip_assoc *hip_a, struct sockaddr *src,
+	struct sockaddr *dst, int direction);
+int sadb_delete(hip_assoc *hip_a, struct sockaddr *src, struct sockaddr *dst,
+	__u32 spi);
 int sadb_delete_policy(struct sockaddr *src,struct sockaddr *dst,int direction);
 int sadb_register(int satype);
 int check_last_used(hip_assoc *hip_a, int direction, struct timeval *now);
@@ -220,10 +215,10 @@ __u32 lsi_name_lookup(char *name, int name_len);
 struct sockaddr *get_hip_dns_server();
 __u32 receive_hip_dns_response(unsigned char *buff, int len);
 int hits_equal(const hip_hit hit1, const hip_hit hit2);
-void hit_to_sockaddr (struct sockaddr_in6 *sockad, hip_hit hit);
+void hit_to_sockaddr (struct sockaddr *sockad, const hip_hit hit);
 void print_cookie(hipcookie *cookie);
 int str_to_addr(__u8 *data, struct sockaddr *addr);
-int hit2hitstr(char *hit_str, const hip_hit hit);
+int hit_to_str(char *hit_str, const hip_hit hit);
 int addr_to_str(struct sockaddr *addr, __u8 *data, int len);
 int hex_to_bin(char *src, char *dst, int dst_len);
 int solve_puzzle(hipcookie *cookie, __u64 *solution,

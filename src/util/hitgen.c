@@ -64,7 +64,6 @@
 #ifdef __UMH__ 
 int g_state;
 int netlsp[2];
-int send_udp_esp_tunnel_activation(__u32 spi_out) { return 0; }
 #endif
 
 #ifdef __WIN32__
@@ -587,9 +586,7 @@ void generate_conf_file(char *filename)
 
 	xmlNewChild(root_node, NULL, BAD_CAST "min_lifetime", BAD_CAST "96");	/* exponential lifetime 2^((x-64)/8) 	*/
 	xmlNewChild(root_node, NULL, BAD_CAST "max_lifetime", BAD_CAST "255");	/* exponential lifetime 2^((x-64)/8)	*/
-	xmlNewChild(root_node, NULL, BAD_CAST "reg_type_rvs", BAD_CAST "1");
 	xmlNewChild(root_node, NULL, BAD_CAST "lifetime", BAD_CAST "217");	/* by default more than 1 week 	*/
-	xmlNewChild(root_node, NULL, BAD_CAST "reg_type", BAD_CAST "1");
 	xmlNewChild(root_node, NULL, BAD_CAST "cookie_difficulty",BAD_CAST "10");
 	xmlNewChild(root_node, NULL, BAD_CAST "packet_timeout", BAD_CAST "10");
 	xmlNewChild(root_node, NULL, BAD_CAST "max_retries", BAD_CAST "5");
@@ -622,9 +619,11 @@ void generate_conf_file(char *filename)
 	xmlNewChild(root_node, NULL, BAD_CAST "disable_notify", BAD_CAST "no");
 #ifdef __UMH__
 	xmlNewChild(root_node, NULL, BAD_CAST "disable_dns_thread",
-			BAD_CAST "no");
+			BAD_CAST "yes");
 	xmlNewChild(root_node, NULL, BAD_CAST "enable_broadcast",BAD_CAST "no");
 #endif
+	xmlNewChild(root_node, NULL, BAD_CAST "disable_udp",
+			BAD_CAST "no");
 	xmlSaveFormatFileEnc(filename, doc, "UTF-8", 1);
 	xmlFreeDoc(doc);
 }

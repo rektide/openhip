@@ -1339,7 +1339,7 @@ int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
 
 	/* Retransmit UPDATEs unless it contains a LOCATOR or address check */
 	log_(NORM, "Sending UPDATE packet to dst : %s \n", logaddr(dst));
-	return(hip_send(buff, location, src, dst, NULL, retransmit, 0, 0));
+	return(hip_send(buff, location, src, dst, NULL, retransmit));
 }
 
 /*
@@ -1707,16 +1707,16 @@ int add_proxy_ticket(const __u8 *data)
 	}
 	pthread_mutex_unlock(&hip_mr_client_mutex);
 	/* status output */
-	hit2hitstr(hit_str, ticket->mn_hit);
+	hit_to_str(hit_str, ticket->mn_hit);
 	if (ret < 0) {
 		log_(WARN, "Unable to find mobile router client %s to peer ",
 			hit_str);
-		hit2hitstr(hit_str, ticket->peer_hit);
+		hit_to_str(hit_str, ticket->peer_hit);
 		log_(NORM, "%s\n", hit_str);
 	} else {
 		log_(NORM, "Added proxy ticket for mobile router client %s to ",
 			hit_str);
-		hit2hitstr(hit_str, ticket->peer_hit);
+		hit_to_str(hit_str, ticket->peer_hit);
 		log_(NORM, "peer %s\n", hit_str);
 	}
 

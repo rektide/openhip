@@ -809,19 +809,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
 	hip_a->peer_dh		= NULL;
 	hip_a->keymat_index	= 0;
 	hip_a->preserve_outbound_policy = FALSE;
-
-	if (is_behind_nat && OPT.enable_udp) {
-		hip_a->use_udp = TRUE;
-		hip_a->next_use_udp = TRUE;
-	} else {
-		hip_a->use_udp = FALSE;
-		hip_a->next_use_udp = FALSE;
-	}
-
-	hip_a->peer_dst_port = 0;
-	hip_a->use_time_ka.tv_sec = 0;
-	hip_a->use_time_ka.tv_usec = 0;
-	hip_a->peer_esp_dst_port = 0;
+	hip_a->udp		= FALSE;
 
 	return(hip_a);
 }
@@ -965,12 +953,7 @@ void replace_hip_assoc(hip_assoc *a_old, hip_assoc *a_new)
 	memcpy(a_old->keymat, a_new->keymat, KEYMAT_SIZE);
 	memcpy(a_old->keys, a_new->keys, NUMKEYS*sizeof(struct key_entry));
 	a_old->preserve_outbound_policy = a_new->preserve_outbound_policy;
-	a_old->use_udp = a_new->use_udp;
-	a_old->next_use_udp = a_new->next_use_udp;
-	a_old->peer_dst_port = a_new->peer_dst_port;
-	a_old->use_time_ka.tv_sec = a_new->use_time_ka.tv_sec;
-	a_old->use_time_ka.tv_usec = a_new->use_time_ka.tv_usec;
-	a_old->peer_esp_dst_port = a_new->peer_esp_dst_port;
+	a_old->udp = a_new->udp;
 
 	/* "free" the old entry (don't call free_hip_assoc) */
 	memset(a_new, 0, sizeof(hip_assoc));
@@ -1490,13 +1473,13 @@ int hits_equal(const hip_hit hit1, const hip_hit hit2)
 }
 
 /*
- * Create a struct sockaddr_in6 from HIT
+ * Create a struct sockaddr from HIT
  */
-void hit_to_sockaddr (struct sockaddr_in6 *addr, hip_hit hit)
+void hit_to_sockaddr (struct sockaddr *addr, const hip_hit hit)
 {
-	memset(addr, 0, sizeof(struct sockaddr_in6));
-	addr->sin6_family = AF_INET6;
-	memcpy(&addr->sin6_addr, hit, 16);
+	memset(addr, 0, sizeof(struct sockaddr_storage));
+	addr->sa_family = AF_INET6;
+	memcpy(SA2IP(addr), hit, HIT_SIZE);
 }
 
 
@@ -1546,16 +1529,11 @@ int addr_to_str(struct sockaddr *addr, __u8 *data, int len)
 #endif
 }
 
-int hit2hitstr(char *hit_str, const hip_hit hit)
+int hit_to_str(char *hit_str, const hip_hit hit)
 {
-	struct sockaddr *addr;
-	struct sockaddr_storage ss_addr;
-  
-	addr = (struct sockaddr*) &ss_addr;
-	memset(&ss_addr, 0, sizeof(struct sockaddr_storage));
-	ss_addr.ss_family = AF_INET6; 
-	memcpy(SA2IP(&ss_addr), hit, SAIPLEN(&ss_addr));
-	return (addr_to_str(addr, (__u8 *)hit_str, INET6_ADDRSTRLEN));
+	struct sockaddr_storage addr;
+	hit_to_sockaddr(SA(&addr), hit);
+	return (addr_to_str(SA(&addr), (__u8 *)hit_str, INET6_ADDRSTRLEN));
 }
 
 
@@ -2138,8 +2116,8 @@ void hip_packet_type(int type, char *r)
  */
 void print_usage()
 {
-        printf("%s v%s kernel daemon\n", HIP_NAME, HIP_VERSION);
-	printf("Usage: hipd [debug] [options]\n\n");
+        printf("%s v%s daemon\n", HIP_NAME, HIP_VERSION);
+	printf("Usage: hip [debug] [options]\n\n");
 	printf("Where debug is one of the following:\n");
 	printf("  -v\t show verbose debugging information\n");
 	printf("  -q\t quiet mode, only errors are shown\n");
@@ -2154,10 +2132,14 @@ void print_usage()
 	printf("  -nr\t no retransmit mode (for testing)\n");    
 	printf("  -t <addr>  manually trigger a HIP exchange with the ");
 	printf("given address\n");
+#ifdef HIP_I3
 	printf("  -i3\t enable Hi3: use i3 overlay for control packets\n");    
+#endif /* HIP_I3 */
 	printf("  -m\t rendezvous server mode\n");
-	printf("  -g <num>  stores in RVS as many entries as num, read from /etc/hip/registered_host_identitie\n");
-	printf("  -stun <addr>  specify the address of a STUN server (if none, NAT detection is disabled)\n");
+#ifdef MOBILE_ROUTER
+	printf("  -mr\t mobile router mode\n");
+#endif /* MOBILE_ROUTER */
+	printf("  -mn\t mobile node (mobile router client) mode\n");
 	printf("With no options, simple output will be displayed.\n\n");
 }
 
@@ -2377,32 +2359,14 @@ __u16 checksum_magic(const hip_hit *i, const hip_hit *r)
  */
 int hip_header_offset(const __u8 *data)
 {
-#ifdef __MACOSX__
-	struct ip *iph;
-	iph = (struct ip*) &data[0];
-	return((iph->ip_hl & 0x0f) << 2);
-#else
-	struct iphdr *iph;
-	iph = (struct iphdr*) &data[0];
-	return((iph->ihl & 0x0f) << 2);
-#endif
-}
+	struct ip *iph = (struct ip*) &data[0];
+	int len =  ((iph->ip_hl & 0x0f) << 2); /* IPv4 header length */
 
-/*
- * HIP over UDP
- * Use ip header length to find start of UDP packet
- */
-int udp_header_offset(const __u8 *data)
-{
-#ifdef __MACOSX__
-	struct ip *iph;
-	iph = (struct ip*) &data[0];
-	return((iph->ip_hl & 0x0f) << 2);
-#else
-	struct iphdr *iph;
-	iph = (struct iphdr*) &data[0];
-	return((iph->ihl & 0x0f) << 2);
-#endif
+	/* Adjust for any UDP header plus zero marker */
+	if (iph->ip_p == IPPROTO_UDP)
+		len += sizeof(udphdr) + sizeof(__u32);
+
+	return(len);
 }
 
 /*
@@ -2870,9 +2834,7 @@ void log_hipa_fromto(int level, char *msg, hip_assoc *hip_a, __u8 from, __u8 to)
 	strncat(logstr, msg, 1024 - 130);
 	if (from && hip_a->hi) { /* from HIT/src */
 		strcat(logstr, " from \n\t");
-		memset(&hit, 0, sizeof(struct sockaddr_storage));
-		hit.ss_family = AF_INET6;
-		memcpy(SA2IP(&hit), hip_a->hi->hit, SAIPLEN(&hit));
+		hit_to_sockaddr(SA(&hit), hip_a->hi->hit);
 		if (addr_to_str(SA(&hit), addrstr, INET6_ADDRSTRLEN)) {
 			strcat(logstr, "(none)");
 		} else {
@@ -2887,9 +2849,7 @@ void log_hipa_fromto(int level, char *msg, hip_assoc *hip_a, __u8 from, __u8 to)
 	}
 	if (to && hip_a->peer_hi) { /* to HIT/dst */
 		strcat(logstr, " to \n\t");
-		memset(&hit, 0, sizeof(struct sockaddr_storage));
-		hit.ss_family = AF_INET6;
-		memcpy(SA2IP(&hit), hip_a->peer_hi->hit, SAIPLEN(&hit));
+		hit_to_sockaddr(SA(&hit), hip_a->peer_hi->hit);
 		if (addr_to_str(SA(&hit), addrstr, INET6_ADDRSTRLEN)) {
 			strcat(logstr, "(none)");
 		} else {

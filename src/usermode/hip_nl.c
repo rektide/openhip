@@ -42,7 +42,7 @@
 /*
  * Globals
  */
-int netlsp[2];
+int netlsp[2] = {-1, -1};
 extern __u32 g_tap_lsi;
 
 /* 

@@ -36,7 +36,7 @@
 
 
 #define H_PROTO_UDP 17
-#define HIP_ESP_UDP_PORT 54500
+#define HIP_UDP_PORT 50500
 
 #define HIP_PROTO_VER 1
 #define H_PROTO_HIP 139 /* IP layer protocol number for private encryption */
@@ -145,7 +145,6 @@ typedef enum {
 	(1 << ESP_NULL_HMAC_MD5))
 /* Default ESP transforms proposed when none are specified in config */
 #define ESP_OFFSET 8
-#ifndef __CYGWIN__
 #define DEFAULT_ESP_TRANS \
 	((1 << (ESP_OFFSET + ESP_AES_CBC_HMAC_SHA1)) | \
 	(1 << (ESP_OFFSET + ESP_3DES_CBC_HMAC_SHA1)) | \
@@ -153,13 +152,6 @@ typedef enum {
 	(1 << (ESP_OFFSET + ESP_BLOWFISH_CBC_HMAC_SHA1)) | \
 	(1 << (ESP_OFFSET + ESP_NULL_HMAC_SHA1)) | \
 	(1 << (ESP_OFFSET + ESP_NULL_HMAC_MD5)))
-#else /* Windows transform support more limited. */
-#define DEFAULT_ESP_TRANS \
-	((1 << (ESP_OFFSET + ESP_3DES_CBC_HMAC_SHA1)) | \
-	(1 << (ESP_OFFSET + ESP_3DES_CBC_HMAC_MD5)) | \
-	(1 << (ESP_OFFSET + ESP_NULL_HMAC_SHA1)) | \
-	(1 << (ESP_OFFSET + ESP_NULL_HMAC_MD5)))
-#endif
 
 /* HI (signature) algorithms  */
 typedef enum {

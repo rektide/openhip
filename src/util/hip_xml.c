@@ -549,7 +549,7 @@ void print_hi_to_buff(uint8_t **bufp, int *buf_len, hi_node *hi, int mine)
 
 	if (!hi) return;
 
-	hit2hitstr((char *)addr_str, hi->hit);
+	hit_to_str((char *)addr_str, hi->hit);
 	memset(tmp, 0, sizeof(tmp));
 	i = snprintf(tmp, sizeof(tmp), " HI%s: %s %s %s\n\t",
 		    mine ? "" : "T", hi->name, mine ? "HIT:" : "", addr_str);
@@ -776,9 +776,9 @@ int save_identities_file(int mine)
 	} else {
 	  for(i=0; i<rc; i++){
 	    np = xmlNewChild(root_node, NULL, BAD_CAST "peer_allowed", NULL);
-	    hit2hitstr(hit_hex, hits1[i]);
+	    hit_to_str(hit_hex, hits1[i]);
 	    xmlNewChild(np, NULL, BAD_CAST "hit1", BAD_CAST hit_hex);
-	    hit2hitstr(hit_hex, hits2[i]);
+	    hit_to_str(hit_hex, hits2[i]);
 	    xmlNewChild(np, NULL, BAD_CAST "hit2", BAD_CAST hit_hex);
 	  }
 	}
@@ -937,6 +937,12 @@ int read_conf_file(char *filename)
 			else
 				HCNF.enable_bcast = FALSE;
 #endif
+		} else if (strcmp((char *)node->name, 
+				"disable_udp")==0) {
+			if (strncmp(data, "yes", 3)==0)
+				HCNF.disable_udp = TRUE;
+			else
+				HCNF.disable_udp = FALSE;
 		} else if (strcmp((char *)node->name, "min_lifetime")==0) {
 			/* real_min_lifetime (sec) = 2^((min_lifetime-64)/8) */
 			sscanf(data, "%d", &tmp);
@@ -945,16 +951,10 @@ int read_conf_file(char *filename)
 			/* real_max_lifetime (sec) = 2^((max_lifetime-64)/8) */
 			sscanf(data, "%d", &tmp);
 			HCNF.max_lifetime = (__u8)tmp;
-		} else if (strcmp((char *)node->name, "reg_type_rvs")==0) {
-			sscanf(data, "%d", &tmp);
-			HCNF.reg_type_rvs = (__u8)tmp;
 		} else if (strcmp((char *)node->name, "lifetime")==0) {
 			/* real_lifetime (seconds) = 2^((lifetime-64)/8) */
 			sscanf(data, "%d", &tmp);
 			HCNF.lifetime = (__u8)tmp;
-		} else if (strcmp((char *)node->name, "reg_type")==0) {
-			sscanf(data, "%d", &tmp);
-			HCNF.reg_type = (__u8)tmp;
 		} else if (strcmp((char*)node->name, "preferred")==0) {
 			addr = (struct sockaddr*)&HCNF.preferred;
 			memset(addr, 0, sizeof(struct sockaddr_storage));
@@ -989,6 +989,7 @@ int read_conf_file(char *filename)
 				HCNF.peer_certificate_required = TRUE;
 			else
 				HCNF.peer_certificate_required = FALSE;
+#ifdef SMA_CRAWLER
 		} else if (strcmp((char*)node->name, 
 				"use_local_known_identities")==0){
 			if (strncmp(data, "yes", 3)==0)
@@ -1028,7 +1029,6 @@ int read_conf_file(char *filename)
 				log_(WARN, "Warning: HCNF.smartcard_openssl_module malloc " "error!\n");
 			else
 				strcpy(HCNF.smartcard_openssl_module, data);
-#ifdef SMA_CRAWLER
 		/* Example: /usr/local/lib/libhipcfgldap.so */
 		} else if (strcmp((char*)node->name, "cfg_library")==0){
 			HCNF.cfg_library = malloc(strlen(data)+1);
@@ -1070,51 +1070,6 @@ int read_conf_file(char *filename)
 		xmlFree(data);
 	}
 
-	xmlFreeDoc(doc);
-	return(0);
-}
-
-
-/*
- * function read_reg_file()
- *
- * Open ~/.hip/reg_host_identities 
- * XML file and store HITs, IP addresses and lifetimes into hip_reg_table.
- *
- */
-int read_reg_file()
-{
-	xmlDocPtr doc = NULL;
-	xmlNodePtr node = NULL;
-	char name[255], *data = NULL;
-	hip_reg *hi;
-	int i = 0;
-
-	memset(name, 0, sizeof(name));
-	if (locate_config_file(name, sizeof(name), HIP_REG_FILENAME) < 0) {
-		log_(ERR, "Error locating %s xml file\n", HIP_REG_FILENAME);
-		hip_exit(0);
-	}
-	doc = xmlParseFile(name);
-	if (doc == NULL) {
-		log_(ERR, "Error parsing xml file (%s)\n", name);
-		hip_exit(0);
-	}
-	node = xmlDocGetRootElement(doc);
-	for (node = node->children; node; node = node->next)
-	{
-		if (i<num_hip_reg) {
-			data = (char *)xmlNodeGetContent(node);
-			if (strcmp((char *)node->name, "host_identity")==0) {
-				hi = (hip_reg *) malloc(sizeof(hip_reg));
-				memset(hi, 0, sizeof(hip_reg));
-				parse_xml_reghostid(node->children, hi, i);
-				i++;
-			}	
-		}
-	}	
-	if (data)
-		xmlFree(data);
 	xmlFreeDoc(doc);
 	return(0);
 }

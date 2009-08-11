@@ -223,8 +223,8 @@ void hip_sadb_deinit() {
  *
  * Add an SADB entry to the SADB hash table.
  */ 
-int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *inner_src,
-    struct sockaddr *inner_dst, struct sockaddr *src, struct sockaddr *dst, 
+int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *src_hit,
+    struct sockaddr *dst_hit, struct sockaddr *src, struct sockaddr *dst, 
     __u16 port,
     __u32 spi, __u8 *e_key, __u32 e_type, __u32 e_keylen, __u8 *a_key,
     __u32 a_type, __u32 a_keylen, __u32 lifetime, __u16 hitmagic, __u32 spinat)
@@ -233,7 +233,6 @@ int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *inner_src,
 	hip_lsi_entry *lsi_entry;
 	int hash, err, key_len;
 	__u8 key1[8], key2[8], key3[8]; /* for 3-DES */
-	struct sockaddr *use_dst, *use_src;
 
 	/* type is currently ignored */	
 	if (!src || !dst || !a_key)
@@ -261,11 +260,8 @@ int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *inner_src,
 	entry->hit_magic = hitmagic;
 	entry->src_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
 	entry->dst_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
-	entry->inner_src_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
-	entry->inner_dst_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
-	entry->dst_port = port ;
-	entry->usetime_ka.tv_sec = 0;
-	entry->usetime_ka.tv_usec = 0;
+	memset(&entry->src_hit, 0, sizeof(struct sockaddr_storage));
+	memset(&entry->dst_hit, 0, sizeof(struct sockaddr_storage));
 	memset(&entry->lsi, 0, sizeof(struct sockaddr_storage));
 	memset(&entry->lsi6, 0, sizeof(struct sockaddr_storage));
 	entry->a_type = a_type;
@@ -289,19 +285,14 @@ int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *inner_src,
 	if ((e_keylen > 0) && !entry->e_key)
 		goto hip_sadb_add_error;
 
-	/* copy addresses */
+	/* copy addresses, HITs */
 	memset(entry->src_addrs, 0, sizeof(sockaddr_list));
 	memset(entry->dst_addrs, 0, sizeof(sockaddr_list));
 	memcpy(&entry->src_addrs->addr, src, SALEN(src));
 	memcpy(&entry->dst_addrs->addr, dst, SALEN(dst));
-	memset(entry->inner_src_addrs, 0, sizeof(sockaddr_list));
-	memset(entry->inner_dst_addrs, 0, sizeof(sockaddr_list));
-	if (entry->mode == 3) { /* HIP_ESP_OVER_UDP */
-		memcpy(&entry->inner_src_addrs->addr, inner_src,
-			SALEN(inner_src));
-		memcpy(&entry->inner_dst_addrs->addr, inner_dst,
-			SALEN(inner_dst));
-	}
+	memcpy(&entry->src_hit, src_hit, SALEN(src_hit));
+	memcpy(&entry->dst_hit, dst_hit, SALEN(dst_hit));
+
 	/* copy keys */
 	memcpy(entry->a_key, a_key, a_keylen);
 	if (e_keylen > 0)
@@ -328,21 +319,17 @@ int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *inner_src,
 		BF_set_key(entry->bf_key, e_keylen, e_key);
 	}
 
-	/* add to destination cache for easy lookup via address
-	 * for HIP over UDP, HITs are used and not outer dst addr 
-	 * 	which can be the same for multiple hosts 
+	/* add to destination cache for easy lookup via address */
+	hip_sadb_add_dst_entry(dst, entry);
+
+	/* TODO: remove the below code; now the HITs are stored in the sadb
+	 * entry, so we can derive the lsi6/4 from that, and then trigger
+	 * the lsi_entry->send_packets here (this would remove the ability to
+	 * specify any number as an LSI)
 	 */
-	use_src = (entry->mode == 3) ? inner_src : src;
-	use_dst = (entry->mode == 3) ? inner_dst : dst;
-	if (!use_src || !use_dst)
-		goto hip_sadb_add_error;
-	
-	hip_sadb_add_dst_entry(use_dst, entry);
-
-
 	/* fill in LSI, add entry to destination cache for outbound;
 	 * the LSI is needed for both outbound and inbound SAs */
-	if ((lsi_entry = hip_lookup_lsi_by_addr(use_dst))) {
+	if ((lsi_entry = hip_lookup_lsi_by_addr(dst))) {
 		if (lsi_entry->lsi4.ss_family == AF_INET) { /* lsi exists? */
 			memcpy(&entry->lsi,  &lsi_entry->lsi4, 
 				SALEN(&lsi_entry->lsi4));
@@ -353,7 +340,7 @@ int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *inner_src,
 				SALEN(&lsi_entry->lsi6));
 			hip_sadb_add_dst_entry(SA(&lsi_entry->lsi6), entry);
 		}
-	} else if ((lsi_entry = hip_lookup_lsi_by_addr(use_src))) {
+	} else if ((lsi_entry = hip_lookup_lsi_by_addr(src))) {
 		memcpy(&entry->lsi,  &lsi_entry->lsi4, SALEN(&lsi_entry->lsi4));
 		memcpy(&entry->lsi6, &lsi_entry->lsi6, SALEN(&lsi_entry->lsi6));
 		lsi_entry->send_packets = 1;
@@ -406,7 +393,7 @@ int hip_sadb_delete(__u32 type, struct sockaddr *src, struct sockaddr *dst,
 		hip_sadb_delete_dst_entry(SA(&entry->lsi6));
 	}
 	if (entry->mode==3) { /*(HIP_ESP_OVER_UDP) */
-		hip_sadb_delete_dst_entry(SA(&entry->inner_dst_addrs->addr));
+		hip_sadb_delete_dst_entry(SA(&entry->dst_hit));
 	} else {
 		hip_sadb_delete_dst_entry(dst);
 	}
@@ -452,10 +439,6 @@ int hip_sadb_delete_entry(hip_sadb_entry *entry, int unlink)
 		free_addr_list(entry->src_addrs); 
 	if (entry->dst_addrs)
 		free_addr_list(entry->dst_addrs);
-	if (entry->inner_src_addrs)
-		free_addr_list(entry->inner_src_addrs);
-	if (entry->inner_dst_addrs)
-		free_addr_list(entry->inner_dst_addrs);
 	
 	/* securely erase keys */
 	if (entry->a_key) {

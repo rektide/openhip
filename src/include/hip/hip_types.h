@@ -115,7 +115,6 @@
 
 
 #define H_PROTO_UDP 17
-#define HIP_ESP_UDP_PORT 54500
 
 /* PFKEY message sizes*/
 #define SADB_RESPONSE_BUFFER	20
@@ -207,7 +206,6 @@ typedef HANDLE hip_mutex_t;
 typedef pthread_mutex_t hip_mutex_t;
 #endif
 
-#define HIP_UDP_PORT 50500
 #define HIP_KEEPALIVE_TIMEOUT 20
 
 /* 
@@ -337,11 +335,7 @@ typedef struct _hip_assoc {
 	struct key_entry keys[NUMKEYS];
 	struct key_entry mr_key;
 	__u8 preserve_outbound_policy;
-	int use_udp; /* 0: no UDP / 1: HIP over UDP */
-	int next_use_udp; /* used during UPDATE, when rekeying has not been completed */
-	__u16 peer_dst_port; /* UDP port number used by the peer for HIP packets */
-	struct timeval use_time_ka; /* last use timestamp, including keepalives */
-	__u16 peer_esp_dst_port; /* UDP port number used by the peer for ESP packets */
+	__u8 udp;
 #ifdef __MACOSX__
 	__u16 ipfw_rule;
 #endif
@@ -831,14 +825,15 @@ struct hip_opt {
 	int permissive;
 	int opportunistic;
 	int allow_any;
-	int enable_udp;
 	struct sockaddr *trigger;
-	int use_i3;
 	int rvs;
-	int entries;
-	int stun;
 	int mn;
+#ifdef MOBILE_ROUTER
 	int mr;
+#endif
+#ifdef HIP_I3
+	int i3;
+#endif
 };
 
 /*
@@ -849,18 +844,18 @@ struct hip_conf {
 	__u8 max_lifetime;
 	__u8 reg_type_rvs;
 	__u8 lifetime;	/* for registration with rvs. exponential lifetime */
-	__u8 reg_type;			/*for registration with rvs. 	*/	
-  __u8 reg_types[MAX_REGISTRATION_TYPES];
+	__u8 reg_type;			/*for registration with rvs.	*/
+	__u8 reg_types[MAX_REGISTRATION_TYPES];
 	__u8 n_reg_types;
-        __u32 cookie_difficulty;	/* 2 raised to this power	*/
+	__u32 cookie_difficulty;	/* 2 raised to this power	*/
 	__u32 cookie_lifetime;		/* valid 2^(life-32) seconds	*/
-        __u32 packet_timeout;		/* seconds			*/
-        __u32 max_retries;		/* retransmissions		*/
-        __u32 sa_lifetime;		/* lifetime of SAs in seconds	*/
-        __u32 loc_lifetime;		/* lifetime of locators in seconds */
-        char *preferred_hi;		/* which HI to use		*/
+	__u32 packet_timeout;		/* seconds			*/
+	__u32 max_retries;		/* retransmissions		*/
+	__u32 sa_lifetime;		/* lifetime of SAs in seconds	*/
+	__u32 loc_lifetime;		/* lifetime of locators in seconds */
+	char *preferred_hi;		/* which HI to use		*/
 	__u8  send_hi_name;		/* flag to include DI (FQDN) in HI */
-        __u8  dh_group;			/* which DH group to propose in R1 */
+	__u8  dh_group;			/* which DH group to propose in R1 */
 	__u32 dh_lifetime;		/* seconds until DH expires	*/
 	__u32 r1_lifetime;		/* seconds until an R1 is replaced */
 	__u32 failure_timeout;		/* seconds to wait in state E_FAILED */
@@ -874,6 +869,7 @@ struct hip_conf {
 	__u8  disable_dns_lookups;	/* T/F disable DNS lookups	     */
 	__u8  disable_notify;		/* T/F disable sending NOTIFY packets */
 	__u8  disable_dns_thread;	/* T/F disable DNS thread	     */
+	__u8  disable_udp;		/* T/F disable sending HIP over UDP */
 	__u8  enable_bcast;		/* T/F unicast packets from bcast LSI */
         char *master_interface;
 	struct sockaddr_storage preferred; /* preferred address */
@@ -882,26 +878,23 @@ struct hip_conf {
 	__u8 save_known_identities;	/* save known_host_id's on exit */
 	__u8 peer_certificate_required;
 	__u8 use_smartcard;		/* use smartcard for hostid, RSA/DSA sign and X.509 certificate */
+#ifdef SMA_CRAWLER
 	char *smartcard_pin;		/* the pin */
 	char *smartcard_key_id;		/* the smartcard key to use */
 	char *smartcard_openssl_engine;	/* the smartcard openssl engine interface */
 	char *smartcard_openssl_module;	/* the smartcard openssl engine module */
 	__u8 use_local_known_identities; /* use local known_identities file or get it from a server such as Ldap */
-#ifdef SMA_CRAWLER
 	char *cfg_library;		/* filename of configuration library */
 	char *cfg_serv_host;		/* e.g. ldap or ifmap server */
 	__u32 cfg_serv_port;		/* e.g. ldap server port */
 	char *cfg_serv_basedn;          /* e.g. ldap base dn */
 	char *cfg_serv_login_id;        /* e.g. ldap binddn */
 	char *cfg_serv_login_pwd;	/* e.g. ldap bindpw */
-#endif
+#endif /* SMA_CRAWLER */
 	char conf_filename[255];
 	char my_hi_filename[255];
 	char known_hi_filename[255];
 };
-
-extern RSA *hip_rsa_new();
-extern void hip_rsa_free(RSA *rsa);
 
 #endif /* _HIP_TYPES_H_*/
 

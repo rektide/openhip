@@ -21,7 +21,6 @@
 #include <openssl/dh.h>		/* Diffie-Hellman contexts      */
 #include <math.h>		/* for exponential macros (reg life) */
 #include <hip/hip_types.h>
-#include <hip/hip_stun.h>
 
 /* global variables */
 
@@ -82,14 +81,10 @@ extern unsigned char dhgen[DH_MAX];
 extern int pfk_seqno; /* PFKEY messages need to be numbered */
 
 extern int s_hip, s_pfk; /* PFKEY and RAW socket handles */
-extern int s_hip_udp; /* socket for UDP-encapsulated HIP packets */
 #undef s_net
 extern int s_net; /* netlink socket */
 extern int s6_hip; /* RAW IPv6 socket handle */
 extern int s_stat; /* status socket */
-
-extern int is_behind_nat; /* determined with STUN : indicates whether the host is behind a NAT or not */
-extern StunAddress4 STUN_server_addr;
 
 /* Global options */
 extern struct hip_opt OPT;
@@ -100,9 +95,6 @@ extern struct hip_conf HCNF;
 #ifdef __UMH__
 extern int pfkeysp[2];
 extern int g_state;
-#endif
-#ifdef __CYGWIN__
-extern int netlsp[2];
 #endif
 #ifdef __WIN32__
 extern int netlsp[2];

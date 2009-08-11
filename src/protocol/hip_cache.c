@@ -41,10 +41,8 @@
 #include <openssl/dsa.h>
 #include <openssl/asn1.h>
 #include <openssl/rand.h>
-#ifndef __CYGWIN__
 #ifndef __WIN32__
 #include <netinet/ip6.h>
-#endif
 #endif
 #include <sys/types.h>
 #include <errno.h>

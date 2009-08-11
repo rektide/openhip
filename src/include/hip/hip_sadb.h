@@ -53,17 +53,13 @@ typedef struct _hip_sadb_entry
 	struct _hip_sadb_entry *next;
 	__u32 spi;			/* primary index into SADB */
 	__u32 spinat;			/* OTB -- spinat for mobile router */
+	__u32 mode; 	/* ESP mode :  0-default 1-transport 2-tunnel 3-beet */
 	int direction;			/* in/out */
 	__u16 hit_magic;		/* for quick checksum calculation */
 	sockaddr_list *src_addrs;	/* source addresses 		*/
 	sockaddr_list *dst_addrs;	/* destination addresses 	*/
-	/* inner addresses for BEET SAs (the above addresses
-	 * are used as outer addresses) */
-	sockaddr_list *inner_src_addrs;
-	sockaddr_list *inner_dst_addrs;
-	__u32 mode; 	/* ESP mode :  0-default 1-transport 2-tunnel 3-beet */
-	__u16 dst_port;			/* UDP dest. port for encaps. ESP */
-	struct timeval usetime_ka;  /* last used timestamp, incl keep-alives */
+	struct sockaddr_storage src_hit; /* source HIT */
+	struct sockaddr_storage dst_hit; /* destination HIT */
 	struct sockaddr_storage lsi;	/* LSI 				*/
 	struct sockaddr_storage lsi6;	/* IPv6 LSI (peer HIT)		*/
 	__u32 a_type;			/* crypto parameters 		*/
@@ -128,10 +124,11 @@ typedef struct _hip_proto_sel_entry
  */
 void hip_sadb_init();
 void hip_sadb_deinit();
-int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *inner_src,
-    struct sockaddr *inner_dst, struct sockaddr *src, struct sockaddr *dst, __u16 port,
-    __u32 spi, __u8 *e_key, __u32 e_type, __u32 e_keylen, __u8 *a_key,
-    __u32 a_type, __u32 a_keylen, __u32 lifetime, __u16 hitmagic, __u32 spinat);
+int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *src_hit,
+    struct sockaddr *dst_hit, struct sockaddr *src, struct sockaddr *dst,
+    __u16 port, __u32 spi, __u8 *e_key, __u32 e_type, __u32 e_keylen,
+    __u8 *a_key, __u32 a_type, __u32 a_keylen, __u32 lifetime, __u16 hitmagic,
+    __u32 spinat);
 int hip_sadb_delete(__u32 type, struct sockaddr *src, struct sockaddr *dst,
     __u32 spi);
 void hip_remove_expired_lsi_entries();

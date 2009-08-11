@@ -33,6 +33,7 @@
 #include <ws2tcpip.h>		/* sockaddrin_6 */
 #include <io.h>				/* read() */
 #include <win32/types.h>
+#include <win32/ip.h>
 #else
 #ifndef __MACOSX__
 #include <asm/types.h>
@@ -88,20 +89,22 @@ static struct pfkey_buffer_entry {
  * Should be instead handled by configure process
  */
 #ifndef SADB_GETSEQ
-#define SADB_GETSEQ    24
-#define SADB_GETLSI    25
-#define SADB_READDRESS   26
-#define SADB_HIP_ACQUIRE 27
-#define SADB_HIP_ADD   28
+#define SADB_GETSEQ		24
+#define SADB_GETLSI		25
+#define SADB_READDRESS		26
+#define SADB_HIP_ACQUIRE	27
+#define SADB_HIP_ADD		28
+#define SADB_HIP_PACKET		29
 #undef SADB_MAX
-#define SADB_MAX   29
+#define SADB_MAX		30
 #endif
 
 
 #ifdef DUMMY_FUNCTIONS
 /* dummy prototypes for libipsec provided routines */
 int pfkey_send_hip_x1 (int a, u_int b, u_int c, u_int d, struct sockaddr *e,
-        struct sockaddr *f, struct sockaddr *fa, struct sockaddr *fb, u_int32_t g, u_int32_t h, u_int i, caddr_t j,
+        struct sockaddr *f, struct sockaddr *fa, struct sockaddr *fb,
+	u_int32_t g, u_int32_t h, u_int i, caddr_t j,
         u_int k, u_int l, u_int m, u_int n, u_int o, u_int32_t p, u_int32_t q,
         u_int32_t r, u_int32_t s, u_int32_t t,
         u_int8_t u, u_int16_t v, u_int16_t w, struct sockaddr *x, u_int16_t y)
@@ -186,12 +189,20 @@ extern caddr_t ipsec_set_policy (char *msg, int msglen);
 #ifdef __MACOSX__
 extern void del_divert_rule(int);
 #endif
+/* from hip_main.c */
+#ifdef __WIN32__
+void hip_handle_packet(__u8* buff, int length, struct sockaddr *src);
+#else
+void hip_handle_packet(struct msghdr *msg, int length, __u16 family);
+#endif
+
 /* local functions */
 int check_pfkey_response(int expected_type, __u32 seqno);
 void hip_handle_acquire(struct sockaddr *src, struct sockaddr *dst);
 int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 	struct sockaddr *src, struct sockaddr *dst);
 void hip_handle_expire(__u32 spi);
+void hip_pfkey_to_hip(char *buff);
 void hip_add_pfkey_buffer(char *data, int len);
 
 /*
@@ -230,7 +241,7 @@ retry_getspi:
 	 */
 	err = pfkey_send_getspi(s_pfk,
 				SADB_SATYPE_ESP,	/* satype */
-				(hip_a->use_udp ? 3 : 0) , /* mode 3=BEET, 0=default */
+				0, 		/* mode 3=BEET, 0=default */
 				src,
 				dst,
 				new_spi,		/* min */
@@ -336,15 +347,13 @@ int sadb_register(int satype)
  *  as this is munged to look for a hit.
  * 
  */
-int sadb_add(struct sockaddr *src, struct sockaddr *dst, struct sockaddr *inner_src,
-		struct sockaddr *inner_dst, hip_assoc *hip_a,
+int sadb_add(struct sockaddr *src, struct sockaddr *dst, hip_assoc *hip_a,
 		__u32 spi, int direction)
 {
 	unsigned char *key, concat_key[256];
-	int udp, err=0;
+	int err=0;
 	__u32 e_type, a_type, e_keylen, a_keylen;
-	__u16 port = (direction ? hip_a->peer_esp_dst_port : 
-				  HIP_ESP_UDP_PORT);
+	struct sockaddr_storage s_src_hit, s_dst_hit;
 
 	/* 
 	 * The libipsec code wants the two keys catentated together.  It 
@@ -400,12 +409,18 @@ int sadb_add(struct sockaddr *src, struct sockaddr *dst, struct sockaddr *inner_
 		memcpy(&concat_key[e_keylen],key,a_keylen);
 	}
 
+	if (direction) { 	/* inbound */
+		hit_to_sockaddr(SA(&s_src_hit), hip_a->peer_hi->hit);
+		hit_to_sockaddr(SA(&s_dst_hit), hip_a->hi->hit);
+	} else {		/* outbound */
+		hit_to_sockaddr(SA(&s_src_hit), hip_a->hi->hit);
+		hit_to_sockaddr(SA(&s_dst_hit), hip_a->peer_hi->hit);
+	}
+
 	log_(NORMT, "sadb_add(src=%s, ", logaddr(src));
 	log_(NORM,  "dst=%s, ", logaddr(dst));
-	if (inner_src && inner_dst) {
-		log_(NORM,  "inner src=%s, ", logaddr(inner_src));
-		log_(NORM,  "inner dst=%s, ", logaddr(inner_dst));
-	}
+	log_(NORM,  "src HIT=%s, ", logaddr(SA(&s_src_hit)));
+	log_(NORM,  "dst HIT=%s, ", logaddr(SA(&s_dst_hit)));
 	log_(NORM,  "spi=0x%x, ", spi);
 	log_(NORM,  "direction=%s)\n", direction ? "in":"out");
 	log_(NORM, "spi=0x%x ekey: 0x", spi);
@@ -414,15 +429,14 @@ int sadb_add(struct sockaddr *src, struct sockaddr *dst, struct sockaddr *inner_
 	print_hex(&concat_key[e_keylen],a_keylen);
 	log_(NORM, "\n");
 
-	udp = hip_a->use_udp; /* (HIP_ESP_OVER_UDP) */
 	err = pfkey_send_hip_x1(s_pfk,		/* my sock */
 				SADB_ADD,       /* msg type */
 				SADB_SATYPE_ESP,/* SATYPE always ESP*/
-				udp ? 3 : 0,	/* mode 3=BEET */
+				hip_a->udp ? 3 : 0, /* mode 0=normal, 3=UDP */
 				src,		/* src host */ 
 				dst,		/* dst host */ 
-				udp ? inner_src : NULL,	/* inner src : HIT */
-				udp ? inner_dst : NULL,	/* inner dst : HIT */
+				SA(&s_src_hit),	/* inner src : HIT */
+				SA(&s_dst_hit),	/* inner dst : HIT */
 				htonl(spi),	/* SPI */
 				hip_a->spi_nat,	/* reqID -- unused (OTB) */
 				0,		/* wsize=0*/
@@ -437,10 +451,9 @@ int sadb_add(struct sockaddr *src, struct sockaddr *dst, struct sockaddr *inner_
 				HCNF.sa_lifetime,/* l_addtime */
 				0,  		/* l_usetime */
 				++pfk_seqno, 	/* seq # */
-				(__u8)(udp ? 2 : 0), /* l_natt_type 
-							2=UDP_ENCAP_ESPINUDP */
-				(__u16)(udp ? port : 0), /* l_natt_sport */
-				(__u16)(udp ? port : 0), /* l_natt_dport */
+				0, /* l_natt_type 2=UDP_ENCAP_ESPINUDP */
+				0, /* l_natt_sport */
+				0, /* l_natt_dport */
 				NULL, 
 				checksum_magic((const hip_hit*)hip_a->hi->hit,
 					(const hip_hit*)hip_a->peer_hi->hit));
@@ -577,7 +590,7 @@ int sadb_delete(hip_assoc *hip_a, struct sockaddr *src, struct sockaddr *dst, __
 
 	err = pfkey_send_delete(s_pfk,  		/* socket */
 				SADB_SATYPE_ESP,	/* satype */
-				(hip_a->use_udp ? 3 : 0) , /* mode 3=BEET, 0=default */
+				0, 		/* mode 3=BEET, 0=default */
 				src,			/* src */
 				dst,			/* dest */
 				htonl(spi));		/* SPI  */
@@ -610,9 +623,8 @@ int sadb_delete(hip_assoc *hip_a, struct sockaddr *src, struct sockaddr *dst, __
  * Attempt to add a HIP IPSEC policy for the specific IP addresses of this
  * host and its peer (using 32-bit or 128-bit prefix length).
  */
-int sadb_add_policy(hip_assoc *hip_a, struct sockaddr *out_src, 
-		struct sockaddr *out_dst,
-		struct sockaddr *in_src, struct sockaddr *in_dst, int direction)
+int sadb_add_policy(hip_assoc *hip_a, struct sockaddr *src, 
+		struct sockaddr *dst, int direction)
 {
 	int err=0;
 	char pol1[100];
@@ -623,60 +635,27 @@ int sadb_add_policy(hip_assoc *hip_a, struct sockaddr *out_src,
 	memset(pol1, 0, 100);
 	memset(pol2, 0, 100);
 	
-	if (hip_a->use_udp) { /* (HIP_ESP_OVER_UDP) */
-		/* definition of the policies for ESP over UDP */
-		strcpy(pol1, "in ipsec hip/beet/");
-		strcat(pol1, logaddr(out_src));
-		strcat(pol1, "[54500]-");
-		strcat(pol1, logaddr(out_dst));
-		strcat(pol1, "[54500]/require");
-
-		strcpy(pol2, "out ipsec hip/beet/");
-		strcat(pol2, logaddr(out_src));
-		strcat(pol2, "[54500]-");
-		strcat(pol2, logaddr(out_dst));
-		strcat(pol2, "[54500]/require");
-	} else {
-		strcpy(pol1, "in ipsec hip/transport//require");
-		strcpy(pol2, "out ipsec hip/transport//require");
-	}
+	strcpy(pol1, "in ipsec hip/transport//require");
+	strcpy(pol2, "out ipsec hip/transport//require");
 
 	policy = direction ? 
 		ipsec_set_policy(pol1, strlen(pol1)) :
 		ipsec_set_policy(pol2, strlen(pol2));
 	policylen = ipsec_get_policylen(policy);
 	/* set prefix length to match specific host */
-	if (hip_a->use_udp) { /* (HIP_ESP_OVER_UDP) */
-		src_plen = (in_src->sa_family == AF_INET) ? 32 : 128;
-		dst_plen = (in_dst->sa_family == AF_INET) ? 32 : 128;
+	src_plen = (src->sa_family == AF_INET) ? 32 : 128;
+	dst_plen = (dst->sa_family == AF_INET) ? 32 : 128;
 
-		log_(NORMT, "sadb_add_policy(inner src=%s, ", logaddr(in_src));
-		log_(NORM, "dst=%s, ", logaddr(in_dst));
-		log_(NORM, "outer src=%s, ", logaddr(out_src));
-		log_(NORM, "dst=%s, ", logaddr(out_dst));
-		log_(NORM, "direction=%s)\n", direction ? "in":"out");
-	} else {
-		src_plen = (out_src->sa_family == AF_INET) ? 32 : 128;
-		dst_plen = (out_dst->sa_family == AF_INET) ? 32 : 128;
-
-		log_(NORMT, "sadb_add_policy(src=%s, dst=", logaddr(out_src));
-		log_(NORM,  "%s, direction=%s)\n", logaddr(out_dst), 
+	log_(NORMT, "sadb_add_policy(src=%s, dst=", logaddr(src));
+	log_(NORM,  "%s, direction=%s)\n", logaddr(dst), 
 			direction ? "in":"out");
-	}
 
 	/* PF_KEY message will have the format:
 	 * < SADB_X_SPDADD >
 	 * <base,address_S,address_D,lifeH,lifeS,lifeC,x_POLICY>
 	 */
-	if (hip_a->use_udp) { /* (HIP_ESP_OVER_UDP) */
-		err = pfkey_send_spdadd(s_pfk, in_src, src_plen, 
-				in_dst, dst_plen, 255,
+	err = pfkey_send_spdadd(s_pfk, src, src_plen, dst, dst_plen, 255,
 				policy, policylen, ++pfk_seqno);
-	} else {
-		err = pfkey_send_spdadd(s_pfk, out_src, src_plen,
-				out_dst, dst_plen, 255,
-				policy, policylen, ++pfk_seqno);
-	}
 	free(policy);
 	if (err < 0) {
 		log_(WARN, "PF_KEY write() error: %s.\n", strerror(errno));
@@ -785,7 +764,7 @@ int check_last_used(hip_assoc *hip_a, int incoming, struct timeval *now)
 	
 	err = pfkey_send_get(	s_pfk,
 				SADB_SATYPE_ESP,	/* satype */
-				(hip_a->use_udp ? 3 : 0) , /* mode 3=BEET, 0=default */
+				0,	/* mode 3=BEET, 0=default */
 				src,			/* src */
 				dst,			/* dst */
 				spi);
@@ -952,14 +931,6 @@ int delete_associations(hip_assoc *hip_a, __u32 old_spi_in, __u32 old_spi_out)
 	int err;
 	__u32 spi_in, spi_out;
 
-	struct sockaddr_in6 host_hit_sock;
-#ifndef __UMH__
-	struct sockaddr_in6 peer_hit_sock;
-#endif
-
-	hit_to_sockaddr (&host_hit_sock, hip_a->hi->hit);
-	hit_to_sockaddr (&host_hit_sock, hip_a->peer_hi->hit);
-	
 	/* alternate SPIs may be passed in, but if zero use hip_a SPIs */
 	spi_in = (old_spi_in) ? old_spi_in : hip_a->spi_in;
 	spi_out = (old_spi_out) ? old_spi_out :	hip_a->spi_out;
@@ -978,28 +949,14 @@ int delete_associations(hip_assoc *hip_a, __u32 old_spi_in, __u32 old_spi_out)
 #ifndef __UMH__
 	/* do not delete policy entry when we are only removing old SAs */
 	if (!old_spi_in && !old_spi_out) {
-		if (hip_a->use_udp) { /*(HIP_ESP_OVER_UDP) */
-			if (sadb_delete_policy((struct sockaddr*) &peer_hit_sock,
-			  (struct sockaddr*) &host_hit_sock,1) < 0) {
-				log_(WARN, "Error removing incoming policy \n");
-				err = -1;
-			}
-			if ((!hip_a->preserve_outbound_policy) &&
-			  (sadb_delete_policy((struct sockaddr*) &host_hit_sock,
-				(struct sockaddr*) &peer_hit_sock,0) < 0)){
-				log_(WARN, "Error removing outgoing policy \n");
-				err = -1;
-			}
-		} else {
-			if (sadb_delete_policy(HIPA_DST(hip_a),HIPA_SRC(hip_a),1) < 0) {
-				log_(WARN, "Error removing incoming policy \n");
-				err = -1;
-			}
-			if ((!hip_a->preserve_outbound_policy) &&
-			  (sadb_delete_policy(HIPA_SRC(hip_a),HIPA_DST(hip_a),0) < 0)){
-				log_(WARN, "Error removing outgoing policy \n");
-				err = -1;
-			}
+		if (sadb_delete_policy(HIPA_DST(hip_a),HIPA_SRC(hip_a),1) < 0) {
+			log_(WARN, "Error removing incoming policy \n");
+			err = -1;
+		}
+		if ((!hip_a->preserve_outbound_policy) &&
+		  (sadb_delete_policy(HIPA_SRC(hip_a),HIPA_DST(hip_a),0) < 0)) {
+			log_(WARN, "Error removing outgoing policy \n");
+			err = -1;
 		}
 	}
 #endif
@@ -1424,14 +1381,23 @@ void hip_handle_pfkey(char* buff)
 		log_(NORMT, "SADB_EXPIRE: SA with SPI=0x%x has expired.\n",spi);
 		hip_handle_expire(spi);
 		break;
+	/*
+	 * SADB_HIP_PACKET - HIP control packet received from the UDP socket in
+	 *                   the usermode ESP thread.
+	 */
+	case SADB_HIP_PACKET:
+		hip_pfkey_to_hip(buff);
+		break;
 	default:
 		log_(NORMT, "Received %s (%d) message from %s, ignoring...\n",
 		    typestr, pfkey_msg->sadb_msg_type,
 		    (pfkey_msg->sadb_msg_pid==0) ? S_PFK_PROCESS :
 		    				  "other process");
+		print_hex(buff, 100);
 		break;
 	} /* end switch */
 }
+
 
 /*
  * hip_handle_acquire()
@@ -1545,12 +1511,8 @@ void hip_handle_acquire(struct sockaddr *src, struct sockaddr *dst)
 	/* XXX skip this when using RVS? */
 	if (do_lsi) {
 		/* update SADB with LSI mapping */
-		hit_to_sockaddr((struct sockaddr_in6*)&lsi6, *hitp);
-		if (!hip_a || (hip_a && hip_a->use_udp)) {/*(HIP_ESP_OVER_UDP)*/
-			sadb_lsi(SA(&lsi6), SA(&lsi), SA(&lsi6));
-		} else {
-			update_lsi_mapping(dst, SA(&lsi), *hitp);
-		}
+		hit_to_sockaddr(SA(&lsi6), *hitp);
+		update_lsi_mapping(dst, SA(&lsi), *hitp);
 	}
 #endif
 
@@ -1562,6 +1524,14 @@ void hip_handle_acquire(struct sockaddr *src, struct sockaddr *dst)
 	memcpy(HIPA_DST(hip_a), dst, SALEN(dst));
 	memcpy(&(hip_a->peer_hi->hit), hiph.hit_sndr, sizeof(hip_hit));
 	add_other_addresses_to_hi(hip_a->peer_hi, FALSE);
+
+	/* use HIP over UDP unless disabled in conf file */
+	if (!HCNF.disable_udp) {
+		hip_a->udp = TRUE;
+		/* this signals to hip_send() to perform UDP encapsulation */
+		((struct sockaddr_in*)HIPA_DST(hip_a))->sin_port = \
+							htons(HIP_UDP_PORT);
+	}
 
 	log_hipa_fromto(QOUT, "Base exchange initiated", hip_a, TRUE, TRUE);
 	print_hex(hip_a->peer_hi->hit, HIT_SIZE);
@@ -1759,11 +1729,61 @@ void hip_handle_expire(__u32 spi)
 			"structure for rekey initiation.\n");
 		return;
 	}
-	if ((err = hip_send_update(hip_a, NULL, NULL, hip_a->use_udp)) > 0) {
+	if ((err = hip_send_update(hip_a, NULL, NULL)) > 0) {
 		log_(NORM, "Sent UPDATE (%d bytes)\n", err);
 	} else {
 		log_(NORM, "Failed to send UPDATE: %s.\n", strerror(errno));
 	}
+}
+
+/*
+ * hip_pfkey_to_hip()
+ *
+ * Convert HIP control packet from PFKEY message to a HIP packet and pass it
+ * to the parser.
+ *
+ */
+void hip_pfkey_to_hip(char *buff)
+{
+	struct sadb_msg *pfkey_msg = (struct sadb_msg *) buff;
+	struct sockaddr_storage ss_addr_from;
+	struct sockaddr *src = SA(&ss_addr_from);
+	struct ip *iph;
+	udphdr *udph;
+	int length;
+	int family = AF_INET; /* TODO: detect family from ip header to
+				       support IPv6 */
+#ifndef   __WIN32__
+	struct msghdr msg;
+	struct iovec iov;
+#endif /* __WIN32__ */
+
+	length = (pfkey_msg->sadb_msg_len * sizeof(__u64));
+	length -= sizeof(struct sadb_msg);
+
+	/* TODO: IPv6 over UDP here */
+	iph = (struct ip *) &buff[sizeof(struct sadb_msg)];
+	udph = (udphdr *) (iph + 1);
+
+	memset(src, 0, sizeof(struct sockaddr_storage));
+	src->sa_family = family;
+	((struct sockaddr_in *)src)->sin_addr = iph->ip_src;
+	((struct sockaddr_in *)src)->sin_port = udph->src_port;
+
+#ifdef   __WIN32__
+	hip_handle_packet(&buff[sizeof(struct sadb_msg)], length, src);
+#else /* __WIN32__ */
+	msg.msg_name = src;
+	msg.msg_namelen = sizeof(struct sockaddr_storage);
+	msg.msg_iov = &iov;
+	msg.msg_iov->iov_base = &buff[sizeof(struct sadb_msg)];
+	msg.msg_iovlen = length;
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
+
+	hip_handle_packet(&msg, length, AF_INET);
+#endif /* __WIN32__ */
 }
 
 /*

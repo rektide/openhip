@@ -84,11 +84,7 @@ HANDLE tapfd;
 int tapfd;
 #endif
 int readsp[2] = {0,0};
-int s_esp, s_esp_udp, s_esp6;
-int s_udp;
-#ifdef DEBUG_EVERY_PACKET
-FILE *debugfp;
-#endif
+int s_esp, s_esp_udp, s_esp_udp_dg, s_esp6;
 
 #ifdef __MACOSX__
 extern char *logaddr(struct sockaddr *addr);
@@ -109,38 +105,11 @@ __u8 eth_addrs[6 * MAX_ETH_ADDRS]; /* must be initialized to random values */
 /* Prototype of checksum function defined in hip_util.c */
 __u16 checksum_udp_packet(__u8 *data, struct sockaddr *src, struct sockaddr *dst);
 
-/* 
- * Local data types 
- */
-struct ip_esp_hdr {
-	__u32 spi;
-	__u32 seq_no;
-	__u8 enc_data[0];
-};
-
-struct ip_esp_padinfo {
-	__u8 pad_length;
-	__u8 next_hdr;
-};
-
-struct eth_hdr {
-	__u8 dst[6];
-	__u8 src[6];
-	__u16 type;
-};
-
-/* ARP header - RFC 826, STD 37 */
-struct arp_hdr {
-	__u16 ar_hrd;
-	__u16 ar_pro;
-	__u8 ar_hln;
-	__u8 ar_pln;
-	__u16 ar_op;
-};
-
-
-#define ARPOP_REQUEST 1
-#define ARPOP_REPLY 2
+#ifdef __WIN32__
+#define IS_EINTR_ERROR() (WSAGetLastError() == WSAEINTR)
+#else
+#define IS_EINTR_ERROR() (errno == EINTR)
+#endif /* __WIN32__ */
 
 /* 
  * Local function declarations
@@ -164,162 +133,9 @@ void add_ipv6_header(__u8 *data, struct sockaddr *src, struct sockaddr *dst,
 __u16 in_cksum(struct ip *iph);
 __u64 get_eth_addr(int family, __u8 *addr);
 
-#ifdef SMA_CRAWLER
-int build_host_mac_map();
-#endif
-
-/* void reset_sadbentry_udp_port (__u32 spi_out); */
-int send_udp_esp_tunnel_activation (__u32 spi_out);
-
 extern __u32 get_preferred_lsi(struct sockaddr *lsi);
 extern int do_bcast();
 extern int maxof(int num_args, ...);
-
-#ifdef SMA_CRAWLER 
-spiList *spiHead;
-pList s[255];  /* local hosts */
-int numHosts = 0;
-int read_private_hosts() {
-  FILE *fp;
-  char str[255];
-  char ip[16];
-  char mac[32];
-  int counter=0;
-
-  fp = fopen("/tmp/private_hosts","r");
-  if(!fp){
-          fprintf(stderr,"error opening private host list\n");
-          exit(-1);
-  }
-  while(!feof(fp)) {
-          str[0] = 0;
-          if (fgets(&str[0],255,fp) == NULL)
-		  break;
-          if(isalnum(str[0])) {
-                  if(str[strlen(str)-1] == '\n')
-                          str[strlen(str)-1] = '\0';
-
-                  if(sscanf(&str[0], "%s\t%s", ip, mac) < 2) {
-                          printf("parse error reading private host file\n");
-                          return -1;
-                          }
-                  s[counter].ip = strdup(ip);
-                  s[counter].mac = strdup(mac);
-                  counter++;
-          }
-  }
-  fclose(fp);
-  numHosts = counter;
-  return numHosts;
-}
-
-void save_private_hosts()
-{
-  FILE *fp;
-  int i;
-  if((fp=fopen("/tmp/private_hosts", "w"))==NULL){
-     log_(WARN, "cannot open /tmp/private_hosts - MAC address will not be cached\n");
-      return;
-  }
- 
-  for(i=0;i<numHosts;i++)
-    fprintf(fp,"%s %s\n",s[i].ip,s[i].mac);
-  fclose(fp);
-}
-
-int find_host(char *host)
-{
-int i,retVal = 0;
-	for(i=0;i< numHosts;i++) {
-		if(!strcmp(s[i].ip,host)) {
-			retVal =1;
-			continue;
-		}
-	}
-return retVal;
-}
-
-
-int find_host2(__u32 host)
-{
-int i;
-__u32 r=0;
-	for(i=0;i< numHosts;i++) {
-	  r=inet_addr(s[i].ip);
-	  if(host == r) {
-		  return 1;
-		}
-	}
-return 0;
-}
-
-pList *find_host3(__u32 host)
-{
-int i;
-	for(i=0;i< numHosts;i++) {
-	  if(host == inet_addr(s[i].ip)) {
-			return &s[i];
-		}
-	}
-
-return 0;
-}
-
-__u64 build_mac(char *mac)  {
-  struct ether_addr *addr;
-  __u64 ret=0;
-  if(mac) {
-    addr = ether_aton(mac);
-    memcpy(&ret,&addr->ether_addr_octet,6);
-  }
-  return ret;
-}
-__u64 find_mac(__u32 host) 
-{
-  pList *p = find_host3(host);
-
-  if(p)
-    return build_mac(p->mac);
-
-  /*
-   *  check whether it is a multicast address...
-   */
-
-  if(IN_MULTICAST(ntohl(host))) {
-     return build_mac("FF:FF:FF:FF:FF:FF");
-  }
-  return 0;
-}
-
-__u64 find_mac2(int index)
-{
-   if (index < numHosts)
-     return build_mac(s[index].mac);
-   else
-     return 0;
- }
-
-int find_mac3(__u8 *mac)
-{
-  int i;
-  __u64 host_mac, mac2 = 0;
-
-  for(i = 0; i < numHosts; i++) {
-    host_mac = build_mac(s[i].mac);
-    memcpy(&mac2,mac,6);
-    if (host_mac == mac2)
-      return 1;
-  }
-  printf("find_mac3 cannot find mac for MAC %02x%02x\n", mac[4], mac[5]);
-  return 0;
-}
-
-void endbox_init()
-{
-	spiHead= (spiList *) malloc(sizeof(spiList));
-	spiHead->next = 0;
-}
-#endif /* SMA_CRAWLER */
 
 #ifdef __MACOSX__
 void add_outgoing_esp_header(__u8 *data, __u32 src, __u32 dst, __u16 len);
@@ -341,61 +157,6 @@ void init_readsp()
 	RAND_bytes(eth_addrs, sizeof(eth_addrs));
 }
 
-#ifdef SMA_CRAWLER
-/* determine if to proxy a legacy node */
-int ack_request(struct in_addr sa, struct in_addr da)
-{
-	int rc;
-	struct sockaddr_storage host_ss;
-	struct sockaddr_storage eb_ss;
-	struct sockaddr *host_p;
-	struct sockaddr *eb_p;
-	hip_hit hit1, hit2;
-	char *ip;
-
-	host_p = (struct sockaddr*)&host_ss;
-	eb_p = (struct sockaddr*)&eb_ss;
-
-	host_p->sa_family = AF_INET;
-	ip = inet_ntoa(sa);
-	str_to_addr((unsigned char *)ip, host_p);
-
-	//log_(NORM, "ack_request: sender ip addr %s\n", ip);
-	if(!find_host2(sa.s_addr))
-		return 0;
-	/*
-	  Not proxy it if no ACL permission between the source and
-	  desitination endboxes, which takes care of the case where
-	  the two endboxes are "behind" a bridge
-	*/
-	eb_p->sa_family=AF_INET6;
-	rc = hipcfg_getEndboxByLegacyNode(host_p, eb_p);
-	if(rc){
-		log_(WARN, "invalid source addr in arp %s", ip);
-		return 0;
-	}
-
-	memcpy(hit1, SA2IP(eb_p), HIT_SIZE);
-
-	host_p->sa_family = AF_INET;
-	ip = inet_ntoa(da);
-	str_to_addr((unsigned char *)ip, host_p);
-	eb_p->sa_family=AF_INET6;
-	rc = hipcfg_getEndboxByLegacyNode(host_p, eb_p);
-	if(rc){
-		log_(WARN, "invalid dest addr in arp %s", ip);
-		return 0;
-	}
-	memcpy(hit2, SA2IP(eb_p), HIT_SIZE);
-
-	rc = hipcfg_allowed_peers(hit1, hit2);
-	if(!rc)
-	   log_(NORM, "peer connection not allowed hit1: %02x%02x, hit2: "
-		"%02x%02x\n", hit1[HIT_SIZE-2], hit1[HIT_SIZE-1],
-		hit2[HIT_SIZE-2], hit2[HIT_SIZE-1]);
-	return rc;
-}
-#endif /* SMA_CRAWLER */
 /*
  * hip_esp_output()
  *
@@ -446,11 +207,6 @@ void *hip_esp_output(void *arg)
 	}
 #endif /* RAW_IP_OUT */
 
-#ifdef DEBUG_EVERY_PACKET
-	if (!(debugfp = fopen("esp.log", "w"))) {
-		printf("********* error opening debug log!\n");
-	}
-#endif
 	init_readsp();
 	lsi->sa_family = AF_INET;
 	get_preferred_lsi(lsi);
@@ -478,25 +234,12 @@ void *hip_esp_output(void *arg)
 		timeout.tv_usec = g_read_usec;
 #endif
 #ifdef SMA_CRAWLER
-		now_time = time(NULL);
-		if (now_time - last_time > 60) {
-			printf("hip_esp_output() heartbeat (%d packets)\n",
-				packet_count);
-			last_time = now_time;
-			packet_count = 0;
-			if (touchHeartbeat)
-				utime("/usr/local/etc/hip/heartbeat_hip_output",
-					NULL);
-			else
-				printf("not touching heartbeat_hip_output!\n");
-		}
+		endbox_periodic_heartbeat(&now_time, &last_time, &packet_count,
+			"output", touchHeartbeat);
 #endif
+
 		if ((err = select(readsp[1]+1, &fd, NULL, NULL, &timeout))< 0) {
-#ifdef __WIN32__
-			if (WSAGetLastError() == WSAEINTR)
-#else
-			if (errno == EINTR)
-#endif
+			if (IS_EINTR_ERROR())
 				continue;
 			printf("hip_esp_output(): select() error\n");
 		} else if (err == 0) {
@@ -511,11 +254,10 @@ void *hip_esp_output(void *arg)
 
 #ifdef __WIN32__
 		if ((len = recv(readsp[1], raw_buff, BUFF_LEN, 0)) == SOCKET_ERROR) {
-			if (WSAGetLastError() == WSAEINTR)
 #else
 		if ((len = read(readsp[1], raw_buff, BUFF_LEN)) < 0) {
-			if (errno == EINTR)
 #endif
+			if (IS_EINTR_ERROR())
 				continue;
 			printf("hip_esp_output(): read() failed: %s\n",
 				strerror(errno));
@@ -527,58 +269,32 @@ void *hip_esp_output(void *arg)
 		if ((raw_buff[12] == 0x08) && (raw_buff[13] == 0x00)) {
 			iph = (struct ip*) &raw_buff[14];
 			/* accept IPv4 traffic to 1.x.x.x here */
-#ifndef SMA_CRAWLER
-			if (((iph->ip_v) == IPVERSION) &&
-#if defined(__MACOSX__) && defined(__BIG_ENDIAN__)
-				(iph->ip_dst.s_addr >> 24 & 0xFF)!=0x01)
-#else
-			    (iph->ip_dst.s_addr & 0xFF)!=0x01)
-#endif
-				continue;
-#endif /* SMA_CRAWLER */
 #ifdef SMA_CRAWLER
-			if (!IN_MULTICAST(ntohl(iph->ip_dst.s_addr)) && 
-			    ((ntohl(iph->ip_dst.s_addr)) & 0x000000FF) != 
-			     0x000000FF) {
-		          if(!ack_request(iph->ip_src, iph->ip_dst))
-			    continue;
-
-		          struct sockaddr_storage legacy_host_ss, eb_ss;
-			  struct sockaddr *legacy_host_p = (struct sockaddr*)
-				&legacy_host_ss;
-			  struct sockaddr *eb_p = (struct sockaddr*)&eb_ss;
-			  legacy_host_p->sa_family = AF_INET;
-			  LSI4(legacy_host_p) = iph->ip_dst.s_addr;
-			  eb_p->sa_family = AF_INET;
-			  if(!hipcfg_getEndboxByLegacyNode(legacy_host_p,
-				eb_p)){
-				char endboxAddr[16];
-				inet_ntop(eb_p->sa_family, SA2IP(eb_p),
-					endboxAddr, sizeof(endboxAddr));
-				struct sockaddr_in saddr;
-				inet_pton(AF_INET,
-					endboxAddr,&saddr.sin_addr.s_addr);
-				LSI4(lsi) = ntohl(saddr.sin_addr.s_addr);
-				lsi->sa_family = AF_INET;
-			  }
-			  packet_count++;
-			} /* end if not multicast */
-#else /* SMA_CRAWLER */
-			lsi_ip = ntohl(iph->ip_dst.s_addr);
-			lsi->sa_family = AF_INET;
-			LSI4(lsi) = lsi_ip;
-#endif /* SMA_CRAWLER */
+			if (endbox_ipv4_packet_check(iph, lsi, &packet_count)<0)
+				continue;
 			is_broadcast = FALSE;
-			/* broadcast packets */
-#ifndef SMA_CRAWLER
-			if ((lsi_ip & 0x00FFFFFF)==0x00FFFFFF) {
-				if (!do_bcast())
-					continue;
-#else
 			if (IN_MULTICAST(ntohl(iph->ip_dst.s_addr)) ||
 			    (((ntohl(iph->ip_dst.s_addr)) & 0x000000FF) ==
 			     0x000000FF)) {
-#endif /* !SMA_CRAWLER */
+
+#else /* SMA_CRAWLER */
+
+			if (((iph->ip_v) == IPVERSION) &&
+#if defined(__MACOSX__) && defined(__BIG_ENDIAN__)
+			    (iph->ip_dst.s_addr >> 24 & 0xFF)!=0x01)
+#else /* BIG_ENDIAN */
+			    (iph->ip_dst.s_addr & 0xFF)!=0x01)
+#endif /* BIG_ENDIAN */
+				continue;
+			lsi_ip = ntohl(iph->ip_dst.s_addr);
+			lsi->sa_family = AF_INET;
+			LSI4(lsi) = lsi_ip;
+			is_broadcast = FALSE;
+			/* broadcast packets */
+			if ((lsi_ip & 0x00FFFFFF)==0x00FFFFFF) {
+				if (!do_bcast())
+					continue;
+#endif /* SMA_CRAWLER */
 				/* unicast the broadcast to each entry */
 				entry = hip_sadb_get_next(NULL);
 				is_broadcast = TRUE;
@@ -631,14 +347,13 @@ void *hip_esp_output(void *arg)
 			 *       of calls to inet_addr()
 			 */
 			memmove(&data[20],&data,len);
-			saddr = inet_addr(
-			    logaddr((struct sockaddr*)&entry->src_addrs->addr));
-			daddr = inet_addr(
-			    logaddr((struct sockaddr*)&entry->dst_addrs->addr));
+			saddr = inet_addr(logaddr(SA(&entry->src_addrs->addr)));
+			daddr = inet_addr(logaddr(SA(&entry->dst_addrs->addr)));
                         
 			add_outgoing_esp_header(data, saddr,daddr,len);
                         
-			err=sendto(s_esp,data,len+sizeof(struct ip),flags,0,0);
+			err = sendto(s_esp,data, len + sizeof(struct ip),
+				     flags, 0, 0);
 			if (err < 0)
                                 perror("sendto()");
 #else /* __MACOSX__ */
@@ -662,8 +377,6 @@ void *hip_esp_output(void *arg)
 					entry->bytes += sizeof(struct ip) + err;
 					entry->usetime.tv_sec = now.tv_sec;
 					entry->usetime.tv_usec = now.tv_usec;
-					entry->usetime_ka.tv_sec = now.tv_sec;
-					entry->usetime_ka.tv_usec = now.tv_usec;
 					pthread_mutex_unlock(&entry->rw_lock);
 				}
 				/* broadcasts are unicast to each association */
@@ -808,7 +521,6 @@ void *hip_esp_input(void *arg)
 	struct sockaddr *lsi = (struct sockaddr*) &ss_lsi;
 	struct ip *iph;
 	struct ip_esp_hdr *esph;
-	hip_sadb_entry *inverse_entry;
 	udphdr *udph;
 
 	__u32 spi, seq_no;
@@ -828,22 +540,24 @@ void *hip_esp_input(void *arg)
         printf("hip_esp_input() thread started...\n");
 #endif
 	g_read_usec = 1000000;
-	
+
 	lsi->sa_family = AF_INET;
 	get_preferred_lsi(lsi);
 	g_tap_lsi = LSI4(lsi);
 	
 	while (g_state == 0) {
-		gettimeofday(&now, NULL); /* XXX does this cause perf. hit? */
+		gettimeofday(&now, NULL);
 		FD_ZERO(&fd);
 		FD_SET((unsigned)s_esp, &fd);
 		FD_SET((unsigned)s_esp_udp, &fd);
-#ifndef __WIN32__
-		/* IPv6 ESP not available in Windows */
-		FD_SET((unsigned)s_esp6, &fd);
-		max_fd = maxof(3, s_esp, s_esp6, s_esp_udp);
-#else
+#ifdef __WIN32__
+		/* IPv6 ESP not available in Windows. Separate UDP datagram
+		 * socket not needed. */
 		max_fd = (s_esp > s_esp_udp) ? s_esp : s_esp_udp;
+#else
+		FD_SET((unsigned)s_esp_udp_dg, &fd);
+		FD_SET((unsigned)s_esp6, &fd);
+		max_fd = maxof(4, s_esp, s_esp6, s_esp_udp, s_esp_udp_dg);
 #endif
 		timeout.tv_sec = 1;
 		timeout.tv_usec = 0;
@@ -851,26 +565,14 @@ void *hip_esp_input(void *arg)
 		memset(data, 0, sizeof(data));
 
 #ifdef SMA_CRAWLER
-		now_time = time(NULL);
-		if (now_time - last_time > 60) {
-			printf("hip_esp_input() heartbeat (%d packets)\n", packet_count);
-			last_time = now_time;
-			packet_count = 0;
-			utime("/usr/local/etc/hip/heartbeat_hip_input", NULL);
-		}
+		endbox_periodic_heartbeat(&now_time, &last_time, &packet_count,
+			"input", touchHeartbeat);
 #endif
 		if ((err = select(max_fd+1, &fd, NULL, NULL, &timeout)) < 0 ) {
-#ifdef __WIN32__
-			if (WSAGetLastError() == WSAEINTR)
-				continue;
-			printf("hip_esp_input(): select() error %d\n",
-			       WSAGetLastError());
-#else
-			if (errno == EINTR)
+			if (IS_EINTR_ERROR())
 				continue;
 			printf("hip_esp_input(): select() error %s\n",
 			       strerror(errno));
-#endif
 		} else if (FD_ISSET(s_esp, &fd)) {
 #ifdef __WIN32__
 			len = recv(s_esp, buff, sizeof(buff), 0);
@@ -903,25 +605,7 @@ void *hip_esp_input(void *arg)
 #ifdef SMA_CRAWLER
 		      packet_count++;
 		      iph = (struct ip*) &data[offset + sizeof(struct eth_hdr)];
-		
-		      // If multicast IP address, generate a MAC address for each host in the
-		      // private host map.  OTB 20080414
-		
-		      if(IN_MULTICAST((ntohl(iph->ip_dst.s_addr)))) {
-		        int i, n = numHosts;
-		        for (i = 0; i < n; i++) {
-		          __u64 dst_mac = find_mac2(i);
-		          if(dst_mac) { //the endbox, entry with LSI, has dst_mac 0
-		            add_eth_header(&data[offset], g_tap_mac, dst_mac, 0x0800);
-		            if (write(tapfd, &data[offset], len) < 0) {
-		              printf("hip_esp_input() write() failed.\n");
-		            }
-		          }
-		        }
-		      } else {
-			if (write(tapfd, &data[offset], len) < 0)
-        		   printf("hip_esp_input() write() failed.\n");
-			}
+		      endbox_ipv4_multicast_write(data, offset, len);
 #else /* SMA_CRAWLER */
 			if (write(tapfd, &data[offset], len) < 0) {
 				printf("hip_esp_input() write() failed.\n");
@@ -935,42 +619,38 @@ void *hip_esp_input(void *arg)
 			len = read(s_esp_udp, buff, sizeof(buff));
 #endif
 
-			/* XXX clean this up XXX */
+			if (len < (sizeof(struct ip) + sizeof(udphdr)))
+				continue; /* packet too short */
 			iph = (struct ip*) &buff[0];
 			udph = (udphdr*) &buff[sizeof(struct ip)];
 			esph = (struct ip_esp_hdr *) \
-				&buff[sizeof(struct ip)+sizeof(udphdr)];
-
-			if (((int)(len - sizeof(struct ip) - sizeof(udphdr)) ==
-				1) && (((__u8*)esph)[0] == 0xFF)) {
-				printf ("Keepalive packet received.\n");
-				continue;
-			}
+				&buff[sizeof(struct ip) + sizeof(udphdr)];
 			spi 	= ntohl(esph->spi);
 			seq_no 	= ntohl(esph->seq_no);
+
+			/* SOCK_RAW receives all UDP traffic, not just
+			 * HIP_UDP_PORT, even though we used bind(). */
+			if (HIP_UDP_PORT != ntohs(udph->dst_port)) {
+			/*	printf("ignoring %d bytes from UDP port %d\n",
+					len, ntohs(udph->dst_port)); */
+				continue;
+			}
+
+			/* UDP packet with SPI of zero is a HIP control packet,
+			 * send it to the hipd protocol thread via PFKEY.
+			 */
+			if (0x0 == spi) {
+				if (pfkey_send_hip_packet((char *)buff, len) <0)
+					printf("Failed to process UDP-encapsu"
+					    "lated HIP packet of %d bytes.\n",
+					    len);
+				continue;
+			}
+
 			if (!(entry = hip_sadb_lookup_spi(spi))) {
 				/*printf("Warning: SA not found for SPI 0x%x\n",
 					spi);*/
 				continue;
-			}
-
-			if (!entry->inner_src_addrs)
-				continue;
-
-			if (!(inverse_entry = hip_sadb_lookup_addr(
-				SA(&(entry->inner_src_addrs->addr))))) {
-				printf ("Corresponding sadb entry for "
-					"outgoing packets not found.\n");
-				continue;
-			}
-			/*printf ( "DST_PORT = %u\n", 
-			 * inverse_entry->dst_port);*/
-			if (inverse_entry->dst_port == 0) {
-				printf ("ESP channel - Setting dst_port "
-					"to %u\n",ntohs(udph->src_port));
-				pthread_mutex_lock(&inverse_entry->rw_lock);
-				inverse_entry->dst_port = ntohs(udph->src_port);
-				pthread_mutex_unlock(&inverse_entry->rw_lock);
 			}
 
 			pthread_mutex_lock(&entry->rw_lock);
@@ -981,34 +661,6 @@ void *hip_esp_input(void *arg)
 			if (err)
 				continue;
 
-			if (len==35 && data[34]==0xFF) {
-				printf ("Reception of udp-tunnel activation "
-					"packet for spi:0x%x.\n",
-					inverse_entry->spi);
-				if (ntohs(udph->src_port) != 0) {
-					printf ("ESP channel : Updating "
-						"dst_port: %u=>%u.\n",
-						inverse_entry->dst_port,
-						ntohs(udph->src_port));
-					pthread_mutex_lock(
-						&inverse_entry->rw_lock);
-					inverse_entry->dst_port = 
-						ntohs( udph->src_port );
-					pthread_mutex_unlock(
-						&inverse_entry->rw_lock);
-				}
-				continue;
-			}
-			if (inverse_entry->dst_port != ntohs(udph->src_port)) {
-				printf ("ESP channel : unexpected change of "
-					"dst_port : %u=>%u\n",
-					inverse_entry->dst_port,
-					ntohs( udph->src_port ));
-				pthread_mutex_lock(&inverse_entry->rw_lock);
-				inverse_entry->dst_port = ntohs(udph->src_port);
-				pthread_mutex_unlock(&inverse_entry->rw_lock);
-			}
-			 
 #ifdef __WIN32__
 			if (!WriteFile(tapfd, &data[offset], len, &lenin, 
 				&overlapped)){
@@ -1022,12 +674,15 @@ void *hip_esp_input(void *arg)
 #endif
 
 #ifndef __WIN32__
+		} else if (FD_ISSET(s_esp_udp_dg, &fd)) {
+			len = read(s_esp_udp_dg, buff, sizeof(buff));
+			/* This data is ignored, it was already received by the
+			 * s_esp_udp RAW socket. This bound datagram socket
+			 * prevents ICMP port unreachable messages. */
+			continue;
 		} else if (FD_ISSET(s_esp6, &fd)) {
 			len = read(s_esp6, buff, sizeof(buff));
 			/* there is no IPv6 header supplied */
-#ifdef DEBUG_EVERY_PACKET
-			fprintf(debugfp, "read() %d bytes\n", len);
-#endif
 			esph = (struct ip_esp_hdr *) &buff[0];
 			spi 	= ntohl(esph->spi);
 			seq_no 	= ntohl(esph->seq_no);
@@ -1061,171 +716,6 @@ void *hip_esp_input(void *arg)
 	return(NULL);
 #endif
 }
-
-
-#ifdef __WIN32__
-void udp_esp_keepalive (void *arg) {
-#else
-void *udp_esp_keepalive (void *arg) {
-#endif
-	int len;
-	hip_sadb_entry *entry;
-	struct timeval now;
-	__u8 buff[ sizeof(udphdr) + 1 ];
-	udphdr *udph;
-	__u8 *data;
-	
-
-	printf("udp_esp_keepalive() thread started...\n");
-
-	/* prepare the UDP packet */
-	memset(buff,0,sizeof(buff));
-	udph = (udphdr*) buff;
-	udph->src_port = htons(HIP_ESP_UDP_PORT);
-	udph->len = htons((__u16) sizeof(buff));
-	udph->checksum = 0;
-	data = &buff[sizeof(udphdr)];
-	data[0]=0xFF;
-
-	/* 
-	 * Loop forever, sending UDP ESP keepalives every 
-	 * HIP_KEEPALIVE_TIMEOUT seconds for outgoing 
-	 * BEET-mode SADB entries.
-	 */
-	while (g_state == 0) {
-		gettimeofday(&now, NULL);
-		/* get first outgoing entry from the hip_sadb[] */
-		entry = hip_sadb_get_next(NULL);
-		while (entry) {
-			pthread_mutex_lock(&entry->rw_lock);
-			/* BEET-mode only entries, must have dst_port */
-			if ((entry->mode != 3) ||
-			    (entry->dst_port == 0)) {
-				goto udp_esp_keepalive_continue; 
-			}
-			/* not time yet */
-			if (now.tv_sec < (entry->usetime_ka.tv_sec +
-						HIP_KEEPALIVE_TIMEOUT)) {
-				goto udp_esp_keepalive_continue; 
-			}
-			/* send a UDP ESP keepalive */
-			udph->dst_port = htons(entry->dst_port);
-			len = sendto(s_esp_udp, buff, sizeof(buff), 0,
-				     (struct sockaddr*)&entry->dst_addrs->addr,
-				     SALEN(&entry->dst_addrs->addr));
-			if (len < 0) {
-				printf("Keepalive sendto() failed for SPI=0x%x:"
-				       " %s\n", entry->spi, strerror(errno));
-			} else {
-				/* printf("Keepalive sent for SPI=0x%x.\n",
-					entry->spi); */
-				entry->bytes += sizeof(struct ip) + len;
-				entry->usetime_ka.tv_sec = now.tv_sec;
-				entry->usetime_ka.tv_usec = now.tv_usec;
-			}
-			udph->dst_port = 0;
-udp_esp_keepalive_continue:
-			pthread_mutex_unlock(&entry->rw_lock);
-			/* get next outgoing entry from the hip_sadb[] */
-			entry = hip_sadb_get_next(entry);
-		} /* end while */
-		hip_sleep(1);
-	}
-	printf("udp_esp_keepalive() thread shutdown.\n");
-#ifndef __WIN32__
-	pthread_exit((void *) 0);
-	return (NULL);
-#endif /* __WIN32__ */
-}
-
-/*
-void reset_sadbentry_udp_port (__u32 spi_out)
-{
-	hip_sadb_entry *entry;
-	entry = hip_sadb_lookup_spi (spi_out);
-	if (entry) {
-		entry->dst_port = 0;
-		printf ("SADB-entry dst_port reset for spi: 0x%x.\n",spi_out);
-	}
-}
-*/
-
-int send_udp_esp_tunnel_activation (__u32 spi_out)
-{
-	hip_sadb_entry *entry;
-	struct timeval now;
-	int err, len;
-	int raw_len = 35 ;
-	__u8 raw_buff[35];
-	__u8 *payload;
-	struct ip *iph;
-	__u8 data[BUFF_LEN];
-
-	memset(raw_buff,0,sizeof(raw_buff));
-	iph = (struct ip*) &raw_buff[14];
-	iph->ip_p = IPPROTO_RAW;
-	payload = &raw_buff[34];
-	payload[0]=0xFF;
-
-/* ugly hack... 
- * since there is no "ACK" from the responder to signal that its SADB is 
- * uptodate, the "moving" initiator sends the activation packet directly
- * after its own SADB is updated... */
-/* so this hack just add a small delay */
-/* wait 0.2sec to give enough time to the peer for finishing the SADB update */
-#ifdef __WIN32__
-	Sleep(200);
-#else
-	struct timespec delay;
-	delay.tv_sec = 0 ;
-	delay.tv_nsec = 200000000;
-	nanosleep (&delay, NULL);
-#endif
-/* end of ugly hack :-) */
-
-	gettimeofday(&now, NULL);
-
-	entry = hip_sadb_lookup_spi (spi_out);
-
-	if (entry) {
-		if (entry->mode != 3) {
-			return(-1);
-		}
-		if (entry->direction != 2) {
-			return(-1);
-		}
-		if (entry->dst_port == 0) {
-			return(-1);
-		}
-
-		pthread_mutex_lock(&entry->rw_lock);
-		err = hip_esp_encrypt(raw_buff, raw_len, data, 
-					&len, entry, &now);
-		pthread_mutex_unlock(&entry->rw_lock);
-		if (err) {
-			printf ("Error in send_udp_esp_tunnel_activation(). "
-				"hip_esp_encrypt failed.\n");
-			return (-1);
-		}
-		err = sendto(s_esp_udp, data, len, 0,
-			(struct sockaddr*)&entry->dst_addrs->addr,
-			SALEN(&entry->dst_addrs->addr));
-		if (err < 0) {
-			printf("send_udp_esp_tunnel_activation sendto() "
-				"failed: %s\n",
-				strerror(errno));
-			return (-1);
-		} else {
-			printf("send_udp_esp_tunnel_activation packet sent.\n");
-			entry->bytes += sizeof(struct ip) + err;
-			entry->usetime_ka.tv_sec = now.tv_sec;
-			entry->usetime_ka.tv_usec = now.tv_usec;
-			return (0);
-		}
-	}
-	return (-1);
-}
-
 
 
 #ifdef __WIN32__
@@ -1484,11 +974,9 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 		p_target = p_sender + 6 + 4;
 		ip_req = *((__u32*)(p_target + 6));
 #ifdef SMA_CRAWLER
-		struct in_addr sa, da;
-	        sa.s_addr = ip_sender;
-		da.s_addr = ip_req;
-		if(!ack_request(sa, da)) //not proxy legacy node if both are behind the bridge
-		  return -1;
+		/* do not proxy legacy node if both are behind the bridge */
+		if(!ack_request(ip_sender, ip_req))
+			return -1;
 #endif
 	} else {
 		return(-1);
@@ -1518,6 +1006,9 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 				return (1);
 		}
 	}
+	/* XXX jeffa: the above code sets src but then it is also set below,
+	 *            seems incorrect
+	 */
 	/* convert 32-bit lsi (1.a.b.c) to 48-bit MAC address (00-00-1-a-b-c) */
         src = (__u64)g_tap_lsi << 16;
 #else
@@ -1548,238 +1039,6 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 	*outlen = sizeof(struct eth_hdr) + sizeof(struct arp_hdr) + 20;
 	return(0);
 }
-
-#ifdef SMA_CRAWLER
-int build_host_mac_map()
-{
-  __u8 out[256], *p;
-  int outlen = 0, i, j, rc;
-  struct arp_hdr *arp_request, *arp_reply;
-  __u64 dst_mac = 0xffffffffffffffffLL;
-  __u64 src_mac;
-  __u8 in[BUFF_LEN];
-  struct timeval timeout;
-  fd_set read_fdset;
-  __u32 resp_ip;
-  char *resp_ip_s;
-  struct in_addr resp_ip_in;
-  __u8 resp_mac[6];
-  char resp_mac_s[32];
-  struct in_addr eb_in, dst_in;
-  char *eb_s, dst_s[32];
-  int host_cnt;
-  struct sockaddr_storage legacyHosts[5], eb_ss;
-  struct sockaddr *dst_p, *eb_p = (struct sockaddr *)&eb_ss;
-  struct stat stat_buf;
-
-  if(stat("/tmp/private_hosts", &stat_buf)==0){
-    log_(NORM, "loading legacy node MAC addresses from /tmp/private_hosts.\n");
-    if(read_private_hosts()>0){
-      printf("loaded %d entries from /tmp/private_hosts.\n", numHosts);
-      return 0;
-    }
-  }
-      
-  log_(NORM, "Lookup MAC addresses for legacy hosts attached this endobx...\n");
-  eb_in.s_addr = g_tap_lsi;
-  eb_s = inet_ntoa(eb_in);
-  
-  s[numHosts].ip = strdup(eb_s);
-  s[numHosts].mac = strdup("00:00:00:00:00:00");
-  numHosts++; 
-
-  if(eb_s == NULL)
-    return -1;
-  eb_p->sa_family=AF_INET;
-  inet_pton(AF_INET, eb_s, SA2IP(eb_p));
- 
-  host_cnt=hipcfg_getLegacyNodesByEndbox(eb_p,
-	legacyHosts, sizeof(legacyHosts)/sizeof(struct sockaddr_storage));
-  if(host_cnt <0 )
-    return -1;
-  if(host_cnt == 0){
-    log_(WARN, "no legacy hosts servied by endbox %s\n", eb_s);
-    return 0;
-  }
- 
-  hip_sleep(30); //HIP threads initialization complete
-  for(i = 0; i<host_cnt; i++){
-    dst_p = (struct sockaddr *)&legacyHosts[i];
-    inet_ntop(dst_p->sa_family, SA2IP(dst_p), dst_s, sizeof(dst_s));
-    log_(NORM, "finding MAC for legacy node %s...\n", dst_s);
-    inet_aton(dst_s, &dst_in);
-   
-    src_mac = (__u64)g_tap_lsi << 16;
-    add_eth_header(out, src_mac, dst_mac, 0x0806);
-
-    arp_request = (struct arp_hdr*) &out[14];
-    arp_reply = (struct arp_hdr*) &in[14];
-    arp_request->ar_hrd = htons(0x01);
-    arp_request->ar_pro = htons(0x0800);
-    arp_request->ar_hln = 6;
-    arp_request->ar_pln = 4;
-    arp_request->ar_op = htons(ARPOP_REQUEST);
-    p = (__u8 *)(arp_request +1);
-    memcpy(p, &src_mac, 6);		/* sender MAC */
-    memcpy(p+6, &g_tap_lsi, 4);	/* sender address */
-    memcpy(p+10, &dst_mac, 6);		/* target MAC */
-    memcpy(p+16, &dst_in.s_addr, 4);	/* target address */
-
-    outlen = sizeof(struct eth_hdr) + sizeof(struct arp_hdr) + 20;
-
-    FD_ZERO(&read_fdset);
-    FD_SET((unsigned)readsp[1], &read_fdset);
-    time_t poll_time, cur_time;
-    time(&poll_time);
-    while(1){
-      time(&cur_time);
-      if((cur_time-poll_time)>20){
-	log_(WARN, "cannot get ARP response for legacy host %s\n", dst_s);
-	break;
-      }
-      if(write(tapfd, out, outlen) < 0) {
-          log_(WARN, "send ARP request failed while aquiring MAC addresses.\n");
-          return -1;
-      }
-      fflush(stdout);
-      timeout.tv_sec = 3;
-      timeout.tv_usec = 0;
-      rc=select(readsp[1]+1, &read_fdset, NULL, NULL, &timeout);
-      if(rc == 0) {
-	continue;
-      }
-      if(rc < 0 ){
-        if(rc == EINTR)
-          continue;
-        log_(WARN, "error polling on socket to get MAC address, error: %s\n",
-		strerror(errno));
-        return -1;
-      } 
-      rc = read(readsp[1], in, BUFF_LEN);
-      //printf("read readsp returned %d bytes", rc);
-      if(rc <= 0) {
-         log_(WARN, "error read on socket to get MAC address, error: %s\n",
-		strerror(errno));
-         return -1;
-      }
-      j=0; // supress compling error.
-   /*
-      printf("\n");
-      for(j=0; j<14; j++)
-        printf("%02x ", in[j]);
-      printf("\n");
-   */
-      if(in[12]!=0x08 || in[13]!=0x06) {
-        //printf("read readsp - not a ARP reply %02x %02x\n", in[12], in[13]);
-        continue;
-      }
-    /*
-      printf("ar_hrd %x\n", ntohs(arp_reply->ar_hrd));
-      printf("ar_pro %x\n", ntohs(arp_reply->ar_pro));
-      printf("ar_hln %x\n", arp_reply->ar_hln);
-      printf("ar_pln %x\n", arp_reply->ar_pln);
-      printf("ar_op %x\n", ntohs(arp_reply->ar_op));
-    */
-	     
-      if(ntohs(arp_reply->ar_hrd)==0x01 &&     /* Ethernet */
-         ntohs(arp_reply->ar_pro)==0x0800 && /* IPv4 */
-         arp_reply->ar_hln==6 && arp_reply->ar_pln == 4 &&
-         ntohs(arp_reply->ar_op)==0x0002){ /* ARP reply */
-	/*
-	   for(j=0; j<10; j++)
-	    printf("%0x ", in[22+j]);
-	   printf("\n");
-	*/
-           memcpy(resp_mac, &in[22], 6);
-           resp_ip = ((__u32)in[28]<<24) + ((__u32)in[29]<<16) + ((__u32)in[30]<<8) + (__u32)in[31];
-	   resp_ip_in.s_addr = htonl(resp_ip);
-	 /*
-	   printf("got ARP response - responder IP %s", inet_ntoa(resp_ip_in));
-	   printf("dest IP %s\n", inet_ntoa(dst_in));
-	 */
-	   if(resp_ip_in.s_addr != dst_in.s_addr)
-	      continue;
-	   resp_ip_s = inet_ntoa(resp_ip_in);
-	   sprintf(resp_mac_s, "%02x:%02x:%02x:%02x:%02x:%02x", 
-		resp_mac[0],resp_mac[1], resp_mac[2],
-		resp_mac[3],resp_mac[4], resp_mac[5]);
-	   log_(NORM, "got MAC [%s] for legacy host [%s]\n",
-		resp_mac_s, resp_ip_s);
-	   s[numHosts].ip = strdup(resp_ip_s);
-	   s[numHosts].mac = strdup(resp_mac_s);
-	   numHosts++;
-	   break;
-      }
-    }
-  }
-  log_(NORM, "complete aquiring legacy hosts MAC addresses on this endbox.\n");
-  save_private_hosts();
-  return(0);
-}
-#endif /* SMA_CRAWLER */
-
-#ifdef CURRENTLY_UNUSED
-extern __u32 get_preferred_addr();
-/*
- * handle_broadcasts()
- *
- * This code leaks broadcast packets outside of the association.
- * Unfortunately, the receiving end will see a different source address
- * (not the source LSI) so the packet may be meaningless.
- */
-void handle_broadcasts(__u8 *data, int len)
-{
-	struct ip iph_old;
-	struct sockaddr_in to;
-	int s, val;
-	__u8 proto, mdata[32];
-	__u16 magic;
-	__u32 src_ip, dst_ip;
-	__u64 sum;
-	
-	/* save IPv4 header before it is zeroed */
-	memcpy(&iph_old, &data[14], sizeof(struct ip));
-	proto = iph_old.ip_p;
-	len -= 14; /* subtract eth header */
-
-	/* 
-	 * form a broadcast address, fixup TCP/UDP checksum
-	 */
-	src_ip = get_preferred_addr();
-	if (!src_ip)	/* preferred address not found! */
-		return;
-	dst_ip = src_ip | 0xFF000000L;
-	
-	/* IP header */
-	memset(mdata, 0, sizeof(mdata));
-	memcpy(&mdata[0], &src_ip, sizeof(src_ip));
-	memcpy(&mdata[16], &dst_ip, sizeof(dst_ip));
-	sum = htonl(src_ip) + htonl(dst_ip);
-	while (sum >> 16)
-		sum = (sum & 0xFFFF) + (sum >> 16);
-	magic = (__u16)sum;
-	magic = htons(magic+1);
-	rewrite_checksum(&data[14], magic);
-
-	/* 
-	 * send it out on a raw socket 
-	 */
-	memset(&to, 0, sizeof(to));
-	to.sin_family = AF_INET;
-	to.sin_addr.s_addr = dst_ip;
-
-	s = socket(PF_INET, SOCK_RAW, proto);
-	val = 1;
-	setsockopt(s, SOL_SOCKET, SO_BROADCAST, &val, sizeof(val));
-	if (sendto(s, &data[34], len, 0, 
-	    (struct sockaddr *)&to, sizeof(to)) < 0) {
-		printf("broadcast sendto() failed: proto=%d len=%d err:%s\n",
-			proto, len, strerror(errno));
-	}
-	close(s);
-}
-#endif
-
 
 /*
  * hip_esp_encrypt()
@@ -1992,34 +1251,11 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 			return(-1);
 		}
 		elen += sizeof(struct ip_esp_hdr);
-#ifdef DEBUG_EVERY_PACKET
-		fprintf(debugfp, "SPI=0x%x out a_key(%d): 0x",
-			entry->spi, entry->a_keylen);
-		for (i=0; i < entry->a_keylen; i++) {
-			if (i%4==0) fprintf(debugfp, " ");
-			fprintf(debugfp,"%.2x",entry->a_key[i] & 0xFF);
-		}
-		fprintf(debugfp, "\n");
-#endif /* DEBUG_EVERY_PACKET */
 		HMAC(	EVP_sha1(), entry->a_key, entry->a_keylen,
 			(__u8*)esp, elen, hmac_md, &hmac_md_len);
 		memcpy(&out[elen + (use_udp ? sizeof(udphdr) : 0)],
 			hmac_md, alen);
 		*outlen += alen;
-#ifdef DEBUG_EVERY_PACKET
-		fprintf(debugfp, "SHA1: (pkt %d) 0x", *outlen);
-		for (i=0; i < alen; i++) {
-			if (i%4==0) fprintf(debugfp, " ");
-			fprintf(debugfp, "%.2x", hmac_md[i] & 0xFF);
-		}
-		fprintf(debugfp, "\n");
-		fprintf(debugfp, "bytes(%d): ", elen);
-		for (i=0; i < elen; i++) {
-			if (i && i%8==0) fprintf(debugfp, " ");
-			fprintf(debugfp, "%.2x",((__u8*)esp)[i] & 0xFF);
-		}
-		fprintf(debugfp, "\n\n");
-#endif /* DEBUG_EVERY_PACKET */
 		break;
 	case SADB_X_AALG_SHA2_256HMAC:
 	case SADB_X_AALG_SHA2_384HMAC:
@@ -2048,33 +1284,47 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 	 * destination.
 	 */
 	if (checksum_fix > 0) {
+#ifdef __MACOSX__
 		if (iph->ip_p == IPPROTO_UDP)
-#ifdef __MACOSX__
 			((struct udphdr*)(iph + 1))->uh_sum = checksum_fix;
-#else
-			((struct udphdr*)(iph + 1))->check = checksum_fix;
-#endif
 		else if (iph->ip_p == IPPROTO_TCP)
-#ifdef __MACOSX__
 			((struct tcphdr*)(iph + 1))->th_sum = checksum_fix;
 #else
+		if (iph->ip_p == IPPROTO_UDP)
+			((struct udphdr*)(iph + 1))->check = checksum_fix;
+		else if (iph->ip_p == IPPROTO_TCP)
 			((struct tcphdr*)(iph + 1))->check = checksum_fix;
 #endif
 	}
 #endif /* SMA_CRAWLER */
 
-	if (use_udp) { /* (HIP_ESP_OVER_UDP) */
-		/* Set up UDP header at the beginning of out */
-		memset (udph, 0, sizeof(udphdr));
-		udph->src_port = htons(HIP_ESP_UDP_PORT);
-		if ( (udph->dst_port = htons(entry->dst_port))==0) {
-			printf ("ESP encrypt : bad UDP dst port number (%u).\n",
-				entry->dst_port);
+	/* 
+	 * Build a UDP header at the beginning of out buffer. 
+	 */
+	if (use_udp) {
+		memset(udph, 0, sizeof(udphdr));
+		/* grab port numbers from sockaddr structures */
+		if (entry->src_addrs->addr.ss_family == AF_INET)
+			udph->src_port = ((struct sockaddr_in*)
+					  &entry->src_addrs->addr)->sin_port;
+		if (entry->dst_addrs->addr.ss_family == AF_INET)
+			udph->dst_port = ((struct sockaddr_in*)
+					  &entry->dst_addrs->addr)->sin_port;
+		if (udph->src_port == 0) {
+			printf("Warning: default to src HIP_UDP_PORT %d\n",
+				HIP_UDP_PORT);
+			udph->src_port = htons(HIP_UDP_PORT);
 		}
-		udph->len = htons ((__u16)*outlen);
-		udph->checksum = checksum_udp_packet (out, 
-				    (struct sockaddr*)&entry->src_addrs->addr,
-				    (struct sockaddr*)&entry->dst_addrs->addr);
+		if (udph->dst_port == 0) {
+			printf("Warning: default to dst HIP_UDP_PORT %d\n",
+				HIP_UDP_PORT);
+			udph->dst_port = htons(HIP_UDP_PORT);
+		}
+		udph->len = htons((__u16)*outlen);
+		/* TODO: support IPv6 ESP over UDP here */
+		udph->checksum = checksum_udp_packet (out,
+					SA(&entry->src_addrs->addr), 
+					SA(&entry->dst_addrs->addr));
 	}
 
 	if (entry->spinat) {
@@ -2113,21 +1363,16 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	udphdr *udph;
 
 	struct ip_esp_padinfo *padinfo=0;
-#ifndef SMA_CRAWLER
-	struct tcphdr *tcp=NULL;
-	struct udphdr *udp=NULL;
-#endif
 	__u8 cbc_iv[16];
 	__u8 hmac_md[EVP_MAX_MD_SIZE];
-	__u64 dst_mac;
-#ifdef SMA_CRAWLER
-  __u64 src_mac;
-#endif
 #ifndef SMA_CRAWLER
+	__u64 dst_mac;
 	__u16 sum;
 	int family_out;
 	struct sockaddr_storage taplsi6;
-#endif
+	struct tcphdr *tcp=NULL;
+	struct udphdr *udp=NULL;
+#endif /* SMA_CRAWLER */
 	int use_udp = FALSE;
 	
 	if (!in || !out || !entry)
@@ -2138,6 +1383,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 		use_udp = TRUE;
 		udph = (udphdr*) &in[sizeof(struct ip)];
 		esp = (struct ip_esp_hdr*)&in[sizeof(struct ip)+sizeof(udphdr)];
+		/* TODO: IPv6 UDP here */
 	} else { 		/* not UDP-encapsulated */
 		if ( iph ) {	/* IPv4 */
 			esp = (struct ip_esp_hdr*) &in[sizeof(struct ip)];
@@ -2192,45 +1438,9 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 			printf("auth err: missing keys\n");
 			return(-1);
 		}
-#ifdef DEBUG_EVERY_PACKET
-		{ 
-			int i;
-			fprintf(debugfp, "SPI=0x%x in a_key(%d): 0x",
-				entry->spi, entry->a_keylen);
-			for (i=0; i < entry->a_keylen; i++) {
-				if (i%4==0) fprintf(debugfp, " ");
-				fprintf(debugfp,"%.2x",entry->a_key[i] & 0xFF);
-			}
-			fprintf(debugfp, "\n");
-			fprintf(debugfp, "len=%d elen=%d alen=%d iph=%p use_udp=%d \n", len, elen, alen, iph, use_udp);
-		}
-#endif /* DEBUG_EVERY_PACKET */
 		HMAC(	EVP_sha1(), entry->a_key, entry->a_keylen, 
 			(__u8*)esp, elen + sizeof(struct ip_esp_hdr),
 			hmac_md, &hmac_md_len);
-#ifdef DEBUG_EVERY_PACKET
-		{
-			int i;
-			fprintf(debugfp, "SHA1: 0x");
-			for (i=0; i < alen; i++) {
-				if (i%4==0) fprintf(debugfp, " ");
-				fprintf(debugfp, "%.2x", hmac_md[i] & 0xFF);
-			}
-			fprintf(debugfp, "\n");
-			fprintf(debugfp, "(pkt(%d): 0x", len);
-			for (i=0; i < alen; i++) {
-				if (i%4==0) fprintf(debugfp, " ");
-				fprintf(debugfp, "%.2x", in[i+len-alen] & 0xFF);
-			}
-			fprintf(debugfp, ")\n");
-			fprintf(debugfp, "bytes(%d): ", elen);
-			for (i=0; i < elen; i++) {
-				if (i && i%8==0) fprintf(debugfp, " ");
-				fprintf(debugfp, "%.2x",((__u8*)esp)[i] & 0xFF);
-			}
-			fprintf(debugfp, "\n\n");
-		}
-#endif /* DEBUG_EVERY_PACKET */
 		if (memcmp(&in[len - alen], hmac_md, alen) !=0) {
 			printf("auth err: SHA1 auth failure SPI=0x%x\n", 
 				entry->spi);
@@ -2395,56 +1605,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 		*outlen = sizeof(struct eth_hdr) + sizeof(struct ip6_hdr)+ elen;
 	}
 #else /* SMA_CRAWLER */
-	iph = (struct ip*) &out[*offset];    /* the inner IP hdr */
-	*offset -= sizeof(struct eth_hdr);   /* where to put the eth hdr */
-	dst_mac = 0;
- 
-	// generate a multicast MAC address
-	// 0x01 0x00 0x5e + 23 bits from dest multicast addr
-
-	if(IN_MULTICAST((ntohl(iph->ip_dst.s_addr)))) {
-/*
- * If the FWDn and AFTn of a crawler have their switches connected,
- * then all nodes will receive a MAC multicast from both FWDn and AFTn,
- * which screws up their arp tables.
- * We know that it is for the HMI which is the second entry in the
- * private host table. OTB 20070907.
- * We are testing with additional checks and unique psuedo-MACs for the
- * ARP responses, if this works.  OTB 20070928
- * This does not work because each tool still gets two multicasts, but
- * responds to both through its own endbox.  OTB 20071012
- * I am putting code in hip_esp_input() to loop through all hosts in
- * private host table if it is a multicast ip address.  OTB 20080414
- */
-	     ((u_char *)&dst_mac)[0] = 0x01;
-	     ((u_char *)&dst_mac)[1] = 0x00;
-	     ((u_char *)&dst_mac)[2] = 0x5e;
-	     ((u_char *)&dst_mac)[3] = ((u_char *)&iph->ip_dst)[1]&0x7f;
-	     ((u_char *)&dst_mac)[4] = ((u_char *)&iph->ip_dst)[2];
-	     ((u_char *)&dst_mac)[5] = ((u_char *)&iph->ip_dst)[3];
-	} else if(((ntohl(iph->ip_dst.s_addr)) & 0x000000FF)==0x000000FF) {
-	     ((u_char *)&dst_mac)[0] = 0xff;
-	     ((u_char *)&dst_mac)[1] = 0xff;
-	     ((u_char *)&dst_mac)[2] = 0xff;
-	     ((u_char *)&dst_mac)[3] = 0xff;
-	     ((u_char *)&dst_mac)[4] = 0xff;
-	     ((u_char *)&dst_mac)[5] = 0xff;
-	} else if (iph->ip_dst.s_addr == g_tap_lsi) {
-              src_mac = get_eth_addr(AF_INET, SA2IP(&entry->lsi));
-              dst_mac = g_tap_mac;
-	} else {
-	     dst_mac = find_mac(iph->ip_dst.s_addr);
-	}
-        if(dst_mac == 0) {
-                char name[16];
-                inet_ntop(AF_INET, &iph->ip_dst.s_addr, name, 16);
-                printf("error obtaining host mac address for %s.  ", name);
-                inet_ntop(AF_INET, &iph->ip_src.s_addr, name, 16);
-                printf("(src = %s)\n", name);
-        }
-
-        /* JEFFM JEFFM JEFFM 2/27/2007   */
-        add_eth_header(&out[*offset], g_tap_mac, dst_mac, 0x0800);
+	endbox_esp_decrypt(out, offset);
 	*outlen = sizeof(struct eth_hdr) + elen;
 #endif /* SMA_CRAWLER */
 
@@ -2453,8 +1614,6 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	entry->bytes += *outlen - sizeof(struct eth_hdr);
 	entry->usetime.tv_sec = now->tv_sec;
 	entry->usetime.tv_usec = now->tv_usec;
-	entry->usetime_ka.tv_sec = now->tv_sec;
-	entry->usetime_ka.tv_usec = now->tv_usec;
 
 	return(0);
 }

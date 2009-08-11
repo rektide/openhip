@@ -79,7 +79,7 @@
 /*
  * Forward declaration of local functions.
  */
-int hip_check_bind(struct sockaddr *src, int use_udp, int num_attempts);
+int hip_check_bind(struct sockaddr *src, int num_attempts);
 int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug);
 int build_tlv_transform(__u8 *data, int type, __u16 transforms[], __u16 single);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
@@ -103,7 +103,8 @@ extern void del_divert_rule(int);
  * function hip_send_I1()
  * 
  * in:		hit  = Responder's HIT, who we want to start communications with
- * 		conn = Connection number to use for retransmission
+ * 		hip_a = Association to use for retransmission
+ * 		pos  = RVS parameter
  * 		
  * out:		Returns bytes sent when successful, -1 on failure.
  *
@@ -121,6 +122,15 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
 
 	memset(buff, 0, sizeof(buff));
 
+	hiph = (hiphdr*) &buff[0];
+	hiph->nxt_hdr = IPPROTO_NONE;
+	hiph->hdr_len = 4; /* 2*sizeof(hip_hit)/8*/
+	hiph->packet_type = HIP_I1;
+	hiph->version = HIP_PROTO_VER;
+	hiph->res = HIP_RES_SHIM6_BITS;
+	hiph->control = 0;
+	hiph->checksum = 0;
+			
 	/* TODO: this can be cleaned up by collapsing the RVS case with
 	 *       a few extra if's in the normal case
 	 */
@@ -131,15 +141,6 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
 		src = (struct sockaddr*) &fr.ip_rvs;
 		dst = (struct sockaddr*) &hip_reg_table[pos].peer_addr;
 	
-		hiph = (hiphdr*) &buff[0];
-	        hiph->nxt_hdr = IPPROTO_NONE;
-	        hiph->hdr_len = 0; 
-        	hiph->packet_type = HIP_I1;
-	        hiph->version = HIP_PROTO_VER;
-	        hiph->res = HIP_RES_SHIM6_BITS;
-	        hiph->control = 0;
-	        hiph->checksum = 0;
-
 		memcpy(hiph->hit_sndr, fr.hit_from, sizeof(hip_hit));
 		memcpy(hiph->hit_rcvr, hit, sizeof(hip_hit));
 		location = sizeof(hiphdr);
@@ -166,11 +167,9 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
 		/* send the packet */
 		log_(NORMT, "relaying HIP_I1 packet (%d bytes)...\n", location);
 		
-		return(hip_send(buff, location, src, dst, hip_a,
-		     		FALSE, hip_a->peer_dst_port, hip_a->use_udp));
+		return(hip_send(buff, location, src, dst, hip_a, FALSE));
 	} else { /* normal mode -- not an RVS relay */
 		/* XXX this line seems extraneous */
-		hip_a->peer_dst_port = HIP_UDP_PORT;
 		src = HIPA_SRC(hip_a);
 		dst = HIPA_DST(hip_a);
 		if (VALID_FAM(&hip_a->peer_hi->rvs)) /* use RVS instead of DST*/
@@ -185,15 +184,6 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
 			log_(NORM, "Sending HIT corresponding to %s.\n", 
 				logaddr(dst));
     
-		hiph = (hiphdr*) &buff[0];
-		hiph->nxt_hdr = IPPROTO_NONE;
-		hiph->hdr_len = 4; /* 2*sizeof(hip_hit)/8*/
-		hiph->packet_type = HIP_I1;
-		hiph->version = HIP_PROTO_VER;
-		hiph->res = HIP_RES_SHIM6_BITS;
-		hiph->control = 0;
-		hiph->checksum = 0;
-			
 		memcpy(hiph->hit_sndr, hip_a->hi->hit, sizeof(hip_hit));
 		if (hit == NULL) /* opportunistic */
 			memset(hiph->hit_rcvr, 0, sizeof(hip_hit));
@@ -201,7 +191,8 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
 			memcpy(hiph->hit_rcvr, hit, sizeof(hip_hit));
 
 		location = sizeof(hiphdr);
-		hiph->checksum = checksum_packet(&buff[0], src, dst);
+		if (!hip_a->udp)
+			hiph->checksum = checksum_packet(&buff[0], src, dst);
 #ifdef SMA_CRAWLER
                 __u32 lsi_d;
                 lsi_d = ntohl(HIT2LSI(hiph->hit_sndr));
@@ -213,13 +204,12 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
 	 	/* send the packet */
 		log_(NORMT, "sending HIP_I1 packet (%d bytes)...\n", location);
 #ifdef HIP_I3
-		if (OPT.use_i3)
+		if (OPT.i3)
 		     return(send_i3(buff, location, hit,
 				    HIPA_SRC(hip_a),HIPA_DST(hip_a)));
 		else
 #endif
-		return(hip_send(buff, location, src, dst, hip_a, TRUE,
-        	                hip_a->peer_dst_port, hip_a->use_udp));
+		return(hip_send(buff, location, src, dst, hip_a, TRUE));
 	}
 }
 
@@ -237,7 +227,7 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
  *
  */
 int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti, 
-		hi_node *hi, __u16 dst_port, int use_udp)
+		hi_node *hi)
 {
 	int err, i, location =0;
 	hiphdr *hiph;
@@ -276,7 +266,13 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 	/* fill in receiver's HIT, checksum */
 	memcpy(hiph->hit_rcvr, hiti, sizeof(hip_hit));
 	hiph->checksum = 0;
-	hiph->checksum = checksum_packet(data, src, dst);
+
+	if (dst->sa_family == AF_INET && 
+	    ((struct sockaddr_in *)dst)->sin_port > 0) {
+		/* this is a UDP encapsulated R1, checksum must be zero */
+	} else {
+		hiph->checksum = checksum_packet(data, src, dst);
+	}
 
 	/* send the packet */
 	if (fr2.add_via_rvs)
@@ -284,10 +280,11 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
                 log_(NORMT, "sending HIP_R1 packet (%d bytes)...\n", r1_entry->len + sizeof(tlv_via_rvs));
 
 /* If it is a RVS forwarding : which destination port ??? */
-                err = hip_send(data, r1_entry->len + sizeof(tlv_via_rvs), src, dst, NULL, FALSE, dst_port, use_udp);
+                err = hip_send(data, r1_entry->len + sizeof(tlv_via_rvs), src,
+				dst, NULL, FALSE);
 	}
 #ifdef HIP_I3
-        if (OPT.use_i3)
+        if (OPT.i3)
 	{
 		log_(NORMT, "sending HIP_R1 packet (%d bytes)...\n", r1_entry->len);
                 err = send_i3(data, r1_entry->len, hiti, src, dst);
@@ -297,7 +294,7 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 	{
 		log_(NORMT, "sending HIP_R1 packet (%d bytes)...\n", r1_entry->len);
 
-		err = hip_send(data, r1_entry->len, src, dst, NULL, FALSE, dst_port, use_udp);
+		err = hip_send(data, r1_entry->len, src, dst, NULL, FALSE);
 	}
 
 	free(data);
@@ -535,9 +532,6 @@ int hip_send_I2(hip_assoc *hip_a)
 	memcpy(&cookie, &hip_a->cookie_r, sizeof(hipcookie));
 	src = HIPA_SRC(hip_a);
 	dst = HIPA_DST(hip_a);
-	/* destination port should already have been defined when I1 has 
-	 * been sent... anyway ... */
-	hip_a->peer_dst_port = HIP_UDP_PORT ;
 
 	if (!ENCR_NULL(hip_a->hip_transform))
 		RAND_bytes(cbc_iv, sizeof(cbc_iv));
@@ -777,18 +771,19 @@ int hip_send_I2(hip_assoc *hip_a)
 	/* finish with checksum, length */
 	hiph->hdr_len = (location/8) - 1;
 	hiph->checksum = 0;
-	hiph->checksum = checksum_packet(buff, src, dst);
+	if (!hip_a->udp)
+		hiph->checksum = checksum_packet(buff, src, dst);
  
 
 	/* send the packet */
 	log_(NORMT, "sending HIP_I2 packet (%d bytes)...\n", location);
 #ifdef HIP_I3
-	if (OPT.use_i3)
+	if (OPT.i3)
      		return(send_i3(buff, location, &hip_a->peer_hi->hit, HIPA_SRC(hip_a), HIPA_DST(hip_a)));
 	else
 #endif
      return(hip_send(buff, location, HIPA_SRC(hip_a), HIPA_DST(hip_a),
-                        hip_a, TRUE, hip_a->peer_dst_port, hip_a->use_udp));
+                        hip_a, TRUE));
 }
 
 
@@ -875,19 +870,20 @@ int hip_send_R2(hip_assoc *hip_a)
 
 	hiph->hdr_len = (location/8) - 1;
 	hiph->checksum = 0;
-	hiph->checksum = checksum_packet(buff, src, dst);
+	if (!hip_a->udp)
+		hiph->checksum = checksum_packet(buff, src, dst);
 
 	/* send the packet */
 	log_(NORMT, "sending HIP_R2 packet (%d bytes)...\n", location);
 	/* R2 packet is not scheduled for retrans., but saved for retrans. */
 
 #ifdef HIP_I3
-	if (OPT.use_i3)
+	if (OPT.i3)
      		return(send_i3(buff, location, &hiph->hit_rcvr, HIPA_SRC(hip_a), HIPA_DST(hip_a)));
 	else
 #endif	
      return(hip_send(buff, location, HIPA_SRC(hip_a), HIPA_DST(hip_a),
-                        hip_a, TRUE, hip_a->peer_dst_port, hip_a->use_udp));
+                        hip_a, TRUE));
 }
 
 /*
@@ -908,7 +904,7 @@ int hip_send_R2(hip_assoc *hip_a)
  *
  */
 int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
-    struct sockaddr *dstaddr, int use_udp)
+    struct sockaddr *dstaddr)
 {
 	struct sockaddr *src, *dst;
 	hiphdr *hiph;
@@ -1168,15 +1164,16 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 
 	hiph->hdr_len = (location/8) - 1;
 	hiph->checksum = 0;
-	hiph->checksum = checksum_packet(buff, src, dst);
+	if (!hip_a->udp)
+		hiph->checksum = checksum_packet(buff, src, dst);
 
 	/* send the packet */
 	log_(NORMT, "sending UPDATE packet (%d bytes)...\n", location);
 
 	/* Retransmit UPDATEs unless it contains a LOCATOR or address check */
 	log_(NORM, "Sending UPDATE packet to dst : %s \n", logaddr(dst));
-	hip_check_bind(src, use_udp, HIP_UPDATE_BIND_CHECKS);
-	return(hip_send(buff, location, src, dst, hip_a, retransmit, hip_a->peer_dst_port, use_udp));
+	hip_check_bind(src, HIP_UPDATE_BIND_CHECKS);
+	return(hip_send(buff, location, src, dst, hip_a, retransmit));
 }
 
 
@@ -1195,8 +1192,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
  * Opens a socket and sends the UPDATE packet.
  *
  */
-int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a,
-				int use_udp)
+int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
 {
 	struct sockaddr *src, *dst;
 	hiphdr *hiph;
@@ -1292,7 +1288,8 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a,
 
 	hiph->hdr_len = (location/8) - 1;
 	hiph->checksum = 0;
-	hiph->checksum = checksum_packet(buff, src, dst);
+	if (!hip_a->udp)
+		hiph->checksum = checksum_packet(buff, src, dst);
 
 	/* send the packet */
 	log_(NORMT, "sending UPDATE packet (%d bytes)...\n", location);
@@ -1300,9 +1297,8 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a,
 	/* Retransmit UPDATEs unless it contains a LOCATOR or address check */
 	log_(NORM, "Sending UPDATE packet to mobile router : %s \n",
 		logaddr(dst));
-	hip_check_bind(src, use_udp, HIP_UPDATE_BIND_CHECKS);
-	return(hip_send(buff, location, src, dst, hip_mr, retransmit,
-			hip_mr->peer_dst_port, use_udp));
+	hip_check_bind(src, HIP_UPDATE_BIND_CHECKS);
+	return(hip_send(buff, location, src, dst, hip_mr, retransmit));
 }
 
 
@@ -1397,7 +1393,8 @@ int hip_send_close(hip_assoc *hip_a, int send_ack)
 
 	hiph->hdr_len = (location/8) - 1;
 	hiph->checksum = 0;
-	hiph->checksum = checksum_packet(buff, src, dst);
+	if (!hip_a->udp)
+		hiph->checksum = checksum_packet(buff, src, dst);
 
 	/* send the packet */
 	log_(NORMT, "sending CLOSE%s packet (%d bytes)...\n",
@@ -1410,7 +1407,7 @@ int hip_send_close(hip_assoc *hip_a, int send_ack)
         }
 #endif
 	return(hip_send(buff, location, HIPA_SRC(hip_a), HIPA_DST(hip_a),
-			hip_a, !send_ack, hip_a->peer_dst_port, hip_a->use_udp));
+			hip_a, !send_ack));
 }
 
 
@@ -1484,14 +1481,15 @@ int hip_send_notify(hip_assoc *hip_a, int code, __u8 *data, int data_len)
 
 	hiph->hdr_len = (location/8) - 1;
 	hiph->checksum = 0;
-	hiph->checksum = checksum_packet(buff, src, dst);
+	if (!hip_a->udp)
+		hiph->checksum = checksum_packet(buff, src, dst);
 
 	/* send the packet */
 	sprintf(msg, "Sent NOTIFY (code %d)", code);
 	log_hipa_fromto(QOUT, msg, hip_a, FALSE, TRUE);
 	/* NOTIFY packet is not scheduled for retransmission */
 	return(hip_send(buff, location, HIPA_SRC(hip_a), HIPA_DST(hip_a),
-			NULL, FALSE, hip_a->peer_dst_port, hip_a->use_udp));
+			NULL, FALSE));
 }
 
 /*
@@ -1510,48 +1508,65 @@ int hip_send_notify(hip_assoc *hip_a, int code, __u8 *data, int data_len)
  *
  */
 int hip_send(__u8 *data, int len, struct sockaddr* src, struct sockaddr* dst,
-	     hip_assoc *hip_a, int retransmit, __u16 dst_port, int use_udp)
+	     hip_assoc *hip_a, int retransmit)
 {
 	int s, flags, err=0;
 	struct timeval time1;
-	int out_len, do_retransmit=0;
+	int out_len, offset, do_retransmit=FALSE, do_udp=FALSE;
 	__u8 *out;
 	udphdr *udph;
+	__u32 *p32;
 #ifndef __WIN32__
 	/* on win32 we use send(), otherwise use sendmsg() */
 	struct msghdr msg;
 	struct iovec iov;
 #endif /* __WIN32__ */
 	
-	if ((hip_a != NULL) && (!OPT.no_retransmit && retransmit))
-		do_retransmit = 1;
-
 	out_len = len;
-	if (use_udp)
-		out_len += sizeof(udphdr);
+	offset = 0;
+
+	if ((hip_a != NULL) && (!OPT.no_retransmit && retransmit))
+		do_retransmit = TRUE;
+
+	/* A non-zero port number in the destination address inidcates
+	 * that UDP encapsulation should be used. */
+	if (dst->sa_family == AF_INET && 
+	    ((struct sockaddr_in *)dst)->sin_port > 0) {
+		if (src->sa_family != AF_INET) {
+			log_(WARN, "hip_send(): src and dst have different "
+				"address families\n");
+			return(-1);
+		}
+		do_udp = TRUE;
+		out_len += sizeof(udphdr) + sizeof(__u32);
+		offset = sizeof(udphdr) + sizeof(__u32);
+	}
 
 	/* malloc and memcpy the supplied data */
-	if (use_udp || do_retransmit) {
+	if (do_retransmit || do_udp) {
 		out = malloc(out_len);
 		if (!out) {
 			log_(WARN, "hip_send() malloc error\n");
 			return(-1);
 		}
 		memset(out, 0, out_len);
-		if (use_udp) {	/* add the UDP header */
-			udph = (udphdr*) out;
-			udph->src_port = htons(HIP_UDP_PORT);
-			udph->dst_port = htons(dst_port);
-			udph->len = htons((__u16)out_len);
-			memcpy(&out[sizeof(udphdr)], data, len);
-			udph->checksum = 0;
-			udph->checksum = checksum_udp_packet(out, src, dst);
-		} else {	/* use supplied data with no headers */
-			memcpy(out, data, len);
-		}
+		memcpy(&out[offset], data, len);
 	/* no malloc and memcpy needed */
 	} else {
 		out = data;
+	}
+
+	if (do_udp) {
+		/* TODO: experiment with ephemeral ports here */
+		((struct sockaddr_in *)src)->sin_port = htons(HIP_UDP_PORT);
+		udph = (udphdr *) out;
+		udph->src_port = htons(HIP_UDP_PORT);
+		udph->dst_port = ((struct sockaddr_in*)dst)->sin_port;
+		udph->len = htons((__u16)out_len);
+		udph->checksum = 0;
+		udph->checksum = checksum_udp_packet(out, src, dst);
+		p32 = (__u32 *) &out[sizeof(udphdr)];
+		*p32 = 0; /* zero ESP SPI marker */
 	}
 
 #ifndef __WIN32__
@@ -1566,8 +1581,7 @@ int hip_send(__u8 *data, int len, struct sockaddr* src, struct sockaddr* dst,
 	iov.iov_base = out;
 #endif /* __WIN32__ */
 
-	s = socket(src->sa_family, SOCK_RAW, 
-		   use_udp ? H_PROTO_UDP : H_PROTO_HIP);
+	s = socket(src->sa_family, SOCK_RAW, do_udp ? H_PROTO_UDP:H_PROTO_HIP);
 	if (s < 0) {
 		log_(WARN, "hip_send() socket() error: %s.\n", strerror(errno));
 		err = -1;
@@ -1588,16 +1602,14 @@ int hip_send(__u8 *data, int len, struct sockaddr* src, struct sockaddr* dst,
 		goto queue_retrans;
 	}
 
-	log_(NORMT, "Sending HIP packet on %s socket\n",
-		use_udp ? "UDP" : "RAW");
-
+	log_(NORMT, "Sending HIP packet on %s socket\n", do_udp ? "UDP":"RAW");
 	flags = 0;
 #ifndef __WIN32__
 	if ((len = sendmsg(s, &msg, flags)) != out_len) {
 		log_(WARN, "Sent unexpected length: %d", len);
 	}
 #else
-	if (sendto(s, data, len, 0, dst, SALEN(dst)) < 0) {
+	if (sendto(s, out, out_len, 0, dst, SALEN(dst)) < 0) {
 		log_(WARN, "sendto(%s) error: %s.\n", 
 			logaddr(dst), strerror(errno));
 		err = -1;
@@ -1616,17 +1628,11 @@ queue_retrans:
 		hip_a->rexmt_cache.xmit_time.tv_usec = time1.tv_usec;
 		hip_a->rexmt_cache.retransmits = 0;
 		memcpy(&hip_a->rexmt_cache.dst, dst, SALEN(dst));
-	} else if (use_udp) { /* out bufer must be freed */
+	} else if (do_udp) {
 		free(out);
 	}
 	
 	closesocket(s);
-
-	if (err >= 0 && hip_a != NULL) {
-		gettimeofday(&time1, NULL);
-		hip_a->use_time_ka.tv_sec = time1.tv_sec;
-		hip_a->use_time_ka.tv_usec = time1.tv_usec;
-	}
 
 	return ((err < 0) ? err : out_len);
 }
@@ -1648,7 +1654,6 @@ int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len,
 		struct sockaddr *src, struct sockaddr *dst)
 {
 	int s, err;
-	struct timeval now;
 #ifndef __WIN32__
 	struct msghdr msg;
 	struct iovec iov;
@@ -1665,8 +1670,8 @@ int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len,
 	if (!hip_a)
 		return(-1);
 
-	s = socket(src->sa_family, SOCK_RAW, 
-		   hip_a->use_udp ? H_PROTO_UDP : H_PROTO_HIP);
+	s = socket(src->sa_family, SOCK_RAW,
+		   hip_a->udp ? H_PROTO_UDP : H_PROTO_HIP);
 	if (s < 0) {
 		log_(WARN, "hip_retransmit() socket() error: %s.\n",
 			strerror(errno));
@@ -1698,128 +1703,28 @@ int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len,
 #endif
 	closesocket(s);
 
-	if (err >= 0 && hip_a != NULL) {
-		gettimeofday(&now, NULL);
-		hip_a->use_time_ka.tv_sec = now.tv_sec;
-		hip_a->use_time_ka.tv_usec = now.tv_usec;
-	}
-
 	return(err);
 }
-
-
-#ifdef __UMH__
-#ifdef __WIN32__
-void udp_hip_keepalive (void *arg) {
-#else
-void *udp_hip_keepalive (void *arg) {
-#endif /* __WIN32__ */
-	int i, err;
-	__u8 buff;
-/*	udphdr *udph;
-	__u8 *data; */
-	struct timeval now;
-	hip_assoc *hip_a;
-	struct sockaddr_storage addr;
-
-	printf("udp_hip_keepalive() thread started...\n");
-
-/*	memset(buff,0,sizeof(buff));
-	udph = (udphdr*) buff;
-	data = &buff[sizeof(udphdr)];
-	udph->src_port = htons(HIP_UDP_PORT);
-	udph->len = htons((__u16) 9);
-	udph->checksum = 0;
-	data[0]=0xFF; */
-	buff = 0xFF;
-
-/*	//debug
-	int delay_print_maxhipassoc = 0; */
-	while (g_state == 0) {
-		gettimeofday(&now, NULL);
-
-		for (i=0; i < max_hip_assoc; i++) {
-			hip_a = &(hip_assoc_table[i]);
-			if (!hip_a) {
-				printf ("Keepalive test : bad hip_a.\n");
-				continue;
-			}
-			if (!hip_a->use_udp) {
-				/* direct hip association without UDP */
-				continue;
-			}
-			if (hip_a->state != ESTABLISHED && hip_a->state != R2_SENT) {
-				continue;
-			}
-			if (hip_a->peer_dst_port == 0) {
-				printf ("Keepalive test : hip_a peer_dst_port not defined.\n");
-				continue;
-			}
-			if (hip_a->use_time_ka.tv_sec + HIP_KEEPALIVE_TIMEOUT < now.tv_sec) {
-				/*udph->dst_port = htons (hip_a->peer_dst_port);*/
-				memset (&addr, 0, sizeof(struct sockaddr_storage));
-				memcpy (&addr, (struct sockaddr*)&hip_a->peer_hi->addrs.addr,
-					sizeof(struct sockaddr_storage));
-				if (((struct sockaddr*)&addr)->sa_family==AF_INET) {
-					((struct sockaddr_in*) &addr)->sin_port = htons (hip_a->peer_dst_port);
-				} else {
-					((struct sockaddr_in6*) &addr)->sin6_port = htons (hip_a->peer_dst_port);
-				}
-				err = sendto(s_hip_udp, &buff, sizeof(buff), 0,
-					(struct sockaddr*)&addr, SALEN(&addr));
-				if (err < 0) {
-					printf("Keepalive sendto() failed: %s\n", strerror(errno));
-				} else {
-					printf("HIP keepalive sent.\n");
-					hip_a->use_time_ka.tv_sec = now.tv_sec;
-					hip_a->use_time_ka.tv_usec = now.tv_usec;
-				}
-				/*udph->dst_port = 0;*/
-			}
-		}
-/* //debug
-		delay_print_maxhipassoc++;
-		if (delay_print_maxhipassoc>10){
-			printf ("MAX_HIP_ASSOC value: %u\n",max_hip_assoc);
-			delay_print_maxhipassoc = 0;
-		}
-*/
-		hip_sleep(1);
-	}
-
-	printf("udp_hip_keepalive() thread shutdown.\n");
-#ifndef __WIN32__
-	pthread_exit((void *) 0);
-	return (NULL);
-#endif /* __WIN32__ */
-}
-#endif /* __UMH__ */
-
 
 
 /*
  * function hip_check_bind()
  *
  * in:		addr = pointer to address to bind
- * 		use_udp = UDP flag
  * 		num_attempts = number of times to try the bind() call
  *
  * out:		returns 0 if bind is successful, -1 otherwise
  *
  * Check if it is possible to bind() to an address.
  */
-int hip_check_bind(struct sockaddr *src, int use_udp, int num_attempts)
+int hip_check_bind(struct sockaddr *src, int num_attempts)
 {
 	int i, s, ret=0;
 
 	if (num_attempts == 0)
 		return 0;
 
-	if (use_udp) {
-		s = socket(src->sa_family, SOCK_RAW, H_PROTO_UDP);
-	} else {
-		s = socket(src->sa_family, SOCK_RAW, H_PROTO_HIP);
-	}
+	s = socket(src->sa_family, SOCK_RAW, H_PROTO_HIP);
 
 	for (i=0; i < num_attempts; i++) {
 		if (bind(s, src, SALEN(src)) < 0) {

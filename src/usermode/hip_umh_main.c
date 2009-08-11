@@ -41,9 +41,9 @@
 #include <sys/time.h>        /* gettimeofday()               */
 #include <unistd.h>          /* fork(), getpid()             */
 #include <pthread.h>
-#include <errno.h>
 #include <arpa/inet.h>
 #endif
+#include <errno.h>
 #include <sys/types.h>       /* getpid() support, etc        */
 #include <hip/hip_types.h>
 #include <hip/hip_usermode.h>
@@ -106,59 +106,35 @@ void *hipd_main(void *args)
 /*
  * init_esp_input()
  *
- * Open and bind an ESP socket.
+ * Perform socket() and bind() calls and return a socket.
  */
-
-
-int init_esp_input(int family, int proto)
+int init_esp_input(int family, int type, int proto, int port, char *msg)
 {
 	int s, err;
-	struct sockaddr *local_addr;
-	struct sockaddr_storage local_addr_s;
-	local_addr = (struct sockaddr*) &local_addr_s;
+	struct sockaddr_storage local_s;
+	struct sockaddr *local = SA(&local_s);
 
 	if ((family != AF_INET) && (family != AF_INET6))
 		return(-1);
-#ifdef __MACOSX__
-	if ((s = socket(AF_INET, SOCK_RAW, IPPROTO_DIVERT)) < 0) {
-		printf("init_esp_input(): socket() error\n");
-		printf("error: (%d) %s\n", errno, strerror(errno));
+	if ((s = socket(family, type, proto)) < 0) {
+		printf("%s socket() error: (%d) %s\n",
+			msg, errno, strerror(errno));
 		return(-1);
 	}
-#else
-	if ((s = socket(family, SOCK_RAW, proto)) < 0) {
-		printf("init_esp_input(): %s socket() error\n"
-		       "error: (%d) %s\n", (proto==IPPROTO_UDP) ? "UDP" : "ESP",
-		       errno, strerror(errno));
-		return(-1);
-	}
-#endif
-	memset(local_addr, 0, sizeof(struct sockaddr_storage));
-#ifdef __MACOSX__
-        ((struct sockaddr_in*)local_addr)->sin_family= AF_INET;
-	/* XXX where does this 5150 come from? */
-        ((struct sockaddr_in*)local_addr)->sin_port = htons(5150);
-        ((struct sockaddr_in*)local_addr)->sin_addr.s_addr = 0;
-#else
-	local_addr->sa_family = family;
+
+	memset(local, 0, sizeof(struct sockaddr_storage));
+	local->sa_family = family;
 	if (family == AF_INET) {
-		((struct sockaddr_in*)local_addr)->sin_port = \
-			(proto==IPPROTO_UDP) ? htons(HIP_UDP_PORT) : 0;
-		((struct sockaddr_in*)local_addr)->sin_addr.s_addr = INADDR_ANY;
+		((struct sockaddr_in*)local)->sin_port =htons((__u16)port);
+		((struct sockaddr_in*)local)->sin_addr.s_addr = INADDR_ANY;
 	} else {
-		str_to_addr((__u8*)"0::0", local_addr);
+		str_to_addr((__u8*)"0::0", local);
+		((struct sockaddr_in6*)local)->sin6_port = htons((__u16)port);
 	}
-#endif	
-	/* XXX shouldn't this bind() to port 50500 only for UDP ?? */
-	if ((err = bind(s, local_addr, SALEN(local_addr))) < 0) {
-		/* XXX this is broken for IPv6; bind() doesn't accept
-		 *     protocol 50, when using winsock2 or cygwin!
-		 */
-/*		if (family == AF_INET) { */
-			printf("init_esp_input(): bind() error\n");
-			printf("error: (%d) %s\n", errno, strerror(errno));
-			return(-1);
-/*		}*/
+	if ((err = bind(s, local, SALEN(local))) < 0) {
+		printf("%s bind() error: (%d) %s\n",
+			msg, errno, strerror(errno));
+		return(-1);
 	}
 	
 	return(s);

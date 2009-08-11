@@ -57,12 +57,11 @@
 CHAR szKey[MAX_PATH];
 extern HANDLE tapfd;
 extern int s_esp, s_esp_udp, s_esp6;
-extern int s_udp;
 extern int is_dns_thread_disabled();
 int g_state;
 __u32 get_preferred_lsi(struct sockaddr *addr);	/* from hip_util.c */
 int str_to_addr(__u8 *data, struct sockaddr *addr); /* from hip_util.c */
-extern int init_esp_input(int family, int proto);
+extern int init_esp_input(int family, int type, int proto, int port, char *msg);
 
 /* from winsvc.h */
 SERVICE_STATUS g_srv_status = {
@@ -790,48 +789,6 @@ int setup_tap()
 }
 
 /*
- * init_udp()
- *
- * Open and bind a UDP socket to HIP_ESP_UDP_PORT
- *
- * This socket is only defined to avoid ICMP errors 'Host unreachable : 
- * port unreachable'
- * All the traffic is handled through the RAW socket.
- *
- */
-/* XXX this is straight from hip_umh.c -- should combine into common file */
-int init_udp()
-{
-	int s, err;
-	struct sockaddr *local_addr;
-	struct sockaddr_storage local_addr_s;
-
-	__u16 port = HIP_ESP_UDP_PORT ;
-
-	local_addr = (struct sockaddr*) &local_addr_s;
-
-	if ((s = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("init_udp(): socket() error\n");
-		printf("error: (%d) %s\n", errno, strerror(errno));
-		return(-1);
-	}
-
-	memset(local_addr, 0, sizeof(struct sockaddr_storage));
-	local_addr->sa_family = AF_INET;
-	((struct sockaddr_in*)local_addr)->sin_port = htons (port);
-	((struct sockaddr_in*)local_addr)->sin_addr.s_addr = INADDR_ANY;
-	
-	if ((err = bind(s, local_addr, SALEN(local_addr))) < 0) {
-		printf("init_udp(): bind() error\n");
-		printf("error: (%d) %s\n", errno, strerror(errno));
-		return(-1);
-	}
-	
-	return(s);
-}
-
-
-/*
  * init_hip()
  *
  * HIP Windows service initialization. Start all of the threads.
@@ -842,7 +799,6 @@ void init_hip(DWORD ac, char **av)
 	WSADATA wsaData;
 	__u32 tunreader_thrd, esp_output_thrd, esp_input_thrd;
 	__u32 pfkey_thrd, hipd_thrd, netlink_thrd, dns_thrd, status_thrd;
-	__u32 keepalive_thrd, hip_keepalive_thrd;
 	int err;
 	char hipd_args[255];
 	int i;
@@ -920,18 +876,14 @@ void init_hip(DWORD ac, char **av)
 		printf("Error creating ESP output thread.\n");
 		exit(-1);
 	}
-	if ((s_esp = init_esp_input(AF_INET, IPPROTO_ESP)) < 0) {
+	if ((s_esp = init_esp_input(AF_INET, SOCK_RAW, IPPROTO_ESP, 0, 
+				    "IPv4 ESP")) < 0) {
 		printf("Error creating IPv4 ESP input socket.\n");
 		exit(-1);
 	}
-	if ((s_esp_udp = init_esp_input(AF_INET, IPPROTO_UDP)) < 0) {
-		printf("Error creating IPv4 ESP input socket.\n");
-		exit(-1);
-	}
-	/* Socket only used to indicate that UDP port 
-	 * HIP_ESP_OVER_UDP is 'reachable' */
-	if ((s_udp = init_udp()) < 0) {
-		printf("Error creating UDP socket.\n");
+	if ((s_esp_udp = init_esp_input(AF_INET, SOCK_RAW, IPPROTO_UDP,
+					HIP_UDP_PORT, "IPv4 UDP")) < 0) {
+		printf("Error creating IPv4 UDP input socket.\n");
 		exit(-1);
 	}
 
@@ -945,23 +897,6 @@ void init_hip(DWORD ac, char **av)
 			exit(-1);
 		}
 	}
-	/*
-	 * Thread to handle keep-alives for UDP-ESP sockets
-	 */
-	if (!(keepalive_thrd = _beginthread(udp_esp_keepalive, 0, NULL))) {
-		printf("Error creating ESP keepalive thread.\n");
-		exit(-1);
-	}
-	/*
-	 * Thread to handle keep-alives for UDP-HIP tunnels
-	 */
-	if (!(hip_keepalive_thrd = _beginthread(udp_hip_keepalive, 0, NULL))) {
-		printf("Error creating HIP keepalive thread.\n");
-		exit(-1);
-	}
-
-
-
 }
 
 /******* MAIN ROUTINES *******/

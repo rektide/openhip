@@ -75,26 +75,10 @@ extern int is_mobile_router();
  * Globals 
  */
 extern int tapfd;
-extern int s_esp, s_esp_udp, s_esp6;
-extern int s_udp;
+extern int s_esp, s_esp_udp, s_esp_udp_dg, s_esp6;
 
 int g_state;
 char tap_dev_name[16];
-
-/*
- * print_hip_service_usage()
- *
- * Print parameters to the hip_service executable
- */
-void print_hip_service_usage()
-{
-	printf("%s v%s User-mode HIP\n", HIP_NAME, HIP_VERSION);
-	printf("Usage: hip [option]\n");
-	printf("Where option is one of the following:\n");
-	printf("  \t\t(No arguments defined at present)\n");
-	printf("  ...\tRemaining arguments are passed to hipd\n");
-	printf("\n");
-}
 
 int init_tap()
 {
@@ -212,46 +196,6 @@ post_init_tap_retry:
 
 
 /*
- * init_udp()
- *
- * Open and bind a UDP socket to HIP_ESP_UDP_PORT
- *
- * This socket is only defined to avoid ICMP errors 'Host unreachable : 
- * port unreachable'
- * All the traffic is handled through the RAW socket.
- *
- */
-int init_udp()
-{
-	int s, err;
-	struct sockaddr *local_addr;
-	struct sockaddr_storage local_addr_s;
-
-	__u16 port = HIP_ESP_UDP_PORT ;
-
-	local_addr = (struct sockaddr*) &local_addr_s;
-
-	if ((s = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("init_udp(): socket() error\n");
-		printf("error: (%d) %s\n", errno, strerror(errno));
-		return(-1);
-	}
-
-	memset(local_addr, 0, sizeof(struct sockaddr_storage));
-	local_addr->sa_family = AF_INET;
-	((struct sockaddr_in*)local_addr)->sin_port = htons (port);
-	((struct sockaddr_in*)local_addr)->sin_addr.s_addr = INADDR_ANY;
-	
-	if ((err = bind(s, local_addr, SALEN(local_addr))) < 0) {
-		printf("init_udp(): bind() error\n");
-		printf("error: (%d) %s\n", errno, strerror(errno));
-		return(-1);
-	}
-	
-	return(s);
-}
-
-/*
  * init_hip()
  *
  * HIP Windows service initialization. Start all of the threads.
@@ -263,7 +207,6 @@ void init_hip(int ac, char **av)
 #ifdef MOBILE_ROUTER
 	pthread_t mr_thrd;
 #endif /* MOBILE_ROUTER */
-	pthread_t keepalive_thrd, hip_keepalive_thrd;
 	char hipd_args[255];
 	int i;
 	char timestr[26];
@@ -294,11 +237,11 @@ void init_hip(int ac, char **av)
 	 */
 	if (pthread_create(&pfkey_thrd, NULL, hip_pfkey, NULL)) {
 		printf("Error creating PFKEY thread.\n");
-		exit(-1);
+		exit(1);
 	}
 	if (pthread_create(&status_thrd, NULL, hip_status, NULL)) {
 		printf("Error creating status thread.\n");
-		exit(-1);
+		exit(1);
 	}
 
 	/*
@@ -306,7 +249,7 @@ void init_hip(int ac, char **av)
 	 */
 	if (pthread_create(&hipd_thrd, NULL, hipd_main, &hipd_args)) {
 		printf("Error creating HIP daemon thread.\n");
-		exit(-1);
+		exit(1);
 	}
 	
 	/* 
@@ -316,12 +259,12 @@ void init_hip(int ac, char **av)
 		printf("Initialized TAP device.\n");
 	} else {
 		printf("Error initializing TAP device.\n");
-		exit(-1);
+		exit(1);
 	}
 
 	if (pthread_create(&tunreader_thrd, NULL, tunreader, NULL)) {
 		printf("Error creating tunreader thread.\n");
-		exit(-1);
+		exit(1);
 	}
 
 	/* 
@@ -329,35 +272,41 @@ void init_hip(int ac, char **av)
 	 */
 	if (pthread_create(&esp_output_thrd, NULL, hip_esp_output, NULL)) {
 		printf("Error creating ESP output thread.\n");
-		exit(-1);
+		exit(1);
 	}
-	if ((s_esp = init_esp_input(AF_INET, IPPROTO_ESP)) < 0) {
+#ifdef __MACOSX__
+	if ((s_esp = init_esp_input(AF_INET, SOCK_RAW, IPPROTO_DIVERT, 5150,
+				    "IPv4 divert")) < 0) {
+		printf("Error creating IPv4 divert socket for ESP input.\n");
+		exit(1);
+	}
+#else
+	if ((s_esp = init_esp_input(AF_INET, SOCK_RAW, IPPROTO_ESP, 0,
+				    "IPv4 ESP")) < 0) {
 		printf("Error creating IPv4 ESP input socket.\n");
-		exit(-1);
+		exit(1);
 	}
-#ifndef __MACOSX__
-	if ((s_esp_udp = init_esp_input(AF_INET, IPPROTO_UDP)) < 0) {
-		printf("Error creating IPv4 ESP-UDP input socket.\n");
-		exit(-1);
+	if ((s_esp_udp = init_esp_input(AF_INET, SOCK_RAW, IPPROTO_UDP, 
+					HIP_UDP_PORT, "IPv4 UDP")) < 0) {
+		printf("Error creating IPv4 UDP input socket.\n");
+		exit(1);
 	}
-	if ((s_esp6 = init_esp_input(AF_INET6, IPPROTO_ESP)) < 0) {
+	/* this socket is to prevent ICMP port unreachable messages */
+	if ((s_esp_udp_dg = init_esp_input(AF_INET, SOCK_DGRAM, IPPROTO_UDP, 
+					HIP_UDP_PORT, "IPv4 UDP dg")) < 0) {
+		printf("Error creating IPv4 UDP datagram socket.\n");
+		exit(1);
+	}
+	if ((s_esp6 = init_esp_input(AF_INET6, SOCK_RAW, IPPROTO_ESP, 0,
+					"IPv6 ESP")) < 0) {
 		printf("Error creating IPv6 ESP input socket.\n");
-		exit(-1);
-	}
-#endif
-
-#ifndef __MACOSX__
-	/* Socket only used to indicate that UDP port 
-	 * HIP_ESP_OVER_UDP is 'reachable' */
-	if ((s_udp = init_udp()) < 0) {
-		printf("Error creating UDP socket.\n");
-		exit(-1);
+		exit(1);
 	}
 #endif
 
 	if (pthread_create(&esp_input_thrd, NULL, hip_esp_input, NULL)) {
 		printf("Error creating ESP input thread.\n");
-		exit(-1);
+		exit(1);
 	}
 #ifdef SMA_CRAWLER
 	hip_sleep(1); /* Wait a sec for config */
@@ -366,26 +315,9 @@ void init_hip(int ac, char **av)
 		/* XXX hip.conf may not be loaded yet */
 		if (pthread_create(&dns_thrd, NULL, hip_dns, NULL)) {
 			printf("Error creating DNS thread.\n");
-			exit(-1);
+			exit(1);
 		}
 	}
-
-	/*
-	 * Thread to handle keep-alives for UDP-ESP sockets
-	 */
-	if (pthread_create(&keepalive_thrd, NULL, udp_esp_keepalive, NULL)) {
-		printf("Error creating ESP keepalive thread.\n");
-		exit(-1);
-	}
-
-	/*
-	 * Thread to handle keep-alives for UDP-HIP tunnels
-	 */
-	if (pthread_create(&hip_keepalive_thrd, NULL, udp_hip_keepalive, NULL)) {
-		printf("Error creating HIP keepalive thread.\n");
-		exit(-1);
-	}
-
 
 	hip_sleep(1); /* allow thread start before printing message */
 #ifdef MOBILE_ROUTER
@@ -393,7 +325,7 @@ void init_hip(int ac, char **av)
 		/* XXX command-line opts may not be loaded yet */
 		if (pthread_create(&mr_thrd, NULL, hip_mobile_router, NULL)) {
 			printf("Error creating Mobile Router thread.\n");
-			exit(-1);
+			exit(1);
 		}
 	}
 #endif /* MOBILE_ROUTER */
@@ -436,7 +368,7 @@ int main (int argc, char **argv)
 			argv--, argc++;
 			goto start_hip;
 		} else {
-			print_hip_service_usage();
+			print_usage();
 			exit(0);
 		}
 		return(0);

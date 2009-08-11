@@ -78,13 +78,9 @@ extern void hip_sleep(int seconds);
 
 #define DNS_PORT 53
 #define HIP_DNS_SUFFIX ".hip"
-#define HIP_UDP_PORT 50500
 extern __u64 g_tap_mac;
 extern int g_state;
 
-/*#ifndef HIP_ESP_UDP_PORT*/
-#define HIP_ESP_UDP_PORT 54500
-/*#endif*/
 #define KEEPALIVE_TIMEOUT 20
 
 /* from linux/include/linux/kernel.h */

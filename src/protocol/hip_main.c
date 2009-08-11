@@ -107,9 +107,9 @@ int main(int argc, char *argv[]);
 /* HIP packets */
 /*I3: static */
 #ifdef __WIN32__
-void hip_handle_packet(__u8* buff, int length, struct sockaddr *src, int use_udp);
+void hip_handle_packet(__u8* buff, int length, struct sockaddr *src);
 #else
-void hip_handle_packet(struct msghdr *msg, int length, __u16 family, int use_udp);
+void hip_handle_packet(struct msghdr *msg, int length, __u16 family);
 #endif
 void hip_handle_state_timeouts(struct timeval *time1);
 void hip_handle_locator_state_timeouts(hip_assoc *hip_a, struct timeval *time1);
@@ -119,10 +119,8 @@ int hip_trigger(struct sockaddr *dst);
 int hip_trigger_rvs(struct sockaddr*rvs, hip_hit *responder);
 
 #ifdef __UMH__
-#ifndef __CYGWIN__
 #ifndef __WIN32__
 void post_init_tap();
-#endif
 #endif
 #endif
 #ifdef SMA_CRAWLER
@@ -130,8 +128,6 @@ void endbox_init();
 int hipcfg_init();
 extern __u32 get_preferred_lsi(struct sockaddr *);
 #endif
-
-#include <hip/hip_stun.h>
 
 /*
  * main():  HIP daemon main event loop
@@ -153,7 +149,7 @@ int main_loop(int argc, char **argv)
 	struct msghdr msg;
 	struct iovec iov;
 #endif
-	struct sockaddr_in addr, addr_udp; /* For IPv4 */
+	struct sockaddr_in addr; /* For IPv4 */
 
 	struct sockaddr_storage addr_from;
 	__u32 addr_from_len;
@@ -174,10 +170,6 @@ int main_loop(int argc, char **argv)
         time_t last_time, now_time;
         int ret;
         struct rlimit limits;
-#endif
-#ifndef __MACOSX__
-	NatType nattype; /* used for NAT detection with STUN */
-	int optval_udp = 1;
 #endif
 
 	/* Predefining global variables */
@@ -204,12 +196,14 @@ int main_loop(int argc, char **argv)
 	OPT.permissive = FALSE;
 	OPT.opportunistic = FALSE;
 	OPT.allow_any = FALSE;
-	OPT.enable_udp = FALSE;
 	OPT.trigger = NULL;
-	OPT.use_i3 = FALSE;
 	OPT.rvs = FALSE;
-	OPT.stun = FALSE;
+#ifdef MOBILE_ROUTER
 	OPT.mr = FALSE;
+#endif
+#ifdef HIP_I3
+	OPT.i3 = FALSE;
+#endif
 	
 	/*
 	 * Set default configuration
@@ -235,15 +229,12 @@ int main_loop(int argc, char **argv)
 	HCNF.log_filename = NULL;
 	HCNF.disable_dns_lookups = FALSE;
 	HCNF.disable_notify = FALSE;
-#ifdef __UMH__
-	HCNF.disable_dns_thread = FALSE;
+	HCNF.disable_dns_thread = TRUE;
+	HCNF.disable_udp = FALSE;
 	HCNF.enable_bcast = FALSE;
-#endif
 	HCNF.min_lifetime = 96;  /* min lt offered by rvs: 2^((96-64)/8) = s */
 	HCNF.max_lifetime = 255; /* max lt offered by rvs: 2^((255-64)/8) = s */
-	HCNF.reg_type_rvs = REGTYPE_RVS;   /* registration type offered by the rvs */
 	HCNF.lifetime = 255;     /* lt req by non rvs node: 2^((255-64)/8) = s*/
-	HCNF.reg_type = REGTYPE_RVS;
 	HCNF.preferred_iface = NULL;
 	HCNF.outbound_iface = NULL;
 	HCNF.save_known_identities = TRUE;
@@ -318,12 +309,20 @@ int main_loop(int argc, char **argv)
 			continue;
 		}
 		if (strcmp(*argv, "-u") == 0) {
-			OPT.enable_udp = TRUE;
+			log_(WARN, "The -u option has been deprecated. UDP "
+				"encapsulation is enabled by default and can be"
+				"disabled in hip.conf.\n");
 			argv++, argc--;
 			continue;
 		}
 		if (strcmp(*argv, "-i3") == 0) {
-			OPT.use_i3 = TRUE;
+#ifndef HIP_I3
+			log_(ERR, "Error: -i3 option specified but I3 support "
+				"not enabled at compile time.\n");
+			exit(1);
+#else
+			OPT.i3 = TRUE;
+#endif /* HIP_I3 */
 			argv++, argc--;
 			continue;
 		}
@@ -357,8 +356,9 @@ int main_loop(int argc, char **argv)
 					"nd built with --enable-mobile-router "
 					"option.\n");
 				exit(1);
-#endif
+#else
 				OPT.mr = TRUE;
+#endif
 				HCNF.reg_types[HCNF.n_reg_types++] = REGTYPE_MR;
 			} else {
 				OPT.rvs = TRUE;
@@ -367,46 +367,7 @@ int main_loop(int argc, char **argv)
 			argv++,argc--;
 			continue;
 		}
-		/* to fill the registration table with a number of entries */
-		if (strcmp(*argv, "-g") == 0){
-			argv++, argc--;
-			if (OPT.rvs == FALSE){
-				log_(ERR, "Error while trying to fill the " \
-					  "registration table in normal mode " \
-					  "(not rvs mode).\n");
-				exit(1);
-			}
-			if (argc==0 || !argv) {
-				log_(ERR, "Please supply a number of entries "\
-					  "to fill the registration table.\n");
-				exit(1);
-			}
-			OPT.entries = TRUE;
-			sscanf(*argv,"%ld", &num_entries);
-			argv++, argc--;
-			continue;
-		}
 		
-#ifndef __MACOSX__
-		/* to use NAT detection, provide a STUN server address */
-		if (strcmp(*argv, "-stun") == 0) {
-			argv++, argc--;
-			if (argc==0 || !argv) {
-				log_(ERR, "Please supply a STUN server address.\n");
-				exit(1);
-			}
-			memset(&STUN_server_addr, 0, sizeof (StunAddress4));
-			if (stunParseServerName( *argv, &STUN_server_addr)) {
-				OPT.stun = TRUE;
-			} else {
-				log_(ERR, "Bad STUN server address. NAT detection not enabled.\n");
-				OPT.stun = FALSE;
-			}
-			argv++, argc--;
-			continue;
-		}
-#endif
-
 		print_usage();
 		exit(1);
 	}
@@ -517,17 +478,6 @@ int main_loop(int argc, char **argv)
 		goto hip_main_error_exit;
 	}
 
-	/* if OPT.entries is activated */
-	if (OPT.entries == TRUE) {
-		num_hip_reg = num_entries;
-		if(read_reg_file() <0)
-			log_(ERR, "Problem with the registration file.\n");
-		/* Sorts the entries read from registered_host_identities */
-		qsort(hip_reg_table, num_hip_reg, sizeof(hip_reg), 
-			compare_hits2);	
-		print_reg_table(hip_reg_table);	
-	}
-
 #ifdef SMA_CRAWLER
 	endbox_init();
 	log_(NORM,"Initializing SMA bridge\n");
@@ -612,15 +562,6 @@ int main_loop(int argc, char **argv)
 		goto hip_main_error_exit;
 	}
 
-	addr_udp.sin_family = AF_INET;
-	addr_udp.sin_addr.s_addr = htonl(INADDR_ANY);
-	addr_udp.sin_port = htons (HIP_UDP_PORT);
-	s_hip_udp = socket(PF_INET, SOCK_DGRAM, 0);
-	if (s_hip_udp < 0) {
-		log_(ERR, "UDP IPv4 socket() for hipd failed\n");
-		goto hip_main_error_exit;
-	}
-
 	/* PF_KEY socket */
 #ifndef __UMH__
 	s_pfk = socket(PF_KEY, SOCK_RAW, PF_KEY_V2);
@@ -629,6 +570,9 @@ int main_loop(int argc, char **argv)
 		goto hip_main_error_exit;
 	}
 #else
+	while (pfkeysp[1] < 0) {
+		hip_sleep(1); /* wait for PFKEY thread to become ready */
+	}
 	s_pfk = pfkeysp[1]; /* UMH */
 #endif
 
@@ -665,7 +609,6 @@ int main_loop(int argc, char **argv)
 #if !defined(__MACOSX__)
 	/* indicate that socket wants to receive ICMP messages */
 	setsockopt(s_hip, SOL_IP, IP_RECVERR, &optval, sizeof(optval));
-	setsockopt(s_hip, IPPROTO_IP, IP_PKTINFO, &optval, sizeof(optval));
 #endif
 #endif /* __WIN32__ */
 	/* bind to specific local address */
@@ -673,17 +616,6 @@ int main_loop(int argc, char **argv)
 		log_(ERR, "bind() for IPv4 HIP socket failed.\n");
 		goto hip_main_error_exit;
 	}
-
-#if !defined(__WIN32__) && !defined(__MACOSX__)
-	setsockopt(s_hip_udp, IPPROTO_IP, IP_PKTINFO, &optval_udp,
-			sizeof(optval_udp));
-#endif /* __WIN32__ */
-#ifndef __MACOSX__
-	if (bind(s_hip_udp, SA(&addr_udp), sizeof(addr_udp)) < 0) {
-		log_(ERR, "bind() for IPv4 UDP HIP socket failed.\n");
-		goto hip_main_error_exit;
-	}
-#endif
 
 #ifdef IPV6_HIP
 	setsockopt(s6_hip, IPPROTO_IPV6, IPV6_RECVERR, &optval, sizeof(optval));
@@ -697,42 +629,16 @@ int main_loop(int argc, char **argv)
 		goto hip_main_error_exit;
 	}
 	
-	highest_descriptor = maxof(6, s_pfk, s_hip, s_hip_udp, s6_hip, s_net, s_stat);
+	highest_descriptor = maxof(5, s_pfk, s_hip, s6_hip, s_net, s_stat);
 #else /* IPV6_HIP */
-	highest_descriptor = maxof(5, s_pfk, s_hip, s_hip_udp, s_net, s_stat);
+	highest_descriptor = maxof(4, s_pfk, s_hip, s_net, s_stat);
 #endif /* IPV6_HIP */
 
 	log_(NORMT, "Listening on HIP and PF_KEY sockets...\n");
 
 #ifdef HIP_I3
-	if (OPT.use_i3)
+	if (OPT.i3)
 	        i3_init((hip_hit *)get_preferred_hi(my_hi_head)->hit);
-#endif
-
-#ifndef __MACOSX__
-  if (OPT.enable_udp) {
-	  /* NAT detection using STUN */
-	  if (OPT.stun) {
-		  log_(NORMT, "STUN: NAT detection with server ");
-		  printIPv4Addr (&STUN_server_addr);
-		  log_(NORM, "\n");
-		  nattype = stunNatType( &STUN_server_addr,FALSE, NULL, NULL, 0, NULL) ;
-		  if (nattype == StunTypeOpen || nattype == StunTypeFirewall) {
-			  is_behind_nat = FALSE ;
-			  log_(NORM, "STUN: No NAT detected.\n");
-		  } else {
-			  is_behind_nat = TRUE ;
-			  log_(NORM, "STUN: NAT detected, UDP encapsulation "
-				"activated.\n");
-		  }
-	  }
-	  else { /* Default case when no NAT detection is proceeded, 
-            * assume NAT is present */
-		  is_behind_nat = TRUE;
-		  log_(NORMT, "STUN: No detection proceeded. UDP encapsulation "
-				"activated (default).\n");
-	  }
-  } 
 #endif
 
 	/* main event loop */
@@ -748,7 +654,6 @@ int main_loop(int argc, char **argv)
 		/* prepare file descriptor sets */
 		FD_ZERO(&read_fdset);
 		FD_SET((unsigned)s_hip, &read_fdset);
-		FD_SET((unsigned)s_hip_udp, &read_fdset);
 #ifdef IPV6_HIP
 		FD_SET((unsigned)s6_hip, &read_fdset);
 #endif
@@ -768,7 +673,7 @@ int main_loop(int argc, char **argv)
 #endif
 
 #ifdef HIP_I3
-		select_func = OPT.use_i3 ? &cl_select : &select;
+		select_func = OPT.i3 ? &cl_select : &select;
 		/* wait for I3 socket activity */
 		if ((err = (*select_func)((highest_descriptor + 1), &read_fdset,
 		    NULL, NULL, &timeout)) < 0) {
@@ -853,33 +758,11 @@ int main_loop(int argc, char **argv)
 #endif
 			} else { /* HIP packet */
 #ifdef __WIN32__
-				hip_handle_packet(buff, length, SA(&addr_from), FALSE);
+				hip_handle_packet(buff, length, SA(&addr_from));
 #else
-				hip_handle_packet(&msg, length, AF_INET, FALSE);
+				hip_handle_packet(&msg, length, AF_INET);
 #endif
 			} 
-		} else if (FD_ISSET(s_hip_udp, &read_fdset)) {
-			/* Something on HIP-UDP socket */
-			flags = 0;
-			memset(&buff, 0, sizeof(buff));
-#ifdef __WIN32__
-			addr_from_len = sizeof(addr_from);
-			length = recvfrom(s_hip_udp, buff, sizeof(buff), flags,
-					  SA(&addr_from), &addr_from_len);
-			if ((length == 1) && (buff[0] == 0xFF)) {
-#else
-			length = recvmsg(s_hip_udp, &msg, flags);
-			if ((length == 1) && (((__u8*)msg.msg_iov->iov_base)[0] == 0xFF)) {
-#endif
-				/* UDP keep-alive for HIP tunnel */
-				printf ("HIP-keepalive received.\n");
-			} else { /* HIP packet */
-#ifdef __WIN32__
-				hip_handle_packet(buff, length, SA(&addr_from), TRUE);
-#else
-				hip_handle_packet(&msg, length, AF_INET, TRUE);
-#endif
-			}
 #ifdef IPV6_HIP
 		} else if (FD_ISSET(s6_hip, &read_fdset)) { 
 			/* Something on HIP v6 socket */
@@ -904,7 +787,7 @@ int main_loop(int argc, char **argv)
 #ifdef __WIN32__
 				hip_handle_packet(buff, length, SA(&addr_from), FALSE);
 #else
-				hip_handle_packet(&msg, length, AF_INET6, FALSE);
+				hip_handle_packet(&msg, length, AF_INET6);
 #endif
 			}
 #endif /* IPV6_HIP */
@@ -981,11 +864,11 @@ hip_main_error_exit:
  * length:  length of datagram
  */
 #ifdef __WIN32__
-void hip_handle_packet(__u8* buff, int length, struct sockaddr *src, int use_udp)
+void hip_handle_packet(__u8* buff, int length, struct sockaddr *src)
 {
 	__u16 family;
 #else
-void hip_handle_packet(struct msghdr *msg, int length, __u16 family, int use_udp)
+void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
 {
 	__u8 *buff;
 	struct sockaddr *src;
@@ -998,20 +881,11 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family, int use_udp
 	hip_hit hit_tmp;
 	int err = 0;
 
-	__u16 peer_src_port = 0;
-#ifndef __MACOSX__
-	struct in_pktinfo *pktinfo_v4 = NULL;
-#endif
-
 	struct sockaddr *dst;
 	struct sockaddr_storage dst_ss;
 
 #ifndef __WIN32__
 	struct sockaddr_storage src_ss;
-#ifndef __MACOSX__
-	struct sockaddr_in *temp_addr;
-	struct sockaddr_in6 *temp_addr6;
-#endif
 
 	buff = msg->msg_iov->iov_base;
 	src = (struct sockaddr*) &src_ss;
@@ -1057,45 +931,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family, int use_udp
 	family = src->sa_family;
 #endif /* !__WIN32__ */
 
-#ifndef __MACOSX__
-	if (use_udp) {
-#ifdef __WIN32__
-		if (family == AF_INET) {
-			peer_src_port = ((struct sockaddr_in*)src)->sin_port;
-		} else {
-			peer_src_port = ((struct sockaddr_in6*)src)->sin6_port;
-		}
-#else /* __WIN32__ */
-		if (family==AF_INET) {
-			temp_addr = (struct sockaddr_in *) msg->msg_name ;
-			peer_src_port = ntohs(temp_addr->sin_port);
-			memcpy (src, temp_addr, sizeof(struct sockaddr_in));
-			for (cmsg=CMSG_FIRSTHDR(msg); cmsg; 
-			     cmsg=CMSG_NXTHDR(msg,cmsg)) {
-				if ((cmsg->cmsg_level == IPPROTO_IP) && 
-				    (cmsg->cmsg_type == IP_PKTINFO)) {
-					pktinfo_v4 = 
-					    (struct in_pktinfo*)CMSG_DATA(cmsg);
-					break;
-				}
-			}
-			if (!pktinfo_v4) {
-				log_(NORMT, 
-				  "Could not determine IPv4 dst, dropping.\n");
-				return;
-			}
-			dst->sa_family = AF_INET;
-			memcpy(SA2IP(dst), &pktinfo_v4->ipi_addr, SAIPLEN(dst));
-		}
-		else {
-			temp_addr6 = (struct sockaddr_in6 *) msg->msg_name ;
-			peer_src_port = ntohs(temp_addr6->sin6_port);
-		}
-#endif /* __WIN32__ */
-	}
-#endif /* __MACOSX__ */
-
-	err = hip_parse_hdr(buff, length, src, dst, family, &hiph, use_udp);
+	err = hip_parse_hdr(buff, length, src, dst, family, &hiph);
 
 	if (err < 0) {
 		/* attempt to send a NOTIFY packet */
@@ -1122,7 +958,9 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family, int use_udp
 	}
 	hip_packet_type(hiph->packet_type, typestr);
 	log_(NORMT, "Received %s packet from %s", typestr, logaddr(src));
-	log_(NORM, " on %s socket length %d\n", use_udp ? "udp" : "raw", length);
+	log_(NORM, " on %s socket length %d\n", 
+		(((struct sockaddr_in*)src)->sin_port > 0) ? "udp" : "raw",
+		length);
 
 	/* lookup using addresses and HITs */
 	hip_a = find_hip_association(src, dst, hiph);
@@ -1157,20 +995,16 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family, int use_udp
 
 	switch(hiph->packet_type) {
 	case HIP_I1:
-		err = hip_handle_I1((__u8 *)hiph, hip_a, src, dst, 
-				&peer_src_port, use_udp);
+		err = hip_handle_I1((__u8 *)hiph, hip_a, src, dst);
 		break;
 	case HIP_R1:
-		err = hip_handle_R1((__u8 *)hiph, hip_a, src,
-				&peer_src_port, use_udp);
+		err = hip_handle_R1((__u8 *)hiph, hip_a, src);
 		break;
         case HIP_I2:
-		err = hip_handle_I2((__u8 *)hiph, hip_a, src, dst, 
-				&peer_src_port, use_udp);
+		err = hip_handle_I2((__u8 *)hiph, hip_a, src, dst);
 		break;
 	case HIP_R2:
-		err = hip_handle_R2((__u8 *)hiph, hip_a, 
-				&peer_src_port, use_udp);
+		err = hip_handle_R2((__u8 *)hiph, hip_a);
 		break;
 	case CER:
 		err = hip_handle_CER((__u8 *)hiph, hip_a);
@@ -1179,17 +1013,14 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family, int use_udp
 		err = hip_handle_BOS((__u8 *)hiph, src);
 		break;
 	case UPDATE:
-		err = hip_handle_update((__u8 *)hiph, hip_a, src, 
-				&peer_src_port, use_udp);
+		err = hip_handle_update((__u8 *)hiph, hip_a, src);
 		break;
 	case NOTIFY:
-		err = hip_handle_notify((__u8 *)hiph, hip_a, 
-				&peer_src_port, use_udp);
+		err = hip_handle_notify((__u8 *)hiph, hip_a);
 		break;
 	case CLOSE:
 	case CLOSE_ACK:
-		err = hip_handle_close((__u8 *)hiph, hip_a, 
-				&peer_src_port, use_udp);
+		err = hip_handle_close((__u8 *)hiph, hip_a);
 		break;
 	default:
 		log_(NORMT, "Unknown HIP packet type(%d), dropping\n", 
@@ -1209,7 +1040,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family, int use_udp
 void
 hip_retransmit_waiting_packets(struct timeval* time1)
 {
-	int i, offset;
+	int i;
 #ifdef DO_EXTRA_DHT_LOOKUPS
 	int err;
 	struct sockaddr_storage ss_addr_tmp;
@@ -1238,8 +1069,7 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 				log_(WARN, "Cannot determine source address for"
 				    " retransmission to %s.\n", logaddr(dst));
 			}
-			offset = hip_a->use_udp ? sizeof(udphdr) : 0;
-			hiph = (hiphdr*) &hip_a->rexmt_cache.packet[offset];
+			hiph = (hiphdr*) &hip_a->rexmt_cache.packet[0];
 #ifdef DO_EXTRA_DHT_LOOKUPS
 			/* XXX note that this code has proven problematic */
 			/* has the address changed? do a DHT lookup */
@@ -1357,7 +1187,7 @@ void hip_handle_state_timeouts(struct timeval *time1)
 			if ((hip_a->rekey) && (hip_a->rekey->acked) &&
 			    (hip_a->peer_rekey) &&
 			    (hip_a->peer_rekey->new_spi > 0))	{
-				hip_finish_rekey(hip_a, TRUE, hip_a->next_use_udp);
+				hip_finish_rekey(hip_a, TRUE);
 				remove_rxmt = TRUE;
 			/*
 			 * Fail rekey using stored creation time
@@ -1466,7 +1296,7 @@ void hip_handle_registrations(struct timeval *time1)
 			}
 		}
 		if (do_update)
-			hip_send_update(hip_a, NULL, NULL, hip_a->use_udp);
+			hip_send_update(hip_a, NULL, NULL);
 	}
 }
 
@@ -1512,7 +1342,7 @@ void hip_handle_locator_state_timeouts(hip_assoc *hip_a, struct timeval *time1)
 		hip_a->rekey->rk_time.tv_sec = time1->tv_sec;
 		RAND_bytes((__u8*)&nonce, sizeof(__u32));
 		l->nonce = nonce;
-		hip_send_update(hip_a, NULL, addrcheck, hip_a->use_udp);
+		hip_send_update(hip_a, NULL, addrcheck);
 	} /* end for */
 }
 

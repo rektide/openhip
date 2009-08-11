@@ -371,39 +371,6 @@ static inline unsigned short csum_tcpudp_hip_nofold6(struct in6_addr *saddr,
 	unsigned short ret = ~sum;
 	
 	/* First, sum saddr and daddr as done in csum_ipv6_magic() */
-#ifdef __CYGWIN__
-	csum = saddr->__u6_addr.__u6_addr32[0];
-	carry = (csum < saddr->__u6_addr.__u6_addr32[0]);
-	csum += carry;
-
-	csum += saddr->__u6_addr.__u6_addr32[1];
-	carry = (csum < saddr->__u6_addr.__u6_addr32[1]);
-	csum += carry;
-
-	csum += saddr->__u6_addr.__u6_addr32[2];
-	carry = (csum < saddr->__u6_addr.__u6_addr32[2]);
-	csum += carry;
-
-	csum += saddr->__u6_addr.__u6_addr32[3];
-	carry = (csum < saddr->__u6_addr.__u6_addr32[3]);
-	csum += carry;
-
-	csum += daddr->__u6_addr.__u6_addr32[0];
-	carry = (csum < daddr->__u6_addr.__u6_addr32[0]);
-	csum += carry;
-
-	csum += daddr->__u6_addr.__u6_addr32[1];
-	carry = (csum < daddr->__u6_addr.__u6_addr32[1]);
-	csum += carry;
-
-	csum += daddr->__u6_addr.__u6_addr32[2];
-	carry = (csum < daddr->__u6_addr.__u6_addr32[2]);
-	csum += carry;
-
-	csum += daddr->__u6_addr.__u6_addr32[3];
-	carry = (csum < daddr->__u6_addr.__u6_addr32[3]);
-	csum += carry;
-#else
 	csum = saddr->s6_addr32[0];
 	carry = (csum < saddr->s6_addr32[0]);
 	csum += carry;
@@ -435,7 +402,6 @@ static inline unsigned short csum_tcpudp_hip_nofold6(struct in6_addr *saddr,
 	csum += daddr->s6_addr32[3];
 	carry = (csum < daddr->s6_addr32[3]);
 	csum += carry;
-#endif
 
 	/* Next, add in the hitMagic and subtract saddr+daddr */
 	ret = ~csum_fold(csum_add(ret, hitMagic));
@@ -511,39 +477,6 @@ static inline unsigned short csum_hip_revert6(struct in6_addr *saddr,
 	unsigned short ret = ~sum;
 	
 	/* First, sum saddr and daddr as done in csum_ipv6_magic() */
-#ifdef __CYGWIN__
-	csum = saddr->__u6_addr.__u6_addr32[0];
-	carry = (csum < saddr->__u6_addr.__u6_addr32[0]);
-	csum += carry;
-
-	csum += saddr->__u6_addr.__u6_addr32[1];
-	carry = (csum < saddr->__u6_addr.__u6_addr32[1]);
-	csum += carry;
-
-	csum += saddr->__u6_addr.__u6_addr32[2];
-	carry = (csum < saddr->__u6_addr.__u6_addr32[2]);
-	csum += carry;
-
-	csum += saddr->__u6_addr.__u6_addr32[3];
-	carry = (csum < saddr->__u6_addr.__u6_addr32[3]);
-	csum += carry;
-
-	csum += daddr->__u6_addr.__u6_addr32[0];
-	carry = (csum < daddr->__u6_addr.__u6_addr32[0]);
-	csum += carry;
-
-	csum += daddr->__u6_addr.__u6_addr32[1];
-	carry = (csum < daddr->__u6_addr.__u6_addr32[1]);
-	csum += carry;
-
-	csum += daddr->__u6_addr.__u6_addr32[2];
-	carry = (csum < daddr->__u6_addr.__u6_addr32[2]);
-	csum += carry;
-
-	csum += daddr->__u6_addr.__u6_addr32[3];
-	carry = (csum < daddr->__u6_addr.__u6_addr32[3]);
-	csum += carry;
-#else
 	csum = saddr->s6_addr32[0];
 	carry = (csum < saddr->s6_addr32[0]);
 	csum += carry;
@@ -575,7 +508,6 @@ static inline unsigned short csum_hip_revert6(struct in6_addr *saddr,
 	csum += daddr->s6_addr32[3];
 	carry = (csum < daddr->s6_addr32[3]);
 	csum += carry;
-#endif
 
 	/* Next, subtract hitMagic and add saddr+daddr */
 	ret = ~csum_fold(csum_sub(ret, hitMagic));

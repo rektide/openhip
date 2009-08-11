@@ -38,12 +38,12 @@
 #include <netinet/in.h>
 #else
 #include <asm/types.h>
-#endif
+#endif /* __MACOSX__ */
 #include <netinet/ip.h>  	/* struct iphdr                 */
 #include <sys/time.h>		/* gettimeofday()               */
 #include <pthread.h>		/* for RVS lifetime thread	*/
 #include <unistd.h>		/* sleep()			*/
-#endif
+#endif /* __WIN32__ */
 #include <openssl/crypto.h>     /* OpenSSL's crypto library     */
 #include <openssl/bn.h>		/* Big Numbers                  */
 #include <openssl/des.h>	/* 3DES support			*/
@@ -56,13 +56,13 @@
 #include <openssl/rand.h>	/* RAND_bytes()                 */
 #ifdef __MACOSX__
 #include <win32/pfkeyv2.h>
-#else
+#else /* __MACOSX__ */
 #ifdef __UMH__
 #include <win32/pfkeyv2.h>
 #else
 #include <linux/pfkeyv2.h> /* PF_KEY_V2 support */
-#endif
 #endif /* __UMH__ */
+#endif /* __MACOSX__ */
 #include <hip/hip_types.h>
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
@@ -96,8 +96,7 @@ int handle_locators(hip_assoc *hip_a, locator **locators,
 			__u32 new_spi);
 void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src);
 int handle_update_rekey(hip_assoc *hip_a);
-int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck,
-			int use_udp);
+int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck);
 void update_peer_list(hip_assoc *hip_a);
 void log_sa_info(hip_assoc *hip_a);
 int check_tlv_type_length(int type, int length, int last_type, char *p);
@@ -121,11 +120,6 @@ void *set_lifetime_thread(void *void_thread_arg);
  */
 hip_hit mobile_router_hit;
 
-/* XXX TODO: this breaks hitgen build. Move out of ../win32/hip_esp.c
- *		since it is called only from this file.
- */
-extern int send_udp_esp_tunnel_activation (__u32 spi_out);
-
 /*
  *
  * function hip_parse_hdr()
@@ -143,59 +137,40 @@ extern int send_udp_esp_tunnel_activation (__u32 spi_out);
  *
  */
 int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src, 
-		   struct sockaddr *dst, __u16 family, hiphdr **hdr, int use_udp)
+		   struct sockaddr *dst, __u16 family, hiphdr **hdr)
 {
 	hiphdr* hiph;
 	__u16 checksum;
+	struct sockaddr_in addr;
+	struct ip *iph;
+	udphdr *udph = NULL;
 
-/* (HIP_OVER_UDP) */
-/* IP header handled in hip_main.c */
-	if (use_udp) { 
-		if (family==AF_INET || family==AF_INET6) {
-			hiph = (hiphdr*) &data[0];
-			*hdr = hiph;
-		} else {
-			return (-1); 
+	/* IPv4 - get source and destination addresses */
+	if (family == AF_INET) {
+		iph = (struct ip*) &data[0];
+		hiph = (hiphdr*) &data[hip_header_offset(data)];
+		*hdr = hiph;
+		memset(&addr, 0, sizeof(struct sockaddr_in));
+		addr.sin_family = AF_INET;
+		addr.sin_addr.s_addr = iph->ip_src.s_addr; 
+		if (iph->ip_p == IPPROTO_UDP) {
+			udph = (udphdr*)&data[sizeof(struct ip)];
+			addr.sin_port = udph->src_port;
 		}
-	} else { /* not HIP_OVER_UDP */
-
-#ifdef __MACOSX__
-		struct ip *iph;
-#else
-		struct iphdr  *iph;
-#endif
-		struct sockaddr_in addr;
-
-		/* IPv4 - get source and destination addresses */
-		if (family == AF_INET) {
-#ifdef __MACOSX__
-			iph = (struct ip*) &data[0];
-#else
-			iph = (struct iphdr*) &data[0];
-#endif
-			hiph = (hiphdr*) &data[hip_header_offset(data)];
-			*hdr = hiph;
-			memset(&addr, 0, sizeof(struct sockaddr_in));
-			addr.sin_family = AF_INET;
-
-#ifdef __MACOSX__
-			addr.sin_addr.s_addr = iph->ip_src.s_addr; 
-			memcpy(src, &addr, sizeof(struct sockaddr_in));
-			addr.sin_addr.s_addr = iph->ip_dst.s_addr;
-#else
-			addr.sin_addr.s_addr = iph->saddr;
-			memcpy(src, &addr, sizeof(struct sockaddr_in));
-			addr.sin_addr.s_addr = iph->daddr;
-#endif
-			memcpy(dst, &addr, sizeof(struct sockaddr_in));
-		/* IPv6 - source and destination addresses already supplied */
-		} else if (family == AF_INET6) {
-			hiph = (hiphdr*) &data[0];
-			*hdr = hiph;
-		} else {
-			return(-1);
-		}
-	 } /* end (not HIP_OVER_UDP) */ 
+		memcpy(src, &addr, sizeof(struct sockaddr_in));
+		addr.sin_addr.s_addr = iph->ip_dst.s_addr;
+		if (udph)
+			addr.sin_port = udph->dst_port;
+		memcpy(dst, &addr, sizeof(struct sockaddr_in));
+	/* IPv6 - source and destination addresses already supplied */
+	} else if (family == AF_INET6) {
+		iph = NULL;
+		hiph = (hiphdr*) &data[0];
+		*hdr = hiph;
+		/* TODO: detect HIP over UDP as with the IPv4 case */
+	} else {
+		return(-1);
+	}
 	
 	if ((hiph->nxt_hdr != 0) && 
 	    (hiph->nxt_hdr != IPPROTO_NONE)) { 
@@ -223,16 +198,24 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
 
 	if (hiph->control != 0) {
 		/* Parse control bits */
-		/* XXX check (hiph->control & CTL_ANON) against global
-		 *     policy for allowing ANONYMOUS HIs */
+		/* TODO: check (hiph->control & CTL_ANON) against global
+		 *       policy for allowing ANONYMOUS HIs */
+		log_(WARN, "Ignoring control bits 0x%x in the HIP header.\n",
+			hiph->control);
 	}
 
-	if (use_udp) {
-		checksum = 0;
-	} else {
-		checksum = checksum_packet((__u8*)hiph, src, dst); 
+	/* HIP encapsulated in UDP, skip checksum verification */
+	if (iph && iph->ip_p == IPPROTO_UDP) {
+		/* assume RAW socket has already enforced the UDP checksum */
+		if (hiph->checksum != 0) { /* checksum MUST be zero */
+			log_(WARN, "HIP header encapsulated in UDP contains a "
+			    "non-zero checksum 0x%x\n", hiph->checksum);
+			return(-4);
+		}
+		return(0);
 	}
 
+	checksum = checksum_packet((__u8*)hiph, src, dst); 
 	if (checksum != 0) {
 		log_(WARN, "Bad checksum: sum=%d, should be 0.\n", checksum);
 		return(-3);
@@ -335,9 +318,10 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti, hip_hit *hit
  * or if opportunistic, accept it if we have not reached MAX_CONNECTIONS.
  */
 int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
-		struct sockaddr *dst, __u16 *dst_port, int use_udp)
+		struct sockaddr *dst)
 {
 	hip_hit hiti, hitr;
+	struct sockaddr_storage addr;
 	hi_node* my_host_id = NULL;
 	hi_node* peer_host_id = NULL;
 	int err=0;
@@ -388,7 +372,11 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 			/* relay the I1 packet */
 			hip_send_I1(&hiph->hit_rcvr, NULL, ret2->position);
 		} else if (!my_host_id) { /* not in RVS mode, drop I1 */
-			log_(NORMT, "Received I1 with unknown receiver HIT\n");
+			log_(NORMT, "Received I1 with unknown receiver HIT:\n");
+			memset(&addr, 0, sizeof(addr));
+			addr.ss_family = AF_INET6;
+			memcpy(SA2IP(&addr), &hiph->hit_rcvr, HIT_SIZE);
+			log_(NORM, "  Receiver HIT = %s\n", logaddr(SA(&addr)));
 			return(-1);
 		}
 		
@@ -411,8 +399,8 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 		}
 #ifdef SMA_CRAWLER
 		if(!hipcfg_allowed_peers(hiti, hitr)){
-		  log_(NORMT,"ACL denied for HIP peer\n");
-                  return -1;
+			log_(NORMT,"ACL denied for HIP peer\n");
+			return -1;
 		}
 #endif
 	} else {
@@ -438,13 +426,7 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 	if (fr2.add_via_rvs) {
 		src = (struct sockaddr*) &fr2.ip_from;
 	}
-	if (hip_a) {
-		hip_a->use_udp = use_udp;
-		hip_a->next_use_udp = use_udp;
-		hip_a->peer_dst_port = *dst_port ;
-	}
-	if ((err = hip_send_R1(dst, src, &hiti, my_host_id, 
-					*dst_port, use_udp)) > 0) {
+	if ((err = hip_send_R1(dst, src, &hiti, my_host_id)) > 0) {
 		log_(NORMT, "Sent R1 (%d bytes)\n", err);
 	} else {
 		log_(NORMT, "Failed to send R1: %s.\n", strerror(errno));
@@ -753,30 +735,12 @@ restore_saved_peer_hi:
 	return(-1);
 }
 
-int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src, __u16 *dst_port, int use_udp)
+int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src)
 {
 	int err=0;
 	hiphdr *hiph;
 
 	hiph = (hiphdr*) buff;
-
-	if (hip_a->use_udp != use_udp) {
-		log_(NORMT,"HIP_R1 packet not accepted, received on wrong "
-			"socket (UDP/raw)\n");
-		return (-1);
-	}
-
-	if (use_udp) {
-		/* R1 accepted only if incoming UDP src port is equal
-		 * to the dest. port used for sending I1 : HIP_UDP_PORT
-		 * comment: in fact it is not really mandatory... */
-		if ( *dst_port != HIP_UDP_PORT ) {
-			log_(NORMT,"HIP_R1 packet not accepted, wrong incoming "
-				"UDP src port number: %d (instead of %d)\n",
-				*dst_port, HIP_UDP_PORT );
-			return (-1);
-		}
-	}
 
 	/* R1 only accepted in these states */
 	if ((hip_a->state != I1_SENT) && (hip_a->state != I2_SENT) &&
@@ -978,6 +942,10 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 			hip_a->hi->addrs.if_index = is_my_address(dst);
 			make_address_active(&hip_a->hi->addrs);
 			memcpy(HIPA_DST(hip_a), src, SALEN(src));
+			if (src->sa_family == AF_INET &&
+			   ((struct sockaddr_in*)src)->sin_port > 0) {
+				hip_a->udp = TRUE;
+			}
 		} else if (type == PARAM_DIFFIE_HELLMAN){
 			if (handle_dh(hip_a, &data[location], &g_id, NULL) < 0){
 				hip_send_notify(hip_a, NOTIFY_INVALID_DH_CHOSEN,
@@ -1301,57 +1269,43 @@ I2_ERROR:
 				gettimeofday(&reg->state_time, NULL);
 				reg->next = hip_a->reg_requested->regs;
 				hip_a->reg_requested->regs = reg;
-				if (*reg_typep == HCNF.reg_type_rvs)
+				if (*reg_typep == REGTYPE_RVS && OPT.rvs)
 				{
-					if (OPT.rvs)
-					{
-						/* when sending R2, add a reg_response parameter */
-						add_reg_response = TRUE;
-						resp_reg_type = *reg_typep;
-						reg->state = REG_SEND_RESP;
-						reg->granted_lifetime = resp_lifetime;
-						gettimeofday(&reg->state_time, NULL);
-						/* add HIT, IP, lt and number of updates in a table */
-						memcpy(insert_key.peer_hit, hiph->hit_sndr, sizeof(hip_hit));
-						insert_key.peer_addr = hip_a->peer_hi->addrs.addr;
+					/* when sending R2, add a reg_response parameter */
+					add_reg_response = TRUE;
+					resp_reg_type = *reg_typep;
+					reg->state = REG_SEND_RESP;
+					reg->granted_lifetime = resp_lifetime;
+					gettimeofday(&reg->state_time, NULL);
+					/* add HIT, IP, lt and number of updates in a table */
+					memcpy(insert_key.peer_hit, hiph->hit_sndr, sizeof(hip_hit));
+					insert_key.peer_addr = hip_a->peer_hi->addrs.addr;
 					insert_key.update = 0;
 					insert_key.hip_a = hip_a;
 					tmp = YLIFE(resp_lifetime);
 					insert_key.lifetime = pow(2,tmp);
-						pos = insert_reg_table(insert_key, hip_reg_table);
-					if (pos >= 0)
-					{
-							if (req->lifetime <= HCNF.max_lifetime && 
-							    req->lifetime >= HCNF.min_lifetime)
-							log_(NORM, "Registration ok\n");
-							else if (req->lifetime < HCNF.min_lifetime || 
-								 req->lifetime > HCNF.max_lifetime)
-								log_(NORM, "Registration ok with granted lifetime different "
-									"from requested\n");
-							log_registration(hip_reg_table, pos);
+					pos = insert_reg_table(insert_key, hip_reg_table);
+					if (pos >= 0) {
+						if (req->lifetime <= HCNF.max_lifetime && 
+						    req->lifetime >= HCNF.min_lifetime)
+						log_(NORM, "Registration ok\n");
+						else if (req->lifetime < HCNF.min_lifetime || 
+							 req->lifetime > HCNF.max_lifetime)
+							log_(NORM, "Registration ok with granted lifetime different "
+								"from requested\n");
+						log_registration(hip_reg_table, pos);
 						print_reg_table(hip_reg_table);
 						
 						/* set lifetime */
 #ifdef __WIN32__
-							_beginthread(set_lifetime_rvs_thread,0, &hip_reg_table[pos]);
+						_beginthread(set_lifetime_rvs_thread,0, &hip_reg_table[pos]);
 #else /* __WIN32__ */
 						pthread_attr_init(&attr);
-							pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-			        pthread_create(&thr, &attr, set_lifetime_rvs_thread,
-						    &hip_reg_table[pos]);
+						pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+			      			pthread_create(&thr, &attr, set_lifetime_rvs_thread,
+						&hip_reg_table[pos]);
 #endif /* __WIN32__ */
 					}
-				} else {
-					/* error in the type of registration....
-					 * suppose fail_type 1 */
-						reg->state = REG_SEND_FAILED;
-						reg->failure_code = REG_FAIL_TYPE_UNAVAIL;
-						gettimeofday(&reg->state_time, NULL);
-					add_reg_failed = TRUE;
-					fail_type = 1;
-						fail_reg_type = *reg_typep;
-					log_(NORM,"Registration type failed\n");
-				}
 #ifdef MOBILE_ROUTER
  				} else if (*reg_typep == REGTYPE_MR) {
 					if (OPT.mr) {
@@ -1377,6 +1331,9 @@ I2_ERROR:
 					reg->failure_code =
 						REG_FAIL_TYPE_UNAVAIL;
 					gettimeofday(&reg->state_time, NULL);
+					add_reg_failed = TRUE;
+					fail_type = 1;
+					fail_reg_type = *reg_typep;
 				}
  			}
 		} else if (type == PARAM_ESP_INFO_NOSIG) {
@@ -1408,7 +1365,7 @@ I2_ERROR:
 
 
 int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing, 
-	      struct sockaddr *src, struct sockaddr *dst, __u16 *dst_port, int use_udp)
+	      struct sockaddr *src, struct sockaddr *dst)
 {
 	int err=0;
 	hi_node *my_host_id=NULL;
@@ -1420,8 +1377,6 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 	/* this is the SPI from the last received I2 packet, so we know
 	 * whether or not it is a retransmission */
 	static __u32 last_I2_spi=0;
-
-	struct sockaddr_in6 host_hit_sock, peer_hit_sock;
 
 	/* Accept I2 in all states but E_FAILED.
 	 * Special treatment when in ESTABLISHED. */
@@ -1509,12 +1464,6 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 		return(-1);
 	}
 
-	if (hip_a) {
-		hip_a->use_udp = use_udp;
-		hip_a->next_use_udp = use_udp;
-		hip_a->peer_dst_port = *dst_port;
-	}
-
 	clear_retransmissions(hip_a);
 	make_address_active(&hip_a->peer_hi->addrs);
 	add_other_addresses_to_hi(hip_a->hi, TRUE);
@@ -1530,9 +1479,6 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 		log_(NORM, "HIP exchange complete.\n");
 		log_sa_info(hip_a);
 
-		hit_to_sockaddr (&host_hit_sock, hip_a->hi->hit);
-		hit_to_sockaddr (&peer_hit_sock, hip_a->peer_hi->hit);
-
 		/* fill in LSI, update peer_hi_head */
 		update_peer_list(hip_a);
 
@@ -1545,45 +1491,29 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 		}
 #ifdef __UMH__
 		/* update LSI mapping */
-		if (use_udp) {
-			update_lsi_mapping((struct sockaddr*) &peer_hit_sock, 
-					SA(&hip_a->peer_hi->lsi), 
-					hip_a->peer_hi->hit);
-			/* correct port will be set up with the first 
-			 * UDP-encaps. packet received */
-			hip_a->peer_esp_dst_port = 0;
-		} else {
-			update_lsi_mapping(HIPA_DST(hip_a), 
-					SA(&hip_a->peer_hi->lsi),
-					hip_a->peer_hi->hit);
-		}
+		update_lsi_mapping(HIPA_DST(hip_a), SA(&hip_a->peer_hi->lsi),
+				   hip_a->peer_hi->hit);
 #endif
 		err = 0;
-		if (sadb_add(HIPA_SRC(hip_a), HIPA_DST(hip_a),
-			     (struct sockaddr *) &host_hit_sock, 
-			     (struct sockaddr *) &peer_hit_sock,
-			     hip_a, hip_a->spi_out, 0) < 0) {
+		if (sadb_add(HIPA_SRC(hip_a), HIPA_DST(hip_a), hip_a,
+			     hip_a->spi_out, 0) < 0) {
 			err = -1;
 			log_(WARN, "Error building outgoing SA: %s.\n",
 			    strerror(errno));
 		}
-		if (sadb_add_policy(hip_a, HIPA_SRC(hip_a), HIPA_DST(hip_a),
-			     (struct sockaddr *) &host_hit_sock, 
-			     (struct sockaddr *) &peer_hit_sock, 0) < 0) {
+		if (sadb_add_policy(hip_a, HIPA_SRC(hip_a), HIPA_DST(hip_a), 0)
+				    < 0) {
 			log_(WARN, "Error building outgoing policy: %s.\n",
 			    strerror(errno));
 		}
-		if (sadb_add(HIPA_DST(hip_a), HIPA_SRC(hip_a),
-			     (struct sockaddr *) &peer_hit_sock, 
-			     (struct sockaddr *) &host_hit_sock,
-			     hip_a, hip_a->spi_in, 1) < 0) {
+		if (sadb_add(HIPA_DST(hip_a), HIPA_SRC(hip_a), hip_a,
+			     hip_a->spi_in, 1) < 0) {
 			err = -2;
 			log_(WARN, "Error building incoming SA: %s.\n",
 			    strerror(errno));
 		}
-		if (sadb_add_policy(hip_a, HIPA_DST(hip_a), HIPA_SRC(hip_a), 
-			    (struct sockaddr *) &peer_hit_sock, 
-			    (struct sockaddr *) &host_hit_sock, 1) < 0) {
+		if (sadb_add_policy(hip_a, HIPA_DST(hip_a), HIPA_SRC(hip_a), 1)
+				    < 0) {
 			log_(WARN, "Error building incoming policy: %s.\n",
 			    strerror(errno));
 		}
@@ -1837,29 +1767,9 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 	return(-1);
 }
 
-int hip_handle_R2(__u8 *buff, hip_assoc *hip_a, __u16 *dst_port, int use_udp)
+int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
 {
 	int err=0;
-
-	struct sockaddr_in6 host_hit_sock, peer_hit_sock;
-
-
-	if (hip_a->use_udp != use_udp) {
-		log_(WARN,"HIP_R2 packet not accepted, received on wrong "
-			"socket UDP/raw\n");
-		return(-1);
-	}
-	if (use_udp) {
-		/* R2 accepted only if incoming UDP src port is equal
-		 * to the port used for sending I2 : HIP_UDP_PORT 
-		 * comment: in fact this is not really necessary... */
-		if ( *dst_port != HIP_UDP_PORT ) {
-			log_(WARN,"HIP_R2 packet not accepted, wrong incoming "
-				"UDP src port number: %d (%d)\n",
-				*dst_port, HIP_UDP_PORT);
-			return (-1);
-		}
-	}
 
 	/* R2 is only accepted in state I2_SENT */
 	if (hip_a->state != I2_SENT) {
@@ -1882,35 +1792,24 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a, __u16 *dst_port, int use_udp)
 	log_(NORM, "HIP exchange complete.\n");
 	log_sa_info(hip_a);
 
-	hit_to_sockaddr (&host_hit_sock, hip_a->hi->hit);
-	hit_to_sockaddr (&peer_hit_sock, hip_a->peer_hi->hit);
-
-	if (use_udp) {
-		/* UDP port for initiator can be set up directly */
-		hip_a->peer_esp_dst_port = HIP_ESP_UDP_PORT;
-	}
-
-	if (sadb_add(HIPA_SRC(hip_a), HIPA_DST(hip_a), SA(&host_hit_sock),
-			SA(&peer_hit_sock), hip_a, hip_a->spi_out, 0) < 0) {
+	if (sadb_add(HIPA_SRC(hip_a), HIPA_DST(hip_a), hip_a, hip_a->spi_out, 0)
+			< 0) {
 		err = -1;
 		log_(WARN, "Error building outgoing SA: %s.\n", 
 		    strerror(errno));
 	}
-	if (sadb_add_policy(hip_a, HIPA_SRC(hip_a), HIPA_DST(hip_a),
-		     SA(&host_hit_sock), SA(&peer_hit_sock), 0) < 0) {
+	if (sadb_add_policy(hip_a, HIPA_SRC(hip_a), HIPA_DST(hip_a), 0) < 0) {
 		err = -1;
 		log_(WARN, "Error building outgoing policy: %s.\n", 
 		    strerror(errno));
 	}
-	if (sadb_add(HIPA_DST(hip_a), HIPA_SRC(hip_a),
-		     SA(&peer_hit_sock), SA(&host_hit_sock),
-		     hip_a, hip_a->spi_in, 1) < 0) {
+	if (sadb_add(HIPA_DST(hip_a), HIPA_SRC(hip_a), hip_a, hip_a->spi_in, 1)
+			< 0) {
 		err = -2;
 		log_(WARN, "Error building incoming SA: %s.\n", 
 		    strerror(errno));
 	}
-	if (sadb_add_policy(hip_a, HIPA_DST(hip_a), HIPA_SRC(hip_a),
-		     SA(&peer_hit_sock), SA(&host_hit_sock), 1) < 0) {
+	if (sadb_add_policy(hip_a, HIPA_DST(hip_a), HIPA_SRC(hip_a), 1) < 0) {
 		err = -2;
 		log_(WARN, "Error building incoming policy: %s.\n", 
 		    strerror(errno));
@@ -1922,8 +1821,7 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a, __u16 *dst_port, int use_udp)
 		set_state(hip_a, ESTABLISHED);
 		if (need_to_send_update2) {
 			need_to_send_update2 = FALSE;
-			if ((err = hip_send_update(hip_a, NULL, NULL, 
-							hip_a->use_udp)) > 0) {
+			if ((err = hip_send_update(hip_a, NULL, NULL)) > 0) {
 				log_(NORM, "Sent UPDATE (%d bytes)\n", err);
 			} else {
 				log_(WARN, "Failed to send UPDATE: %s.\n",
@@ -1943,8 +1841,7 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a, __u16 *dst_port, int use_udp)
 				} else {
 					hip_a->mr_keymat_index = keymat_index;
 					hip_send_update_proxy_ticket(
-						hip_mr, hip_a,
-						hip_mr->use_udp);
+						hip_mr, hip_a);
 				}
 			}
 		}
@@ -1968,7 +1865,7 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a, __u16 *dst_port, int use_udp)
  * out:
  */
 int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
-    __u32 *nonce, struct sockaddr *src, int use_udp)
+    __u32 *nonce, struct sockaddr *src)
 {
 	hiphdr *hiph;
 	int location, len, data_len, pos; 
@@ -2366,7 +2263,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 			/* XXX clean this up to its own function:
 			 *  		handle_reg_request() 
 			 */
-				if (*reg_typep == HCNF.reg_type_rvs)
+				if (*reg_typep == REGTYPE_RVS)
 				{
 					if(OPT.rvs) {
 					add_reg_response = TRUE;
@@ -2494,21 +2391,12 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 					 * reg_failed included */
 					need_to_send_update2 = TRUE;
 			} /* if (OPT.rvs) */
-				} else if (*reg_typep == REGTYPE_MR) {
 #ifdef MOBILE_ROUTER
-					if (OPT.mr) {
-						reg->state = REG_SEND_RESP;
-						reg->granted_lifetime =
-							resp_lifetime;
-						gettimeofday(&reg->state_time,
-							NULL);
-					} else
+				} else if (*reg_typep == REGTYPE_MR && OPT.mr) {
+					reg->state = REG_SEND_RESP;
+					reg->granted_lifetime = resp_lifetime;
+					gettimeofday(&reg->state_time, NULL);
 #endif /* MOBILE_ROUTER */
-					{
-						reg->state = REG_SEND_FAILED;
-						reg->failure_code =
-							REG_FAIL_TYPE_UNAVAIL;
-					}
 				} else { /* Unknown type */
 					reg->state = REG_SEND_FAILED;
 					reg->failure_code =
@@ -2632,24 +2520,16 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 	
 	/* update peer address list */
 	if (loc_count > 0) { 
-		if (use_udp) {
-			if (handle_locators(hip_a, locators, 
-			    loc_count, src, new_spi) < 0) {
-				log_(WARN, "Problem with LOCATOR.\n");
-				status = -1;
-			}
-		} else {
-			if (handle_locators(hip_a, locators, 
-			    loc_count, NULL, new_spi) < 0) {
-				log_(WARN, "Problem with LOCATOR.\n");
-				status = -1;
-			}
+		if (handle_locators(hip_a, locators, loc_count, NULL,
+								new_spi) < 0) {
+			log_(WARN, "Problem with LOCATOR.\n");
+			status = -1;
 		}
 	}
 	return(status);
 }
 
-int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src, __u16 *dst_port, int use_udp)
+int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 {
 	int err;
 	struct rekey_info rk;
@@ -2668,21 +2548,14 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src, __u16 
 	
 	memset(&rk, 0, sizeof(struct rekey_info));
 	nonce = 0;
-	if ((err = hip_parse_update(data, hip_a, &rk, 
-				    &nonce, src, use_udp)) < 0) {
+	if ((err = hip_parse_update(data, hip_a, &rk, &nonce, src)) < 0) {
 		log_(WARN, "Bad UPDATE, dropping.\n");
 		return(-1);
 	}
 	
-	/* after validation of UPDATE packet, hip_a->use_udp is about to be 
-	 * modified to use_udp 
-	 * use_udp stored in hip_a->next_use_udp 
-	 * (necessary, for hip_finish_rekey with timeout in hip_main */
-	hip_a->next_use_udp = use_udp ;
-
 	/*
 	 * If received an UPDATE in R2_SENT state, move to ESTABLISHED state
-	*/
+	 */
 	if (hip_a->state == R2_SENT)
 		set_state(hip_a, ESTABLISHED);
 	
@@ -2745,29 +2618,15 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src, __u16 
 	 * Look for new preferred addresses that may have been added,
 	 * and for addresses that need verifying
 	 */
-	if ((err = handle_update_readdress(hip_a, &addrcheck, use_udp)) < 0) {
+	if ((err = handle_update_readdress(hip_a, &addrcheck)) < 0) {
 		log_(WARN, "Problem with UPDATE readdress processing.\n");
 		return(-1);
 	} else if (err == 1) {
 		need_to_send_update = TRUE;
 	}
 
-	/* If UPDATE is validated, store the incoming UDP src port number in hip_a */
-
-/* // use_udp is updated only at the very end of rekeying process (in hip_finish_rekey) //
-	hip_a->use_udp = use_udp;
-*/
-	if (use_udp) {
-		log_(NORM, "HIP channel UDP dst port updated from %u", hip_a->peer_dst_port);
-		log_(NORM, " to %u.\n",*dst_port);
-		hip_a->peer_dst_port = *dst_port ;
-	}
-	else {
-		hip_a->peer_dst_port = 0;
-	}
-	
 	if (need_to_send_update) {
-		if ((err = hip_send_update(hip_a, NULL, addrcheck, use_udp)) > 0) {
+		if ((err = hip_send_update(hip_a, NULL, addrcheck)) > 0) {
 			log_(NORM, "Sent UPDATE (%d bytes)\n", err);
 		} else {
 			log_(WARN, "Failed to send UPDATE: %s.\n",
@@ -2777,7 +2636,7 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src, __u16 
 
 	if (need_to_send_update2) {
 		need_to_send_update2 = FALSE;
-		if ((err = hip_send_update(hip_a, NULL, NULL, use_udp)) > 0) {
+		if ((err = hip_send_update(hip_a, NULL, NULL)) > 0) {
 			log_(NORM, "Sent UPDATE (%d bytes)\n", err);
 		} else {
 			log_(WARN, "Failed to send UPDATE: %s.\n",
@@ -2879,7 +2738,7 @@ int handle_update_rekey(hip_assoc *hip_a)
  * addresses, and when the preferred flag is set, readdressing is needed;
  * when an address has a status of UNVERIFIED, we need to do an address check.
  */
-int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck, int use_udp)
+int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck)
 {
 	int need_to_send_update = FALSE;
 	sockaddr_list *l, *l_next, *peer_list, *my_list, *new_af = NULL;
@@ -2907,7 +2766,7 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck, int u
 				log_(NORMT, "Performing rekey...\n");
 				new_spi = hip_a->rekey->new_spi;
 				new_peer_spi = hip_a->peer_rekey->new_spi;
-				hip_finish_rekey(hip_a, FALSE, use_udp);
+				hip_finish_rekey(hip_a, FALSE);
 			}
 			my_list = &hip_a->hi->addrs;
 			if (l->addr.ss_family != my_list->addr.ss_family) {
@@ -2925,15 +2784,15 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck, int u
 			}
 			if (!new_af) {
 				rebuild_sa(hip_a, pref_addr, new_spi,
-					TRUE, TRUE, use_udp);
+					TRUE, TRUE);
 				rebuild_sa(hip_a, pref_addr, new_peer_spi,
-					FALSE, TRUE, use_udp);
+					FALSE, TRUE);
 			} else {
 				new_af_addr = SA(&new_af->addr);
 				rebuild_sa_x2(hip_a, pref_addr, new_af_addr,
-					new_peer_spi, TRUE, use_udp);
+					new_peer_spi, TRUE);
 				rebuild_sa_x2(hip_a, new_af_addr, pref_addr,
-					new_spi, FALSE, use_udp);
+					new_spi, FALSE);
 			}
 			sadb_readdress(HIPA_DST(hip_a), pref_addr, 
 				hip_a, hip_a->spi_out);
@@ -3041,14 +2900,10 @@ void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src)
  * Completes the rekey process (UPDATE exchange) by drawing or generating
  * new keying material, adding SAs with new SPIs, and dropping the old SAs.
  */
-int hip_finish_rekey(hip_assoc *hip_a, int rebuild, int use_udp)
+int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 {
 	int len, keymat_index, err;
 	unsigned char *dh_secret_key;
-
-#ifdef __UMH__
-	int err_tunn_activation;
-#endif
 
 	/* 
 	 * Rekey from section 8.11.3
@@ -3114,32 +2969,8 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild, int use_udp)
 	/* 4. move to ESTABLISHED
 	 * 5. add the NEW outgoing/incoming SA
 	 */
-#ifdef __UMH__
-	/* XXX TODO: clean this up */
-	if (!rebuild) {
-		/* when rekeying is finished, update use_udp for the whole hip_association */
-		if (use_udp)
-			log_(NORM, "UDP encapsulation activated.\n");
-		if (hip_a->next_use_udp != use_udp)
-			log_(WARN, "Warning : next_use_udp should have been "
-				"equal to use_udp...?...\n");
-		hip_a->use_udp = use_udp;
-		hip_a->next_use_udp = use_udp;
-
-		if (hip_a->use_udp) { /* (HIP_ESP_OVER_UDP) */
-			err_tunn_activation = send_udp_esp_tunnel_activation (hip_a->spi_out);
-			if (err_tunn_activation<0) {
-				printf("Activation of UDP-ESP channel failed.\n");
-			} else {
-				printf("Activation of UDP-ESP channel for spi:0x%x done.\n",
-					 hip_a->spi_out);
-			}
-		}
-		return(err);
-	}
-#endif /* __UMH__ */
-	err = rebuild_sa(hip_a, NULL, hip_a->rekey->new_spi, TRUE, TRUE, use_udp);
-	err += rebuild_sa(hip_a, NULL, hip_a->peer_rekey->new_spi, FALSE, TRUE, use_udp);
+	err = rebuild_sa(hip_a, NULL, hip_a->rekey->new_spi, TRUE, TRUE);
+	err += rebuild_sa(hip_a, NULL, hip_a->peer_rekey->new_spi, FALSE, TRUE);
 	/* no need to call sadb_readdress(), since address is not changing */
 
 	if (!err) {
@@ -3151,27 +2982,6 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild, int use_udp)
 		free(hip_a->rekey); /* any DH already unused */
 		hip_a->peer_rekey = NULL;
 		hip_a->rekey = NULL;
-
-#ifdef __UMH__
-	/* when rekeying is finished, update use_udp for the whole hip_association */
-		if (use_udp)
-			log_(NORM, "UDP encapsulation activated.\n");
-		if (hip_a->next_use_udp != use_udp)
-			log_(WARN, "Warning: next_use_udp should have been "
-				"equal to use_udp...?...\n");
-		hip_a->use_udp = use_udp;
-		hip_a->next_use_udp = use_udp;
-
-		if (hip_a->use_udp) { /* (HIP_ESP_OVER_UDP) */
-			err_tunn_activation = send_udp_esp_tunnel_activation (hip_a->spi_out);
-			if (err_tunn_activation<0) {
-				printf("Activation of UDP-ESP channel failed.\n");
-			} else {
-				printf("Activation of UDP-ESP channel for spi:0x%x done.\n",
-					 hip_a->spi_out);
-			}
-		}
-#endif /* __UMH__ */
 	}
 	return(err);
 }
@@ -3306,28 +3116,11 @@ int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
 	return(-1);
 }
 
-int hip_handle_close(__u8 *buff, hip_assoc *hip_a, __u16 *dst_port, int use_udp)
+int hip_handle_close(__u8 *buff, hip_assoc *hip_a)
 {
 	int err=0;
 	int is_ack = (((hiphdr*)buff)->packet_type == CLOSE_ACK);
 	__u32 nonce, saved_nonce;
-
-	if (hip_a->use_udp != use_udp) {
-		log_(WARN, "HIP_CLOSE received on wrong socket UDP/raw\n");
-		return (-1);
-	}
-
-	if (use_udp) {
-		/* CLOSE accepted only if incoming UDP src port is equal
-		 * to the port registered in the hip association */
-	/* Is it really necessary to check ?? */
-		if ( *dst_port != hip_a->peer_dst_port ) {
-			log_(WARN,"HIP_CLOSE wrong incoming UDP src port "
-				"number: %d (%d)\n",
-				 *dst_port, hip_a->peer_dst_port);
-			return (-1);
-		}
-	}
 
 	/* CLOSE_ACK is only accepted in state CLOSING or CLOSED */
 	if (is_ack && (hip_a->state != CLOSING) && (hip_a->state != CLOSED)) {
@@ -3467,7 +3260,7 @@ int hip_parse_notify(__u8 *data, hip_assoc *hip_a, __u16 *code, __u8 *nd, __u16 
 	return(-1);
 }
 
-int hip_handle_notify(__u8 *buff, hip_assoc *hip_a, __u16 *dst_port, int use_udp)
+int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
 {
 	int err=0;
 	__u16 code=0, data_len=0;
@@ -3478,25 +3271,6 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a, __u16 *dst_port, int use_udp
 		return(-1);
 	}
 
-	if (hip_a->use_udp != use_udp) {
-		log_(WARN, "HIP_NOTIFY packet not accepted, received on wrong "
-			"socket UDP/raw\n");
-		return (-1);
-	}
-
-	if (use_udp) {
-		/* NOTIFY accepted only if incoming UDP src port is equal
-		 * to the port registered in the hip association */
-		/* Is it really necessary to check ?? */
-		if ( *dst_port != hip_a->peer_dst_port ) {
-			log_(WARN,"HIP_NOTIFY packet not accepted, wrong "
-				"incoming UDP src port number: %d (%d)\n",
-				 *dst_port, hip_a->peer_dst_port);
-			return (-1);
-		}
-	}
-
-	
 	if (hip_parse_notify(buff, hip_a, &code, data, &data_len) < 0) {
 		log_(WARN, "Bad NOTIFY, dropping.\n");
 		/* stay in the same state */
@@ -4280,19 +4054,16 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
  * Handles both readdress and rekey cases.
  */
 int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
-		int in, int peer, int use_udp)
+		int in, int peer)
 {
 	__u32 spi;
 	int err = 0, new_policy = TRUE;
 	struct sockaddr *src_new, *dst_new, *src_old, *dst_old;
-	struct sockaddr_in6 src_hit_sock, dst_hit_sock;
-	int use_udp_backup;
 
 	/* XXX TODO: clean this up
 	 * sadb_add_policy() should be atomic and should not contain special
 	 * cases for UDP mode. modify the calls to sadb_add_policy here.
 	 */
-	use_udp_backup = hip_a->use_udp ;
 
 	spi = (in) ? hip_a->spi_in : hip_a->spi_out;
 	src_old = in ? HIPA_DST(hip_a) : HIPA_SRC(hip_a);
@@ -4315,15 +4086,6 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 #endif
 	}
 
-	if (in) {
-		hit_to_sockaddr (&dst_hit_sock, hip_a->hi->hit);
-		hit_to_sockaddr (&src_hit_sock, hip_a->peer_hi->hit);
-	}
-	else {
-		hit_to_sockaddr (&src_hit_sock, hip_a->hi->hit);
-		hit_to_sockaddr (&dst_hit_sock, hip_a->peer_hi->hit);
-	}
-
 #ifdef __UMH__
 	/* In Windows, SAs stored based on SPI, so must delete first */
 	if (1) {
@@ -4338,39 +4100,25 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 			err--;
 		}
 	}
-	hip_a->use_udp = use_udp;
 
 #ifdef __UMH__
 	/* update LSI mapping for success with sadb_add() */
-	if (use_udp) { /*(HIP_ESP_OVER_UDP)*/
-		update_lsi_mapping(in ? (struct sockaddr*)&src_hit_sock : 
-					(struct sockaddr*) &dst_hit_sock,
-				   SA(&hip_a->peer_hi->lsi), 
-				   hip_a->peer_hi->hit);
-	} else {
-		update_lsi_mapping(in ? src_new : dst_new, 
-				   SA(&hip_a->peer_hi->lsi),
-				   hip_a->peer_hi->hit);
-	}
+	update_lsi_mapping(in ? src_new : dst_new, SA(&hip_a->peer_hi->lsi),
+			   hip_a->peer_hi->hit);
 #endif
 	/* new SPI is used if it is nonzero */
-	if (sadb_add(src_new, dst_new, (struct sockaddr *) &src_hit_sock, 
-		    (struct sockaddr *) &dst_hit_sock, hip_a, 
-		    (newspi > 0) ? newspi : spi, in) < 0) {
+	if (sadb_add(src_new, dst_new, hip_a, newspi>0 ? newspi:spi, in) < 0) {
 		log_(WARN, "Error building new outgoing SA: %s\n",
 		    strerror(errno));
 		err--;
 	}
 	/* In Linux, this adds the required SPD entry;
 	 * for Windows, this gives the SA an in/out direction. */
-	if (new_policy && (sadb_add_policy(hip_a, src_new, dst_new, 
-			    (struct sockaddr *) &src_hit_sock, 
-			    (struct sockaddr *) &dst_hit_sock, in) < 0)) {
+	if (new_policy && (sadb_add_policy(hip_a, src_new, dst_new, in) < 0)) {
 		log_(WARN, "Error building new outgoing policy: %s.\n",
 		    strerror(errno));
 		err--;
 	}
-	hip_a->use_udp = use_udp_backup;
 
 #ifndef __UMH__
 	/* In Windows, SA is deleted earlier -- see above. */
@@ -4382,19 +4130,10 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 		}
 	}
 	/* policy deletion is a NO-OP in Windows */
-	if (hip_a->use_udp) { /* (HIP_ESP_OVER_UDP) */
-		if (new_policy && (sadb_delete_policy((struct sockaddr*) &src_hit_sock,
-		    (struct sockaddr*) &dst_hit_sock, in) < 0)) {
-			log_(WARN, "Error removing old outgoing policy: %s.\n",
-			    strerror(errno));
-			err--;
-		}
-	} else {
-		if (new_policy && (sadb_delete_policy(src_old, dst_old, in) < 0)) {
-			log_(WARN, "Error removing old outgoing policy: %s.\n",
-			    strerror(errno));
-			err--;
-		}
+	if (new_policy && (sadb_delete_policy(src_old, dst_old, in) < 0)) {
+		log_(WARN, "Error removing old outgoing policy: %s.\n",
+		    strerror(errno));
+		err--;
 	}
 #endif
 	hip_a->used_bytes_in = 0;
@@ -4415,32 +4154,15 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
  * when readdress involves a change of address family.
  */
 int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
-		struct sockaddr *dst_new, __u32 newspi, int in, int use_udp)
+		struct sockaddr *dst_new, __u32 newspi, int in)
 {
 	__u32 spi;
 	int err = 0;
 	struct sockaddr *src_old, *dst_old;
-	struct sockaddr_in6 src_hit_sock, dst_hit_sock;
-	int use_udp_backup;
-
-	/* XXX TODO: clean this up
-	 * sadb_add_policy() should be atomic and should not contain special
-	 * cases for UDP mode. modify the calls to sadb_add_policy here.
-	 */
-	use_udp_backup = hip_a->use_udp ;
 
 	spi = (in) ? hip_a->spi_in : hip_a->spi_out;
 	src_old = in ? HIPA_DST(hip_a) : HIPA_SRC(hip_a);
 	dst_old = in ? HIPA_SRC(hip_a) : HIPA_DST(hip_a);
-
-	if (in) {
-		hit_to_sockaddr (&dst_hit_sock, hip_a->hi->hit);
-		hit_to_sockaddr (&src_hit_sock, hip_a->peer_hi->hit);
-	}
-	else {
-		hit_to_sockaddr (&src_hit_sock, hip_a->hi->hit);
-		hit_to_sockaddr (&dst_hit_sock, hip_a->peer_hi->hit);
-	}
 
 #ifdef __UMH__
 	/* In Windows, SAs stored based on SPI, so must delete first */
@@ -4450,39 +4172,25 @@ int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
 		err--;
 	}
 #endif
-	hip_a->use_udp = use_udp;
 
 #ifdef __UMH__
 	/* update LSI mapping for success with sadb_add() */
-	if (use_udp) { /*(HIP_ESP_OVER_UDP)*/
-		update_lsi_mapping(in ? (struct sockaddr*)&src_hit_sock : 
-					(struct sockaddr*) &dst_hit_sock,
-				   SA(&hip_a->peer_hi->lsi), 
-				   hip_a->peer_hi->hit);
-	} else {
-		update_lsi_mapping(in ? src_new : dst_new, 
-				   SA(&hip_a->peer_hi->lsi),
-				   hip_a->peer_hi->hit);
-	}
+	update_lsi_mapping(in ? src_new : dst_new, SA(&hip_a->peer_hi->lsi),
+			   hip_a->peer_hi->hit);
 #endif
 
-	if (sadb_add(src_new, dst_new, (struct sockaddr *) &src_hit_sock, 
-		    (struct sockaddr *) &dst_hit_sock, hip_a, 
-		    (newspi > 0) ? newspi : spi, in) < 0) {
+	if (sadb_add(src_new, dst_new, hip_a, newspi>0 ? newspi:spi, in) < 0) {
 		log_(WARN, "Error building new outgoing SA: %s\n",
 		    strerror(errno));
 		err--;
 	}
 	/* In Linux, this adds the required SPD entry;
 	 * for Windows, this gives the SA an in/out direction. */
-	if ((sadb_add_policy(hip_a, src_new, dst_new, 
-			    (struct sockaddr *) &src_hit_sock, 
-			    (struct sockaddr *) &dst_hit_sock, in) < 0)) {
+	if ((sadb_add_policy(hip_a, src_new, dst_new, in) < 0)) {
 		log_(WARN, "Error building new outgoing policy: %s.\n",
 		    strerror(errno));
 		err--;
 	}
-	hip_a->use_udp = use_udp_backup;
 
 #ifndef __UMH__
 	/* In Windows, SA is deleted earlier -- see above. */
@@ -4492,19 +4200,10 @@ int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
 		err--;
 	}
 	/* policy deletion is a NO-OP in Windows */
-	if (hip_a->use_udp) { /* (HIP_ESP_OVER_UDP) */
-		if (sadb_delete_policy((struct sockaddr*) &src_hit_sock,
-		    (struct sockaddr*) &dst_hit_sock, in) < 0) {
-			log_(WARN, "Error removing old outgoing policy: %s.\n",
-			    strerror(errno));
-			err--;
-		}
-	} else {
-		if (sadb_delete_policy(src_old, dst_old, in) < 0) {
-			log_(WARN, "Error removing old outgoing policy: %s.\n",
-			    strerror(errno));
-			err--;
-		}
+	if (sadb_delete_policy(src_old, dst_old, in) < 0) {
+		log_(WARN, "Error removing old outgoing policy: %s.\n",
+		    strerror(errno));
+		err--;
 	}
 #endif
 	hip_a->used_bytes_in = 0;
@@ -4579,7 +4278,7 @@ void update_peer_list(hip_assoc *hip_a)
 void update_lsi_mapping(struct sockaddr *dst, struct sockaddr *lsi, hip_hit hit)
 {
 	struct sockaddr_storage lsi6;
-	hit_to_sockaddr((struct sockaddr_in6*)&lsi6, hit);
+	hit_to_sockaddr(SA(&lsi6), hit);
 	log_(NORM, "Updating mapping for LSI %s/", logaddr(dst));
 	log_(NORM, "%s/", logaddr(lsi));
 	log_(NORM, "%s\n", logaddr(SA(&lsi6)));
@@ -4716,7 +4415,7 @@ void *set_lifetime_thread(void *void_thread_arg)
 	tmp = pow(2, tmp);
 	hip_sleep( (int)(tmp-1) );
 	add_reg_request = TRUE;
-	hip_send_update(hip_b, NULL, NULL, hip_b->use_udp);
+	hip_send_update(hip_b, NULL, NULL);
 #ifndef __WIN32__
 	return(NULL);
 #endif

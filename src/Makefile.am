@@ -27,8 +27,7 @@ endif
 SRC_PROTO = 	protocol/hip_addr.c protocol/hip_cache.c protocol/hip_dht.c \
 		protocol/hip_globals.c protocol/hip_input.c \
 		protocol/hip_ipsec.c protocol/hip_keymat.c protocol/hip_main.c \
-		protocol/hip_output.c protocol/hip_status.c \
-		protocol/hip_stun.c protocol/hip_stun_udp.c
+		protocol/hip_output.c protocol/hip_status.c
 
 # Utility source files
 SRC_UTIL =	util/hip_util.c util/hip_xml.c
@@ -67,6 +66,7 @@ LDADD = @libxml2_LIBS@
 
 # SMA craweler support
 if WANT_SMA_CRAWLER
+SRC_USERMODE += usermode/hip_endbox.c
 SRC_UTIL +=	util/cfg-api/hip_cfg_api.c
 SRC_HITGEN +=   util/sc_utils.c
 SUBDIRS = util

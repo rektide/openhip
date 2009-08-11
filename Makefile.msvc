@@ -47,8 +47,6 @@ OBJS =	$(SRC)\$(SRCPROTO)\hip_addr.obj \
 	$(SRC)\$(SRCPROTO)\hip_main.obj \
 	$(SRC)\$(SRCPROTO)\hip_output.obj \
 	$(SRC)\$(SRCPROTO)\hip_status.obj \
-	$(SRC)\$(SRCPROTO)\hip_stun.obj \
-	$(SRC)\$(SRCPROTO)\hip_stun_udp.obj \
 	$(SRC)\$(SRCUM)\hip_dns.obj \
 	$(SRC)\$(SRCUM)\hip_esp.obj \
 	$(SRC)\$(SRCUM)\hip_nl.obj \
@@ -74,8 +72,6 @@ OBJNAMES=hip_addr.obj \
 	hip_main.obj \
 	hip_output.obj \
 	hip_status.obj \
-	hip_stun.obj \
-	hip_stun_udp.obj \
 	hip_dns.obj \
 	hip_esp.obj \
 	hip_nl.obj \

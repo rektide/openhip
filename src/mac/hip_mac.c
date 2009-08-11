@@ -59,7 +59,6 @@
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
-#include <hip/hip_stun.h>
 
 /* Local functions */
 /* int read_netlink_response();*/
@@ -87,10 +86,6 @@ int hip_netlink_open()
 return 0;
 
 }
-
-#ifndef __MACOSX__
-extern int send_udp_esp_tunnel_activation (__u32 spi_out);
-#endif
 
 /*
  * function select_preferred_address()
@@ -194,23 +189,6 @@ int hip_handle_netlink(char *data, int len)
 					SALEN(&unpacked[loc]));
 			log_(NORM, "Address %s: (%d)%s \n", (is_add) ? "added" :
 			    "deleted", ifm->ifm_index, logaddr(addr));
-
-#ifndef __MACOSX__
-			/* NAT detection */
-			if (OPT.stun && is_add) {
-				log_(NORMT, "STUN: NAT detection with server ");
-				printIPv4Addr (&STUN_server_addr);
-				log_(NORM, "\n");
-				nattype = stunNatType( &STUN_server_addr,FALSE, NULL, NULL, 0, NULL) ;          
-				if (nattype == StunTypeOpen || nattype == StunTypeFirewall) {                           
-					is_behind_nat = FALSE ;
-					log_(NORM, "STUN: No NAT detected.\n");
-				} else {
-					is_behind_nat = TRUE ; 
-					log_(NORM, "STUN: NAT detected, UDP encapsulation activated.\n");       
-				}
-			}
-#endif
 
 			handle_local_address_change(is_add, addr,
 						    ifm->ifm_index);

@@ -374,7 +374,8 @@ __attribute__((packed));
 #define SADB_READDRESS		26
 #define SADB_HIP_ACQUIRE	27
 #define SADB_HIP_ADD		28
-#define SADB_MAX		29
+#define SADB_HIP_PACKET		29
+#define SADB_MAX		30
 #else
 #define SADB_MAX		23
 #endif
