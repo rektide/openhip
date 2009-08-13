@@ -58,6 +58,7 @@ endif
 if WANT_OSX
 hip_CFLAGS += -D__MACOSX__
 hitgen_CFLAGS += -D__MACOSX__
+hipstatus_CFLAGS = -D__MACOSX__
 SRC_USERMODE += mac/hip_mac.c
 endif
 
