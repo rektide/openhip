@@ -83,15 +83,13 @@ int hip_check_bind(struct sockaddr *src, int num_attempts);
 int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug);
 int build_tlv_transform(__u8 *data, int type, __u16 transforms[], __u16 single);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
+int build_tlv_cert(__u8 *buff);
 int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1);
 int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type);
-int build_tlv_reg_info(__u8 *data, int location);
-int build_tlv_reg_req(__u8 *data, int location, struct reg_entry *reg_offered);
-int build_tlv_reg_resp(__u8 *data, int location,
-		struct reg_entry *reg_requested);
-int build_tlv_reg_failed(__u8 *data, int location,
-		struct reg_entry *reg_requested);
-int build_tlv_rvs_hmac(hip_assoc *hip_a, __u8 *data, int location, int type, int pos);
+int build_tlv_reg_info(__u8 *data);
+int build_tlv_reg_req(__u8 *data, struct reg_entry *regs);
+int build_tlv_reg_resp(__u8 *data, struct reg_entry *regs);
+int build_tlv_reg_failed(__u8 *data, struct reg_entry *regs);
 
 #ifdef __MACOSX__
 extern int next_divert_rule();
@@ -102,23 +100,23 @@ extern void del_divert_rule(int);
 /*
  * function hip_send_I1()
  * 
- * in:		hit  = Responder's HIT, who we want to start communications with
- * 		hip_a = Association to use for retransmission
- * 		pos  = RVS parameter
+ * in:		hit  = receiver's HIT, who we want to start communications with
+ *                     or sender's HIT if we are a RVS relaying this I1 packet
+ * 		hip_a = association to use for addresses and retransmission;
+ * 		        if this is RVS relaying, then this is the assoc between
+ * 		        the RVS and the responder client
  * 		
  * out:		Returns bytes sent when successful, -1 on failure.
  *
  * Opens a socket and sends the HIP Initiator packet.
  *
  */
-int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
+int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
 {
+	__u8 buff[sizeof(hiphdr) + sizeof(tlv_from) + 4 + sizeof(tlv_hmac)];
 	struct sockaddr *src, *dst;
 	hiphdr *hiph;
-	tlv_from *ip_from;
-	__u8 buff[sizeof(hiphdr) + sizeof(tlv_from) +
-		   sizeof(tlv_rvs_hmac)];
-	int location=0;
+	int location=0, do_retrans;
 
 	memset(buff, 0, sizeof(buff));
 
@@ -131,49 +129,47 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
 	hiph->control = 0;
 	hiph->checksum = 0;
 			
-	/* TODO: this can be cleaned up by collapsing the RVS case with
-	 *       a few extra if's in the normal case
-	 */
+	src = HIPA_SRC(hip_a);
+	dst = HIPA_DST(hip_a);
 
 	/* in RVS mode, relay the I1 packet instead of triggering bex */
-	if (OPT.rvs && fr.add_from && pos!=-1) {
-		/* use RVS (global) & Responder (from reg_table) IP addresses */
-		src = (struct sockaddr*) &fr.ip_rvs;
-		dst = (struct sockaddr*) &hip_reg_table[pos].peer_addr;
-	
-		memcpy(hiph->hit_sndr, fr.hit_from, sizeof(hip_hit));
-		memcpy(hiph->hit_rcvr, hit, sizeof(hip_hit));
+	if (OPT.rvs && hip_a->from_via) {
+		if (ntohs(hip_a->from_via->type) != PARAM_FROM) {
+			log_(WARN, "Sending I1 RVS processing error.\n");
+			return(-1);
+		}
+		/* sender's HIT passed in*/
+		memcpy(hiph->hit_sndr, hit, HIT_SIZE);
+		memcpy(hiph->hit_rcvr, hip_a->peer_hi->hit, HIT_SIZE);
 		location = sizeof(hiphdr);
 
-		/* add the from parameter */
-		ip_from	= (tlv_from*) &buff[location];
-	 	ip_from->type = htons (PARAM_FROM);
-		ip_from->length = htons(sizeof(tlv_from) - 4);
-	 	memcpy(ip_from->addr, &fr.ip_from, sizeof(struct sockaddr));
-		location = location + sizeof(tlv_from);
-		location = eight_byte_align(location);
+		/* add the FROM parameter */
+		memcpy(&buff[location], hip_a->from_via, sizeof(tlv_from));
+		location += eight_byte_align(sizeof(tlv_from));
+		free(hip_a->from_via);
+		hip_a->from_via = NULL;
 
-		/* RVS_HMAC */
-		/* hip_a is now the pre-existing association between the 
-		 * RVS server and the responder, to get the HMAC key */
-		hip_a = hip_reg_table[pos].hip_a;
+		/* RVS_HMAC: hip_a is the pre-existing association between the
+		 * RVS and the responder for the HMAC key */
 		hiph->hdr_len = (location/8) - 1; 
-		location += build_tlv_rvs_hmac(hip_a, buff, location, 
-				PARAM_RVS_HMAC, pos);
+		location += build_tlv_hmac(hip_a, buff, location,
+					   PARAM_RVS_HMAC);
 
 		hiph->hdr_len = (location/8) - 1;
-		hiph->checksum = checksum_packet(&buff[0], src, dst);
 
 		/* send the packet */
 		log_(NORMT, "relaying HIP_I1 packet (%d bytes)...\n", location);
-		
-		return(hip_send(buff, location, src, dst, hip_a, FALSE));
-	} else { /* normal mode -- not an RVS relay */
-		/* XXX this line seems extraneous */
-		src = HIPA_SRC(hip_a);
-		dst = HIPA_DST(hip_a);
-		if (VALID_FAM(&hip_a->peer_hi->rvs)) /* use RVS instead of DST*/
+		do_retrans = FALSE;
+	} else { /* normal I1, not relayed by RVS */
+		if (VALID_FAM(&hip_a->peer_hi->rvs)){/* use RVS instead of DST*/
 			dst = SA(&hip_a->peer_hi->rvs);
+			if (hip_a->udp && dst->sa_family == AF_INET) {
+				((struct sockaddr_in *)dst)->sin_port = 
+					((struct sockaddr_in *)
+					 HIPA_DST(hip_a))->sin_port;
+				/* TODO: support IPv6 over UDP here */
+			}
+		}
 
 		/* NULL HITs only allowed for opportunistic I1s */
 		if ((hit == NULL) && !OPT.opportunistic)
@@ -191,26 +187,19 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
 			memcpy(hiph->hit_rcvr, hit, sizeof(hip_hit));
 
 		location = sizeof(hiphdr);
-		if (!hip_a->udp)
-			hiph->checksum = checksum_packet(&buff[0], src, dst);
-#ifdef SMA_CRAWLER
-                __u32 lsi_d;
-                lsi_d = ntohl(HIT2LSI(hiph->hit_sndr));
-                log_(WARN,"Initiator: %u.%u.%u.%u\n",NIPQUAD(lsi_d));
-                lsi_d = ntohl(HIT2LSI(hiph->hit_rcvr));
-                log_(WARN,"Responder: %u.%u.%u.%u\n",NIPQUAD(lsi_d));
-#endif
-
-	 	/* send the packet */
 		log_(NORMT, "sending HIP_I1 packet (%d bytes)...\n", location);
-#ifdef HIP_I3
-		if (OPT.i3)
-		     return(send_i3(buff, location, hit,
-				    HIPA_SRC(hip_a),HIPA_DST(hip_a)));
-		else
-#endif
-		return(hip_send(buff, location, src, dst, hip_a, TRUE));
+		do_retrans = TRUE;
 	}
+	if (!hip_a->udp)
+		hiph->checksum = checksum_packet(&buff[0], src, dst);
+
+ 	/* send the packet */
+#ifdef HIP_I3
+	if (OPT.i3)
+	     return(send_i3(buff, location, hit, src, dst));
+	else
+#endif
+	return(hip_send(buff, location, src, dst, hip_a, do_retrans));
 }
 
 
@@ -218,8 +207,11 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
  *
  * function hip_send_R1()
  * 
- * in: 		hip_a = HIP association containing source/destination addresses,
- * 			response cookie, valid HITs
+ * in:		src
+ * 		dst
+ * 		hiti
+ * 		hi
+ * 		
  * out:		Returns bytes sent when successful, -1 on error.
  * 		hip_a will have DH context and retransmission packets
  *
@@ -227,41 +219,47 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a, int pos)
  *
  */
 int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti, 
-		hi_node *hi)
+		hi_node *hi, hip_assoc *hip_rvs)
 {
-	int err, i, location =0;
+	int err, i, total_len, add_via;
 	hiphdr *hiph;
 	r1_cache_entry *r1_entry;
 	__u8 *data;
-	tlv_via_rvs *via;
 
 	/* make a copy of a pre-computed R1 from the cache */
 	i = compute_R1_cache_index(hiti, TRUE);
 	r1_entry = &hi->r1_cache[i];
+	total_len = r1_entry->len;
+	log_(NORM,"Using premade R1 from %s cache slot %d.\n", hi->name, i);
 
 	/* if received I1 with from parameter, add via_rvs parameter in R1 */
-	if (fr2.add_via_rvs)
-	{ 
-		location = r1_entry->len;
-		data = (__u8 *) malloc(location + sizeof(tlv_via_rvs));
-		memcpy(data, r1_entry->packet, r1_entry->len);
-		
-		via = (tlv_via_rvs *) &data[location];
-		via->type = htons(PARAM_VIA_RVS);
-		via->length = htons(sizeof(tlv_via_rvs) - 4);
-		memcpy(via->address, src, sizeof(struct sockaddr));	// RVS IP address
-		location = location + sizeof(tlv_via_rvs);
-	
-		hiph = (hiphdr*) data;
-		hiph->hdr_len = (location/8) -1;
-	}else
-	{
-		data = (__u8 *) malloc(r1_entry->len);
-		memcpy(data, r1_entry->packet, r1_entry->len);
-		
-		hiph = (hiphdr*) data;
+	if (hip_rvs && hip_rvs->from_via) {
+		if (ntohs(hip_rvs->from_via->type) != PARAM_VIA_RVS) {
+			log_(WARN, "RVS processing error sending R1.\n");
+			return(-1);
+		}
+		total_len += sizeof(tlv_via_rvs);
+		add_via = TRUE;
+	} else {
+		add_via = FALSE;
 	}
-	log_(NORM,"Using premade R1 from %s cache slot %d.\n", hi->name, i);
+
+	total_len = eight_byte_align(total_len);
+	data = (__u8 *) malloc(total_len);
+	if (!data)
+		return(-1);
+	memset(data, 0, total_len);
+	hiph = (hiphdr*) data;
+	memcpy(data, r1_entry->packet, r1_entry->len);
+	if (add_via) {
+		memcpy(&data[r1_entry->len], &hip_rvs->from_via,
+			sizeof(tlv_via_rvs));
+		hiph->hdr_len = (total_len/8) - 1;
+		free(hip_rvs->from_via);
+		hip_rvs->from_via = NULL;
+		log_(NORM, "Adding VIA RVS parameter to R1.\n");
+	}
+
 
 	/* fill in receiver's HIT, checksum */
 	memcpy(hiph->hit_rcvr, hiti, sizeof(hip_hit));
@@ -275,29 +273,15 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 	}
 
 	/* send the packet */
-	if (fr2.add_via_rvs)
-        {
-                log_(NORMT, "sending HIP_R1 packet (%d bytes)...\n", r1_entry->len + sizeof(tlv_via_rvs));
-
-/* If it is a RVS forwarding : which destination port ??? */
-                err = hip_send(data, r1_entry->len + sizeof(tlv_via_rvs), src,
-				dst, NULL, FALSE);
-	}
+	log_(NORMT, "sending HIP_R1 packet (%d bytes)...\n", total_len);
 #ifdef HIP_I3
         if (OPT.i3)
-	{
-		log_(NORMT, "sending HIP_R1 packet (%d bytes)...\n", r1_entry->len);
                 err = send_i3(data, r1_entry->len, hiti, src, dst);
-	}
-#endif
 	else
-	{
-		log_(NORMT, "sending HIP_R1 packet (%d bytes)...\n", r1_entry->len);
+#endif
+	err = hip_send(data, total_len, src, dst, NULL, FALSE);
 
-		err = hip_send(data, r1_entry->len, src, dst, NULL, FALSE);
-	}
-
-	free(data);
+	free(data); /* not retransmitted */
 	return(err);
 }
 
@@ -374,6 +358,9 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 			break;
 		}
 	}
+
+	/* TODO: move this to UPDATE packet instead, as change in locators 
+	 *       will invalidate these precreated R1s */
 	if (preferred_addr) {
 		loc = (tlv_locator*) &data[location];
 		loc->type = htons(PARAM_LOCATOR);
@@ -397,6 +384,8 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 		location = eight_byte_align(location);
 	}
 
+	/* TODO: move this to UPDATE packet instead, as change in locators 
+	 *       will invalidate these precreated R1s */
 	if (second_addr) {
 		loc = (tlv_locator*) &data[location];
 		loc->type = htons(PARAM_LOCATOR);
@@ -450,7 +439,7 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 	location += build_tlv_cert(&data[location]);
 
 	/* reg_info */
-	location += build_tlv_reg_info(data, location);
+	location += build_tlv_reg_info(&data[location]);
 
 	/* if ECHO_REQUEST is needed, put it here */
 
@@ -730,9 +719,8 @@ int hip_send_I2(hip_assoc *hip_a)
 	location += build_tlv_cert(&buff[location]);
 
 	/* add requested registrations */
-	if (hip_a->reg_offered)
-		location += build_tlv_reg_req(buff,location,
-				hip_a->reg_offered);
+	if (hip_a->regs)
+		location += build_tlv_reg_req(&buff[location], hip_a->regs);
 
 	/* add any echo response (included under signature) */
 	if (hip_a->opaque && !hip_a->opaque->opaque_nosig) {
@@ -843,12 +831,9 @@ int hip_send_R2(hip_assoc *hip_a)
 	location += sizeof(tlv_esp_info);
 	location = eight_byte_align(location);
 
-	if (hip_a->reg_requested) {
-		location += build_tlv_reg_resp(buff, location,
-				hip_a->reg_requested);
-		location += build_tlv_reg_failed(buff, location,
-				hip_a->reg_requested);
-	        location = eight_byte_align(location);
+	if (hip_a->regs) {
+		location += build_tlv_reg_resp(&buff[location], hip_a->regs);
+		location += build_tlv_reg_failed(&buff[location], hip_a->regs);
 	}
 
 	/* reg_required not defined yet */
@@ -1016,7 +1001,6 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		}
 		location += sizeof(tlv_locator);
 		location = eight_byte_align(location);
-		add_reg_request = FALSE;
 	}
 
 	if (hip_a->rekey && !hip_a->rekey->acked &&
@@ -1060,21 +1044,12 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 	}
 
 	/* Deal with registrations */
-
-	if (add_reg_info) {
-		add_reg_info = FALSE;
-		location += build_tlv_reg_info(buff, location);
-	}
-
-	if (hip_a->reg_offered)
-		location += build_tlv_reg_req(buff,location,
-			hip_a->reg_offered);
-
-	if (hip_a->reg_requested) {
-		location += build_tlv_reg_resp(buff, location,
-			hip_a->reg_requested);
-		location += build_tlv_reg_failed(buff, location,
-			hip_a->reg_requested);
+	// TODO: decide when to send reg info in UPDATE
+	//	location += build_tlv_reg_info(buff, location);
+	if (hip_a->regs) {
+		location += build_tlv_reg_req(&buff[location], hip_a->regs);
+		location += build_tlv_reg_resp(&buff[location], hip_a->regs);
+		location += build_tlv_reg_failed(&buff[location], hip_a->regs);
 	}
 
 #ifdef UNUSED
@@ -2069,6 +2044,9 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
 	return(eight_byte_align(sizeof(tlv_hip_sig) + sig_len - 1));
 }
 
+/*
+ * build_tlv_hmac()
+ */
 int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
 {
 	hiphdr *hiph;
@@ -2121,246 +2099,174 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
 	return(eight_byte_align(sizeof(tlv_hmac)));
 }
 
-int build_tlv_reg_info(__u8 *data, int location)
+
+/*
+ * build_tlv_reg_info()
+ *
+ * If there are any registration types stored in HCNF.reg_types[] then we
+ * are acting as a registrar and include them in the REG_INFO TLV here.
+ */
+int build_tlv_reg_info(__u8 *data)
 {
-	tlv_reg_info *info;
-	__u8 *reg_typep;
+	tlv_reg_info *info = (tlv_reg_info*) data;
+	__u8 *reg_types;
+	char str[128];
 	int len = 0, i;
 
-	if(HCNF.n_reg_types == 0)
+	/* this server is not offering any registration types, 
+	 * i.e, not a registrar */
+	if ((HCNF.num_reg_types == 0) || 
+	    (HCNF.num_reg_types > MAX_REGISTRATION_TYPES))
 		return 0;
 
-	info = (tlv_reg_info*) &data[location];
 	len += 4;
 	info->type = htons(PARAM_REG_INFO);
-	info->length = htons((__u16)(2 + HCNF.n_reg_types));
-	len += 2 + HCNF.n_reg_types;
-	info->min_lifetime = HCNF.min_lifetime;
-	info->max_lifetime = HCNF.max_lifetime;
-	reg_typep = &(info->reg_type);
-	for (i=0; i<HCNF.n_reg_types; i++) {
-		*reg_typep = HCNF.reg_types[i];
-		reg_typep++;
+	info->length = htons((__u16)(2 + HCNF.num_reg_types));
+	len += 2 + HCNF.num_reg_types;
+	info->min_lifetime = HCNF.min_reg_lifetime;
+	info->max_lifetime = HCNF.max_reg_lifetime;
+	reg_types = &(info->reg_type);
+	for (i=0; i < HCNF.num_reg_types; i++) {
+		if (regtype_to_string(HCNF.reg_types[i], str, sizeof(str)) < 0)
+			continue; /* unknown type */
+		reg_types[i] = HCNF.reg_types[i];
+	/*	log_(NORM, "Offering registration type %d: %s\n",
+			HCNF.reg_types[i], str); */
 	}
 
 	return(eight_byte_align(len));
 }
 
-int build_tlv_reg_req(__u8 *data, int location, struct reg_entry *reg_offered)
+/*
+ * build_tlv_reg_req()
+ */
+int build_tlv_reg_req(__u8 *data, struct reg_entry *regs)
 {
         double tmp;
-	tlv_reg_request *req = (tlv_reg_request*) &data[location];
+	tlv_reg_request *req = (tlv_reg_request*) data;
 	__u8 *reg_typep = &(req->reg_type);
-	__u8 requested_lifetime = reg_offered->max_lifetime;
-	__u16 num = 0;
-	struct reg_info *reg = reg_offered->regs;
+	__u8 lifetime;
+	__u16 num=0;
+	struct reg_info *reg;
+	char str[128];
 
-	while (reg) {
-		if (reg->state != REG_OFFERED  &&  reg->state != REG_CANCELLED)
+	if (!regs || !regs->reginfos)
+		return(0);
+	lifetime = regs->max_lifetime;
+
+	for (reg = regs->reginfos; reg; reg = reg->next) {
+		if (regtype_to_string(reg->type, str, sizeof(str)) < 0)
+			continue; /* skip unknown types */
+		if (reg->state == REG_OFFERED) {
+			log_(NORM, "Requesting registration with %d %s.\n",
+				reg->type, str);
+			reg->state = REG_REQUESTED;
+		} else if (reg->state == REG_SEND_CANCELLED) {
+			log_(NORM, "Canceling registration with %d %s.\n",
+				reg->type, str);
+			reg->state = REG_CANCELLED;
+			lifetime = 0;
+		} else { /* skip regs in other states */
 			continue;
-		if (reg->type == REGTYPE_RVS  && !OPT.rvs  && add_reg_request) {
-			/* if reg_info received, reg_request added to I2
-			 * if finished lifetime, add reg_request in update
-			 *   packet
-			 * reg_request parameter from a normal update, not
-			 *   a failed registration */
-			if (!repeat_reg) {
-				*reg_typep = HCNF.reg_type;
-			/* if there is an error in the registration with a rvs,
-			 * we send the reg_request parameter with the new
-			 * values */
-			} else {
-				repeat_reg = FALSE;
-				*reg_typep = repeat_type;
-			}
-			if (reg->state == REG_CANCELLED) {
-				requested_lifetime = 0;
-				log_(NORM, "Cancelled registration type = %d\n",
-					*reg_typep);
-			} else if (reg->state == REG_OFFERED) {
-				reg->state = REG_REQUESTED;
-				requested_lifetime = reg_offered->max_lifetime;
-				log_(NORM, "Requested registration type = %d\n",
-					*reg_typep);
-			}
-			reg->requested_lifetime = requested_lifetime;
-			add_reg_request = FALSE;
-			num++;
-			reg_typep++;
-		} else if (reg->type == REGTYPE_MR  &&  OPT.mn) {
-			*reg_typep = REGTYPE_MR;
-			if (reg->state == REG_CANCELLED) {
-				requested_lifetime = 0;
-				log_(NORM,"Cancelling registration with "
-					"Mobile Router\n");
-			} else if (reg->state == REG_OFFERED) {
-				reg->state = REG_REQUESTED;
-				requested_lifetime = reg_offered->max_lifetime;
-				log_(NORM,"Requesting registration with "
-					"Mobile Router\n");
-			}
-			reg->requested_lifetime = requested_lifetime;
-			num++;
-			reg_typep++;
 		}
-		reg = reg->next;
+		gettimeofday(&reg->state_time, NULL);
+		*reg_typep = reg->type;
+		num++;
+		reg_typep++;
 	}
         
 	if (num) {
 		req->type = htons(PARAM_REG_REQUEST);
-		num++;
 		req->length = htons((__u16)(1 + num)); /* lifetime+reg_types */
-		req->lifetime = requested_lifetime;
-
+		req->lifetime = lifetime;
 		tmp = YLIFE(req->lifetime);
 		tmp = pow(2, tmp);
-		log_(NORM, "Requested lifetime = %d (%.3f seconds)\n",\
+		log_(NORM, "Requested lifetime = %d (%.3f seconds)\n",
 			req->lifetime, tmp);
-
-		return(eight_byte_align(sizeof(tlv_reg_request)-2+num));
-	} else {
-		return 0;
+		/* tlv struct already includes one reg_type */
+		return(eight_byte_align(sizeof(tlv_reg_request) + (num - 1)));
 	}
+	return 0;
 }
 
-int build_tlv_reg_resp(__u8 *data, int location, struct reg_entry *reg_requested)
+int build_tlv_reg_resp(__u8 *data, struct reg_entry *regs)
 {
+	tlv_reg_response *resp = (tlv_reg_response *) data;
 	double tmp;
-	tlv_reg_response *resp = (tlv_reg_response *) &data[location];
 	__u8 *reg_typep = &(resp->reg_type);
-	__u8 granted_lifetime = 0;
+	__u8 lifetime = 0;
 	__u16 num = 0;
-	struct reg_info *reg = reg_requested->regs;
+	struct reg_info *reg;
+	char str[128];
 
-	while (reg) {
+	for (reg = regs->reginfos; reg; reg = reg->next) {
+		if (regtype_to_string(reg->type, str, sizeof(str)) < 0)
+			continue; /* skip unknown types */
 		if (reg->state == REG_SEND_RESP) {
 			reg->state = REG_GRANTED;
-			*reg_typep = reg->type;
-			granted_lifetime = reg->granted_lifetime;
-			log_(NORM, "Requested type = %d ok\n", *reg_typep);
-			reg_typep++;
-			num++;
+			lifetime = reg->lifetime;
+			log_(NORM, "Client registered with type %d %s\n",
+					reg->type, str);
 		} else if (reg->state == REG_SEND_CANCELLED) {
 			reg->state = REG_CANCELLED;
-			*reg_typep = reg->type;
-			granted_lifetime = 0;
-			log_(NORM, "Cancelled type = %d ok\n", *reg_typep);
-			reg_typep++;
-			num++;
+			lifetime = 0;
+			log_(NORM, "Client canceled type %d %s\n",
+					reg->type, str);
+		} else { /* skip other registration states */
+			continue;
 		}
-		reg = reg->next;
+		gettimeofday(&reg->state_time, NULL);
+		*reg_typep = reg->type;
+		reg_typep++;
+		num++;
 	}
 
 	if (num) {
 		resp->type = htons(PARAM_REG_RESPONSE);
-		num++;
-		resp->length = htons(num); /* lifetime + reg_types */
-		resp->lifetime = granted_lifetime;
+		resp->length = htons((__u16)(1 + num)); /* lifet. + reg_types */
+		resp->lifetime = lifetime;
 
 		tmp = YLIFE(resp->lifetime);
 		tmp = pow(2, tmp);
 		log_(NORM, "Registered lifetime = %d (%.3f seconds)\n",
 			resp->lifetime, tmp);
 
-		return (eight_byte_align(sizeof(tlv_reg_response)-2+num));
-	} else {
-		return 0;
+		return (eight_byte_align(sizeof(tlv_reg_response) + (num -1)));
 	}
+	return 0;
 }
 
-/* TODO: Need to add possiblity of different fail types */
-
-int build_tlv_reg_failed(__u8 *data, int location, struct reg_entry *reg_requested)
+/* TODO: support different fail types */
+int build_tlv_reg_failed(__u8 *data, struct reg_entry *regs)
 {
-	tlv_reg_failed *fail = (tlv_reg_failed*) &data[location];
+	tlv_reg_failed *fail = (tlv_reg_failed*) data;
 	__u8 *reg_typep = &(fail->reg_type);
-	__u8 failure_code = 1;
+	__u8 failure_code = REG_FAIL_TYPE_UNAVAIL;
 	__u16 num = 0;
-	struct reg_info *reg = reg_requested->regs;
+	struct reg_info *reg;
 
-	while (reg) {
-		if (reg->state == REG_SEND_FAILED) {
-			reg->state = REG_FAILED;
-			*reg_typep = reg->type;
-			failure_code = reg->failure_code;
-			log_(NORM, "Failed Registered type = %d\n", *reg_typep);
-			reg_typep++;
-			num++;
-		}
-		reg = reg->next;
+	for (reg = regs->reginfos; reg; reg = reg->next) {
+		if (reg->state != REG_SEND_FAILED)
+			continue;
+
+		reg->state = REG_FAILED;
+		gettimeofday(&reg->state_time, NULL);
+		*reg_typep = reg->type;
+		/* currently unused: */
+		/* failure_code = reg->failure_code; */
+		log_(NORM, "Failed to register client with type %d\n",
+			reg->type);
+		reg_typep++;
+		num++;
 	}
 
 	if (num) {
 		fail->type = htons(PARAM_REG_FAILED);
-		num++;
-		fail->length = htons(num); /* fail_type +reg_types */
+		fail->length = htons((__u16)(1+num)); /* fail_type+reg_types */
 		fail->fail_type = failure_code;
-		return (eight_byte_align(sizeof(tlv_reg_failed)));
-	} else {
-		return 0;
+		return (eight_byte_align(sizeof(tlv_reg_failed) + (num -1)));
 	}
-}
-
-int build_tlv_reg_required()
-{
-      /* TBD */
-        return (eight_byte_align(sizeof(tlv_reg_failed)));
-}
-
-int build_tlv_rvs_hmac(hip_assoc *hip_a, __u8 *data, int location, int type, int pos)
-{
-	hiphdr *hiph;
-	tlv_rvs_hmac *rvs_hmac;
-	unsigned int rvs_hmac_md_len;
-	unsigned char rvs_hmac_md[EVP_MAX_MD_SIZE];
-	/* compute HMAC over message */
-	hiph = (hiphdr*) data;
-	memset(rvs_hmac_md, 0, sizeof(rvs_hmac_md));
-	rvs_hmac_md_len = EVP_MAX_MD_SIZE;
-
-	if (!hip_a) {
-		log_(WARN, "State not found for building RVS HMAC.\n");
-		return(0);
-	}
-	
-	switch (hip_a->hip_transform) {
-	case ESP_AES_CBC_HMAC_SHA1:
-	case ESP_3DES_CBC_HMAC_SHA1:
-	case ESP_BLOWFISH_CBC_HMAC_SHA1:
-	case ESP_NULL_HMAC_SHA1:
-		HMAC(	EVP_sha1(), 
-			get_key(hip_a, HIP_INTEGRITY, FALSE),
-			auth_key_len(hip_a->hip_transform),
-			data, location,
-			rvs_hmac_md, &rvs_hmac_md_len  );
-		break;		
-	case ESP_3DES_CBC_HMAC_MD5:
-	case ESP_NULL_HMAC_MD5:
-		HMAC(	EVP_md5(), 
-			get_key(hip_a, HIP_INTEGRITY, FALSE),
-			auth_key_len(hip_a->hip_transform),
-			data, location,
-			rvs_hmac_md, &rvs_hmac_md_len  );
-		break;
-	default:
-		return(0);
-		break;
-	}
-
-	log_(NORM, "HMAC computed over %d bytes hdr length=%d\n ",
-	    location, hiph->hdr_len);
-
-	/* build tlv header */
-	rvs_hmac = (tlv_rvs_hmac*)  &data[location];
-	rvs_hmac->type = htons((__u16)type);
-	rvs_hmac->length = htons(sizeof(tlv_rvs_hmac) - 4);
-	
-	/* get lower 160-bits of HMAC computation */
-	memcpy( rvs_hmac->hmac, 
-		&rvs_hmac_md[rvs_hmac_md_len-sizeof(rvs_hmac->hmac)],
-		sizeof(rvs_hmac->hmac));
-
-	return(eight_byte_align(sizeof(tlv_rvs_hmac)));
+	return 0;
 }
 
 /* Create a new rekey structure in hip_a, taking into account keymat size

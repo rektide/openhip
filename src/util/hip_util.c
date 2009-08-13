@@ -793,8 +793,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
 	hip_a->spi_in		= 0;
 	hip_a->spi_out		= 0;
 	hip_a->opaque		= NULL;
-	hip_a->reg_offered	= NULL;
-	hip_a->reg_requested	= NULL;
+	hip_a->regs		= NULL;
 	hip_a->rekey		= NULL;
 	hip_a->peer_rekey	= NULL;
 	memset(&hip_a->rexmt_cache, 0, sizeof(hip_a->rexmt_cache));
@@ -847,21 +846,13 @@ int free_hip_assoc(hip_assoc *hip_a)
 		free(hip_a->rexmt_cache.packet);
 	if (hip_a->opaque)
 		free(hip_a->opaque);
-	if (hip_a->reg_offered){
-		while (hip_a->reg_offered->regs) {
-			struct reg_info *reg = hip_a->reg_offered->regs;
-			hip_a->reg_offered->regs = reg->next;
+	if (hip_a->regs){
+		while (hip_a->regs->reginfos) {
+			struct reg_info *reg = hip_a->regs->reginfos;
+			hip_a->regs->reginfos = reg->next;
 			free(reg);
 		}
-		free(hip_a->reg_offered);
-	}
-	if (hip_a->reg_requested){
-		while (hip_a->reg_requested->regs) {
-			struct reg_info *reg = hip_a->reg_requested->regs;
-			hip_a->reg_requested->regs = reg->next;
-			free(reg);
-		}
-		free(hip_a->reg_requested);
+		free(hip_a->regs);
 	}
 	if (hip_a->rekey) {
 		if (hip_a->rekey->dh)
@@ -939,8 +930,7 @@ void replace_hip_assoc(hip_assoc *a_old, hip_assoc *a_new)
 	memcpy(&a_old->rexmt_cache, &a_new->rexmt_cache, 
 			sizeof(struct hip_packet_entry));
 	a_old->opaque = a_new->opaque;
-	a_old->reg_offered = a_new->reg_offered;
-	a_old->reg_requested = a_new->reg_requested;
+	a_old->regs = a_new->regs;
 	a_old->rekey = a_new->rekey;
 	a_old->peer_rekey = a_new->peer_rekey;
 	a_old->hip_transform = a_new->hip_transform;
@@ -1058,201 +1048,6 @@ int compare_hits2(void const *s1, void const *s2)
 	} while (--n != 0);
         
 	return (0);
-}
-
-/*
- * function binsert():
- *      similar to bsearch but it returns a pointer to the position 
- *      we should insert the new element
- *
-*/
-#ifdef __WIN32__
-typedef int ssize_t;
-#endif
-void * binsert(const void *ky, const void *bs, size_t nel, size_t width, int (*compar)(const void *, const void *))
-{
-	char *base, *last, *p; /* last = last element in table */
-	ssize_t two_width;
-	int res = 0;
-
-	if (nel == 0)
-		return (NULL);
-
-	base = (char *)bs;
-	two_width = width + width;
-	last = base + width * (nel - 1);
-
-	p = base + width * ((last - base)/two_width);
-        
-	while (last >= base) {
-		res = (*compar)(ky, (void *)p);
-		if (res == 0)
-			return (NULL);  /* Key found --> no insertion */
-                
-		if (res < 0)
-			last = p - width;
-		else
-			base = p + width;
-		p = base + width * ((last - base)/two_width);
-	}
-	return (p);          /* Position where the key should be stored */
-}
-
-/*
-*
-* function log_registration()
-*
-*/
-void log_registration(hip_reg *hip_r,int k)
-{
-	log_(NORM, "Registered hit = ");
-	print_hex(hip_r[k].peer_hit, HIT_SIZE);
-	log_(NORM, "\n");
-	log_(NORM, "Registered IP = %s\n", 
-		logaddr((struct sockaddr*) &hip_r[k].peer_addr));
-	log_(NORM, "Registered lifetime = %d (%f seconds)\n", 
-		resp_lifetime, hip_r[k].lifetime);
-	log_(NORM, "Number of updates = %d\n", hip_r[k].update);
-}
-
-/*
-*
-* function print_reg_table()
-*
-*/
-void print_reg_table(hip_reg * hip_r)
-{
-	int k;
-
-	log_ (NORM,"Number of registrations: %d\n",num_hip_reg);
-	log_ (NORM, "\n");
-	log_ (NORM, "*************************************REGISTRATION TABLE*");
-	log_ (NORM, "**********************************\n");
-	log_ (NORM, "Pos.                   HIT              \tIP address\t");
-	log_ (NORM, "     Lifetime\t     Updates\n");
-        
-	for (k=0; k< num_hip_reg; k++) {
-		log_(NORM,"%d:\t", k);
-		print_hex(hip_r[k].peer_hit, HIT_SIZE);
-		log_(NORM,"\t%s\t",
-			logaddr((struct sockaddr*) &hip_r[k].peer_addr));
-		log_(NORM,"     %.3f\t", hip_r[k].lifetime);
-		log_(NORM,"     %d\n", hip_r[k].update);
-	}
-	log_(NORM, "\n");
-}
-
-/*
-*
-* function delete_reg_table ()
-*	deletes one position in the registration table
-*	returns: 0 if succesful, -1 if don't
-*
-*/
-int delete_reg_table(hip_reg key, hip_reg *hip_r)
-{
-	int i;
-	returned ret, *ret2 = &ret;
-
-	ret2 = (returned*) search_reg_table(key, hip_r, ret2);
-	if (ret2->position != -1)
-	{
-		for (i=0; i<num_hip_reg - ret2->position -1; i++)
-		{
-			memcpy(hip_r[ret2->position +i].peer_hit, 
-				hip_r[ret2->position +i+1].peer_hit,
-				sizeof(hip_hit));
-			hip_r[ret2->position +i].peer_addr = 
-				hip_r[ret2->position +i+1].peer_addr;
-			hip_r[ret2->position +i].lifetime = 
-				hip_r[ret2->position +i+1].lifetime;
-			hip_r[ret2->position +i].update = 
-				hip_r[ret2->position +i+1].update;
-		}
-		num_hip_reg --;
-	        log_(NORM,"Deleting found entry........Successfully deleted\n");
-	}
-	return (ret2->position);
-}
-
-/*
- * function insert_reg_table()
- *
- *
-*/
-int insert_reg_table(hip_reg key, hip_reg *hip_r)
-{
-	int i;
-	int distance, pos = -1;
-	hip_reg *end;	
-
-	if(num_hip_reg > 0)	
-	{
-		end  = (hip_reg*) binsert(&key, hip_r, num_hip_reg, sizeof(hip_reg), compare_hits2);
-		distance = (char *)end - (char *)hip_r;
-		pos = (int) distance / (int) sizeof(hip_reg);
-
-		if (pos == -1)	
-			pos = 0;
-		if (end!= NULL)
-		{
-			for (i=0; i<=num_hip_reg-pos; i++)
-		      	{
-       				memcpy(hip_r[num_hip_reg-i].peer_hit, hip_r[num_hip_reg-i-1].peer_hit, sizeof(hip_hit));
-                		hip_r[num_hip_reg-i].peer_addr = hip_r[num_hip_reg-i-1].peer_addr;
-				hip_r[num_hip_reg-i].lifetime = hip_r[num_hip_reg-i-1].lifetime;
-				hip_r[num_hip_reg-i].update = hip_r[num_hip_reg-i-1].update;
-				hip_r[num_hip_reg-i].hip_a = hip_r[num_hip_reg-i-1].hip_a;
-			}
-			memcpy(hip_r[pos].peer_hit, key.peer_hit, sizeof(hip_hit));
-		        hip_r[pos].peer_addr = key.peer_addr;
-        		hip_r[pos].lifetime = key.lifetime;
-	        	hip_r[pos].update = 0;
-			hip_r[pos].hip_a = key.hip_a;
-			num_hip_reg++;
-		}
-	}else if(num_hip_reg ==0)
-	{	
-		memcpy(hip_r[0].peer_hit, key.peer_hit, sizeof(hip_hit));
-	        hip_r[0].peer_addr = key.peer_addr;
-        	hip_r[0].lifetime = key.lifetime;
-	       	hip_r[0].update = 0;
-		hip_r[0].hip_a = key.hip_a;
-		num_hip_reg ++;
-		return(0);
-	}
-	return(pos);
-}
-
-/*
-*
-* function search_reg_table()
-*	searchs an entry in the registration table and returns the position in the table
-*/
-returned *search_reg_table(hip_reg key, hip_reg *hip_r, returned *ret2)
-{
-	int m, distance, pos = -1;
-	hip_reg *end;	
-
-	end  = (hip_reg*) bsearch(&key, hip_r, num_hip_reg, sizeof(hip_reg), compare_hits2);
-	distance = (char *)end - (char *)hip_r;
-	pos = (int) distance / (int) sizeof(hip_reg);
-	if (end!= NULL)
-        {
-	        unsigned char *q = (unsigned char*) hip_r[pos].peer_hit;
-		log_(NORM, "Found existing registration entry (%d) with HIT: ", pos); 
-	        for (m = 0; m < sizeof(hip_hit); m++)
-		        log_(NORM,"%.2x", q[m]);
-        	log_(NORM, " and IP address: ");
-	        log_(NORM, "%s\n",logaddr((struct sockaddr *) &hip_r[pos].peer_addr));
-	
-		ret2->position = pos;
-		ret2->update = hip_r[pos].update;
-	} else {
-		ret2->position = -1;
-		ret2->update = -1;
-	}	
-	return(ret2);
 }
 
 /*
@@ -2135,11 +1930,10 @@ void print_usage()
 #ifdef HIP_I3
 	printf("  -i3\t enable Hi3: use i3 overlay for control packets\n");    
 #endif /* HIP_I3 */
-	printf("  -m\t rendezvous server mode\n");
+	printf("  -rvs\t rendezvous server mode\n");
 #ifdef MOBILE_ROUTER
 	printf("  -mr\t mobile router mode\n");
 #endif /* MOBILE_ROUTER */
-	printf("  -mn\t mobile node (mobile router client) mode\n");
 	printf("With no options, simple output will be displayed.\n\n");
 }
 
@@ -2227,7 +2021,8 @@ __u16 checksum_packet(__u8 *data, struct sockaddr *src, struct sockaddr *dst)
 /*
  * function checksum_udp_packet()
  *
- * XXX TODO: combine with other checksum functions
+ * XXX TODO: combine with checksum_packet() function; the two functions differ
+ *           by protocol number in pseudo-header and how the length is read
  *
  * Calculates the checksum of a UDP packet with pseudo-header
  * src and dst are IPv4 or IPv6 addresses in network byte order
@@ -2488,6 +2283,54 @@ hip_assoc* find_hip_association4(hip_hit hit)
 			continue;
 		if ((hits_equal(hip_a->peer_hi->hit, hit))) {
 			return (hip_a);
+		}
+	}
+	return(NULL);
+}
+
+
+hip_assoc *search_registrations(hip_hit hit, __u8 type)
+{
+	hip_assoc *hip_a;
+	struct reg_info *reg;
+
+	hip_a = find_hip_association4(hit);
+	if (!hip_a) /* peer HIT not found */
+		return(NULL);
+
+	if (!hip_a->regs)
+		return(NULL); /* did not offer registration to this peer */
+
+	for (reg = hip_a->regs->reginfos; reg; reg = reg->next) {
+		if (type != reg->type)
+			continue;
+		if (reg->state == REG_GRANTED) {
+			return(hip_a); /* found, registration is valid */
+		} else { /* registration type matches, but state is invalid */
+			return(NULL);
+		}
+	}
+	return(NULL); /* registration type not found */
+}
+
+hip_assoc *search_registrations2(__u8 type, int state)
+{
+	int i;
+	hip_assoc* hip_a;
+	struct reg_info *reg;
+
+	for (i=0; i < max_hip_assoc; i++) {
+		hip_a = &(hip_assoc_table[i]);
+		if ((hip_a->state==0) || !hip_a->regs || !hip_a->regs->reginfos)
+			continue;
+		/* currently there are only three supported reg types,
+		 * so we're assuming this double loop is not too bad.. */
+		for (reg = hip_a->regs->reginfos; reg; reg = reg->next) {
+			if (type != reg->type)
+				continue;
+			if (state != reg->state)
+				continue;
+			return(hip_a);
 		}
 	}
 	return(NULL);
@@ -3057,5 +2900,34 @@ void print_hit(const hip_hit *hit) {
 	for (i=0; i < HIT_SIZE; i++) {
 		printf("%.2x", c[i]);
 	}
+}
+
+/*
+ * regtype_to_string()
+ *
+ * Fill the provided string with text description of this registration type.
+ * Return -1 if the type is unknown, 0 if it is a known registration type.
+ */
+int regtype_to_string(__u8 type, char *str, int str_len)
+{
+	int ret = 0;
+	switch (type) {
+	case REGTYPE_RESERVED:
+		snprintf(str, str_len, "(reserved val=0)");
+		ret = -1;
+		break;
+	case REGTYPE_RVS:
+		snprintf(str, str_len, "Rendezvous Service");
+		break;
+	case REGTYPE_RELAY_UDP_HIP:
+		snprintf(str, str_len, "UDP Relay Service");
+		break;
+	case REGTYPE_MR:
+		snprintf(str, str_len, "Mobile Router Service");
+		break;
+	default:
+		ret = -1;
+	}
+	return(ret);
 }
 

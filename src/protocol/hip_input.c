@@ -74,7 +74,8 @@
 /*
  * Local function declarations
  */
-int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti, hip_hit *hitr);
+int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
+			hip_hit *hitr);
 int hip_parse_R1(const __u8 *data, hip_assoc *hip_a);
 int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 			struct sockaddr *src, struct sockaddr *dst);
@@ -107,18 +108,14 @@ extern int next_divert_rule();
 extern void add_divert_rule(int,int,char *);
 extern void del_divert_rule(int);
 #endif
-#ifdef __WIN32__
-void set_lifetime_rvs_thread(void *void_hip_reg);
-void set_lifetime_thread(void *void_thread_arg);
-#else
-void *set_lifetime_rvs_thread(void *void_hip_reg);
-void *set_lifetime_thread(void *void_thread_arg);
-#endif
-
-/* XXX TODO: remove this global and replace with fn to check for registered
- *            servers (RVS, NAT, MR, etc)
- */
-hip_hit mobile_router_hit;
+int handle_reg_info(hip_assoc *hip_a, const __u8 *data);
+int handle_reg_request(hip_assoc *hip_a, const __u8 *data);
+int handle_reg_response(hip_assoc *hip_a, const __u8 *data);
+int handle_reg_failed(hip_assoc *hip_a, const __u8 *data);
+int add_reg_info(struct reg_entry *regs, __u8 type, int state, __u8 lifetime);
+int delete_reg_info(struct reg_entry *regs, __u8 type);
+int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
+			__u8* address);
 
 /*
  *
@@ -227,7 +224,9 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
  *
  * function hip_parse_I1()
  *
- * in:		data = pointer to hip header in received data
+ * in:		hip_a = pointer to any pre-existing association with RVS for
+ * 			verifying the RVS_HMAC parameter
+ * 		data = pointer to hip header in received data
  * 		hiti = pointer to Initiator's HIT to extract
  * 		hitr = pointer to Responder's HIT to extract
  * 		
@@ -236,12 +235,13 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
  * parse HIP Initiator packet-- has already passed initial just 
  *
  */
-int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti, hip_hit *hitr)
+int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti, 
+		hip_hit *hitr)
 {
 	int location = 0, data_len = 0, rec_num=0;
 	int last_type, type, length, len;
 	tlv_head *tlv;
-	tlv_from *tlv2;
+	tlv_from *from;
 	unsigned char *rvs_hmac;	
 
 	hiphdr *hiph = (hiphdr*) data;
@@ -250,14 +250,9 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti, hip_hit *hit
         data_len = location + ((hiph->hdr_len+1) * 8);
         location += sizeof(hiphdr);
         last_type = 0;
-        
-#ifdef SMA_CRAWLER
-        __u32 lsi_d;
-        lsi_d = ntohl(HIT2LSI(hiph->hit_sndr));
-        log_(WARN,"Initiator: [0x%X] %u.%u.%u.%u\n",lsi_d,NIPQUAD(lsi_d));
-        lsi_d = ntohl(HIT2LSI(hiph->hit_rcvr));
-        log_(WARN,"Responder: [0x%X] %u.%u.%u.%u\n",lsi_d,NIPQUAD(lsi_d));
-#endif
+
+	if (hits_equal(*hiti, zero_hit))
+		return(-1);
         
 	while (location < data_len) {
                 tlv = (tlv_head*) &data[location];
@@ -274,19 +269,23 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti, hip_hit *hit
                         last_type = type;
                 
                 if (type == PARAM_FROM) {
-			if(!OPT.rvs)
-			{
-				tlv2 = (tlv_from*) &data[location];
-				memcpy(&fr2.ip_from, tlv2->addr, sizeof(struct sockaddr_storage));
-				fr2.add_via_rvs = TRUE;
+			from = (tlv_from*) &data[location];
+			if (!hip_a) {
+				log_(WARN, "I1 contains FROM but there " \
+					   "is no association.\n");
+				return(-1);
 			}
+			if (length > (sizeof(tlv_from) - 4)) {
+				log_(NORM, "Ignoring extra address data.\n");
+			}
+			add_from_via(hip_a, PARAM_FROM, NULL, from->address);
 		} else if (type == PARAM_RVS_HMAC){
 			if (!hip_a) {
 				log_(WARN, "I1 contains RVS_HMAC but there " \
 					   "is no association.\n");
 				return(-1);
 			}
-			rvs_hmac = ((tlv_rvs_hmac*)tlv)->hmac;
+			rvs_hmac = ((tlv_hmac*)tlv)->hmac;
                         /* reset the length and checksum for the HMAC */
        	                len = eight_byte_align(location);
                	        hiph->checksum = 0;
@@ -297,6 +296,10 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti, hip_hit *hit
                                	get_key(hip_a, HIP_INTEGRITY, TRUE),
                                 hip_a->hip_transform)) {
        	                        log_(WARN, "Invalid RVS_HMAC.\n");
+				if (hip_a->from_via) {
+					free(hip_a->from_via);
+					hip_a->from_via = NULL;
+				}
                	                if (!OPT.permissive)
                        	                return(-1);
                         } else {
@@ -308,8 +311,6 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti, hip_hit *hit
                 }
                 location += tlv_length_to_parameter_length(length);
 	}
-	if (hits_equal(*hiti, zero_hit))
-		return(-1);
 	return(0);
 }
 
@@ -326,9 +327,10 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 	hi_node* peer_host_id = NULL;
 	int err=0;
 	int state = UNASSOCIATED;
-	returned ret, *ret2;
 	hiphdr *hiph;
-	hip_assoc *hip_rvs;
+	__u8 *addrp;
+	hip_assoc *hip_a_rvs = NULL, *hip_a_client = NULL;
+
 	hiph = (hiphdr*) buff;
 
 	if (hip_a) {
@@ -338,9 +340,9 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 	/* send R1 in any state, except E_FAILED */
 	if (state < E_FAILED) {
 		/* Find hip_assoc between RVS and Responder for RVS_HMAC 
-		 * verification if this is an relayed I1 */
-		hip_rvs = find_hip_association3(src, dst);
-		if (hip_parse_I1(hip_rvs, buff, &hiti, &hitr) < 0) {
+		 * verification if this is a relayed I1 */
+		hip_a_rvs = find_hip_association3(src, dst);
+		if (hip_parse_I1(hip_a_rvs, buff, &hiti, &hitr) < 0) {
 			log_(WARN, "Bad I1, dropping.\n");
 			return(-1);
 		}
@@ -350,27 +352,18 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 		 */
 		my_host_id = check_if_my_hit(&hitr);
 		if (!my_host_id  && OPT.rvs) {   
-			/* add the from parameter in the I1 packet to relay */
-			hip_reg key;
-			memcpy(key.peer_hit, hitr, sizeof(hip_hit));
-			ret2 = &ret;
-			/* gives the position where 
-			 * it is stored the IP of the hit_rcvr */
-			ret2 = search_reg_table(key,hip_reg_table,ret2);
-			if (ret2->position == -1) {
-				log_ (NORMT, "Received I1 with a receiver " \
-					     "HIT that has not been " \
-					     "registered with this RVS.\n");
-				return (-1);
+			hip_a_client = search_registrations(hitr, REGTYPE_RVS);
+			if (!hip_a_client) {
+				log_ (NORMT, "Received I1 with a receiver "
+					     "HIT that does not have a current"
+					     "registration with this RVS.\n");
+				return(-1);
 			}
-			no_R1 = TRUE;
-			fr.add_from = TRUE;
-			memcpy(fr.hit_from, hiph->hit_sndr, HIT_SIZE);
-			memcpy(&fr.ip_rvs, dst,sizeof(struct sockaddr_storage));
-			memcpy(&fr.ip_from, src,
-			    sizeof(struct sockaddr_storage));
-			/* relay the I1 packet */
-			hip_send_I1(&hiph->hit_rcvr, NULL, ret2->position);
+			if (add_from_via(hip_a_client, PARAM_FROM, src, NULL)<0)
+				return(-1);
+			/* relay the I1 packet, and don't send any R1  */
+			hip_send_I1(&hiph->hit_sndr, hip_a_client);
+			return(0);
 		} else if (!my_host_id) { /* not in RVS mode, drop I1 */
 			log_(NORMT, "Received I1 with unknown receiver HIT:\n");
 			memset(&addr, 0, sizeof(addr));
@@ -416,17 +409,39 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 		}
 		/* local HIT is greater than peer HIT, send R1... */
 	}
-	if (no_R1) {
-		no_R1 = FALSE;  /* the I1 packet has already been relayed */
-		return(0);
+	/*
+	 * Relayed I1 from RVS, send to address in FROM parameter and fill
+	 * in address for VIA_RVS parameter.
+	 */
+	if (hip_a_rvs && hip_a_rvs->from_via) { 
+		/* get address from FROM parameter */
+		memset(&addr, 0, sizeof(addr));
+		if (IN6_IS_ADDR_V4MAPPED( (struct in6_addr*) 
+					  hip_a_rvs->from_via->address)) {
+			addr.ss_family = AF_INET;
+			addrp = &hip_a_rvs->from_via->address[12];
+		} else {
+			addr.ss_family = AF_INET6;
+			addrp = &hip_a_rvs->from_via->address[0];
+		}
+		memcpy(SA2IP(&addr), addrp, SAIPLEN(&addr));
+		src = SA(&addr);
+		if (HIPA_DST(hip_a_rvs)->sa_family == AF_INET)
+			((struct sockaddr_in *)src)->sin_port =
+			  ((struct sockaddr_in *)HIPA_DST(hip_a_rvs))->sin_port;
+		log_(NORM, "Relayed I1 from RVS %s, ",
+			logaddr(HIPA_DST(hip_a_rvs))); 
+		log_(NORM, "using %s as new destination address.\n",
+			logaddr(src));
+		/* store RVS address for VIA_RVS parameter */
+		add_from_via(hip_a_rvs, PARAM_VIA_RVS, 
+				HIPA_DST(hip_a_rvs), NULL);
 	}
+
 	/*
 	 * Send a pre-computed R1
 	 */
-	if (fr2.add_via_rvs) {
-		src = (struct sockaddr*) &fr2.ip_from;
-	}
-	if ((err = hip_send_R1(dst, src, &hiti, my_host_id)) > 0) {
+	if ((err = hip_send_R1(dst, src, &hiti, my_host_id, hip_a_rvs)) > 0) {
 		log_(NORMT, "Sent R1 (%d bytes)\n", err);
 	} else {
 		log_(NORMT, "Failed to send R1: %s.\n", strerror(errno));
@@ -462,9 +477,10 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 	dh_cache_entry *dh_entry;
 	hi_node saved_peer_hi;
 	hipcookie cookie_tmp = {0, 0, 0, 0};
-	tlv_reg_info *info;
 	__u64 gen;
 	__u8 valid_cert = FALSE;
+	tlv_via_rvs *via;
+	struct sockaddr_storage rvs_addr;
 
 	location = 0;
 	hiph = (hiphdr*) &data[location];
@@ -648,57 +664,28 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 				hip_a->opaque->opaque_nosig = 
 					(type == PARAM_ECHO_REQUEST_NOSIG);
 			}
-		} else if (type == PARAM_REG_INFO){	/* R1 packet */
-			__u8 *reg_typep;
-			int i;
-			struct reg_info *reg = NULL;
-
-			info = (tlv_reg_info *) &data[location];
-			reg_typep = &(info->reg_type);
-
-			hip_a->reg_offered = (struct reg_entry *)
-				malloc(sizeof(struct reg_entry));
-			if (hip_a->reg_offered == NULL) {
-				log_(NORM,"Malloc err: PARAM_REG_INFO\n");
-				return(-1);
+		} else if (type == PARAM_REG_INFO) {	/* R1 packet */
+			log_(NORM, "Peer is a registrar providing registration "
+				"info in its R1 packet.\n");
+			if (handle_reg_info(hip_a, &data[location]) < 0) {
+				log_(WARN, "Problem with registration info.\n");
 			}
-			hip_a->reg_offered->regs = NULL;
-			hip_a->reg_offered->number = length - 2;
-			hip_a->reg_offered->min_lifetime = info->min_lifetime;
-			hip_a->reg_offered->max_lifetime = info->max_lifetime;
-			for (i = 0; i < length - 2; i++, reg_typep++) {
-				log_(NORM,"Registration type %d offered\n",
-					*reg_typep);
-				reg = (struct reg_info *)
-					malloc(sizeof(struct reg_info));
-				if (reg == NULL) {
-					log_(NORM,
-						"Malloc err: PARAM_REG_INFO\n");
-					return(-1);
-				}
-				reg->type = *reg_typep;
-				reg->state = REG_OFFERED;
-				gettimeofday(&reg->state_time, NULL);
-				reg->next = hip_a->reg_offered->regs;
-				hip_a->reg_offered->regs = reg;
-				if (*reg_typep == REGTYPE_RVS  &&  !OPT.rvs) {
-					add_reg_request = TRUE;
-				/* global variables used in case of 
-				 * failed registration */
-				min_life = info->min_lifetime;
-				max_life = info->max_lifetime;
-					reg_type = *reg_typep;
-				} else if (*reg_typep == REGTYPE_MR) {
-					/* Request mobile routing service */
-					/* in I2 if we are a mobile node */
-				}
+		} else if (type == PARAM_VIA_RVS) {
+			via = (tlv_via_rvs *) &data[location];
+			if (IN6_IS_ADDR_V4MAPPED(
+					(struct in6_addr*)via->address)) {
+				rvs_addr.ss_family = AF_INET;
+				memcpy(SA2IP(&rvs_addr), &via->address[12],
+						SAIPLEN(&rvs_addr));
+			} else {
+				rvs_addr.ss_family = AF_INET;
+				memcpy(SA2IP(&rvs_addr), via->address,
+						SAIPLEN(&rvs_addr));
 			}
-		} else if (type == PARAM_VIA_RVS){
-			if(!OPT.rvs) {
-				/* we could check if the param_via_rvs is 
-				 * the same address that the rvs we used
-				 * for the relay */
-			}
+			log_(NORM, "R1 packet came from the Rendezvous Server "
+				"address %s.\n", logaddr(SA(&rvs_addr)));
+			/* we could check if the VIA RVS address is the same one
+			 * that we used for the relay */
 		} else if ((type == PARAM_HOST_ID) || 
 			   (type == PARAM_HIP_SIGNATURE_2)) {
 			/* these parameters already processed */
@@ -813,10 +800,9 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 		struct sockaddr *src, struct sockaddr *dst)
 {
 	hiphdr *hiph;
-	int location, data_len, pos;
+	int location, data_len;
 	int i, j, len, key_len, iv_len, last_type=0, err=0;
 	int type, length;
-	double tmp = 0;
 	hip_assoc *hip_a=NULL, *hip_a_existing;
 	__u16 proposed_keymat_index = 0;
 	__u32 proposed_spi_out=0;
@@ -825,11 +811,6 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 	unsigned char *hmac;
 	hipcookie cookie;
 	__u64 solution=0, r1count=0;
-	hip_reg insert_key;
-#ifndef __WIN32__
-	pthread_attr_t attr;
-	pthread_t thr;
-#endif /* __WIN32__ */
 	__u16 *p;
 	__u8 g_id=0;
 	unsigned char *dh_secret_key;
@@ -1227,115 +1208,13 @@ I2_ERROR:
 			}
 			/* exit w/OK */
 			status = 0;
-		} else if (type == PARAM_REG_REQUEST){	/* I2 packet */
-			int i; 
-			tlv_reg_request *req = (tlv_reg_request *)
-				&data[location];
-			__u8 *reg_typep = &(req->reg_type);
-			struct reg_info *reg;
-
-			hip_a->reg_requested = (struct reg_entry *)
-				malloc(sizeof(struct reg_entry));
-			if (hip_a->reg_requested == NULL) {
-				log_(NORM,"Malloc err: PARAM_REG_REQUEST\n");
-				return(-1);
+		} else if (type == PARAM_REG_REQUEST) {	/* I2 packet */
+			log_(NORM, "Peer has requested registration(s) in its"
+				" I2 packet.\n");
+			if (handle_reg_request(hip_a, &data[location]) < 0) {
+				log_(WARN, "Problem with registration "
+					"request.\n");
 			}
-			hip_a->reg_requested->regs = NULL;
-			hip_a->reg_requested->number = length - 1;
-
-					/* check if lt is a correct value */
-
-						resp_lifetime = req->lifetime;
-                                         
-			if (resp_lifetime < HCNF.min_lifetime)
-					    resp_lifetime = HCNF.min_lifetime;
-			else if (resp_lifetime > HCNF.max_lifetime)
-					    resp_lifetime = HCNF.max_lifetime;
-
-			for (i = 0; i < length - 1; i++, reg_typep++) {
-				reg = (struct reg_info *)
-					malloc(sizeof(struct reg_info));
-				if (reg == NULL) {
-					log_(NORM,
-						"Malloc err: "
-						"PARAM_REG_REQUEST\n");
-					return(-1);
-				}
-				log_(NORM,"Registration type %d requested\n",
-					*reg_typep);
-				reg->type = *reg_typep;
-				reg->state = REG_REQUESTED;
-				reg->requested_lifetime = req->lifetime;
-				gettimeofday(&reg->state_time, NULL);
-				reg->next = hip_a->reg_requested->regs;
-				hip_a->reg_requested->regs = reg;
-				if (*reg_typep == REGTYPE_RVS && OPT.rvs)
-				{
-					/* when sending R2, add a reg_response parameter */
-					add_reg_response = TRUE;
-					resp_reg_type = *reg_typep;
-					reg->state = REG_SEND_RESP;
-					reg->granted_lifetime = resp_lifetime;
-					gettimeofday(&reg->state_time, NULL);
-					/* add HIT, IP, lt and number of updates in a table */
-					memcpy(insert_key.peer_hit, hiph->hit_sndr, sizeof(hip_hit));
-					insert_key.peer_addr = hip_a->peer_hi->addrs.addr;
-					insert_key.update = 0;
-					insert_key.hip_a = hip_a;
-					tmp = YLIFE(resp_lifetime);
-					insert_key.lifetime = pow(2,tmp);
-					pos = insert_reg_table(insert_key, hip_reg_table);
-					if (pos >= 0) {
-						if (req->lifetime <= HCNF.max_lifetime && 
-						    req->lifetime >= HCNF.min_lifetime)
-						log_(NORM, "Registration ok\n");
-						else if (req->lifetime < HCNF.min_lifetime || 
-							 req->lifetime > HCNF.max_lifetime)
-							log_(NORM, "Registration ok with granted lifetime different "
-								"from requested\n");
-						log_registration(hip_reg_table, pos);
-						print_reg_table(hip_reg_table);
-						
-						/* set lifetime */
-#ifdef __WIN32__
-						_beginthread(set_lifetime_rvs_thread,0, &hip_reg_table[pos]);
-#else /* __WIN32__ */
-						pthread_attr_init(&attr);
-						pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-			      			pthread_create(&thr, &attr, set_lifetime_rvs_thread,
-						&hip_reg_table[pos]);
-#endif /* __WIN32__ */
-					}
-#ifdef MOBILE_ROUTER
- 				} else if (*reg_typep == REGTYPE_MR) {
-					if (OPT.mr) {
-						if (init_hip_mr_client(
-							hiph->hit_sndr,
-							src) < 0) {
-						log_(WARN,"Error initializing "
-						    "mobile router client\n");
-						}
-						reg->state = REG_SEND_RESP;
-						reg->granted_lifetime =
-							resp_lifetime;
-						gettimeofday(&reg->state_time,
-							NULL);
-					} else {
-						reg->state = REG_SEND_FAILED;
-						reg->failure_code =
-							REG_FAIL_TYPE_UNAVAIL;
-					}
-#endif /* MOBILE_ROUTER */
-				} else { /* Unknown or unsupported type */
-					reg->state = REG_SEND_FAILED;
-					reg->failure_code =
-						REG_FAIL_TYPE_UNAVAIL;
-					gettimeofday(&reg->state_time, NULL);
-					add_reg_failed = TRUE;
-					fail_type = 1;
-					fail_reg_type = *reg_typep;
-				}
- 			}
 		} else if (type == PARAM_ESP_INFO_NOSIG) {
 			esp_info = (tlv_esp_info*)tlv;
 			hip_a->spi_nat = ntohl(esp_info->new_spi);
@@ -1574,13 +1453,6 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 	__u16 proposed_keymat_index=0;
 	__u32 proposed_spi_out=0;
 				
-	thread_arg *arg;
-#ifndef __WIN32__
-	pthread_attr_t attr;
-	pthread_t thr;
-#endif /* __WIN32__ */
-	double tmp;
-
 	location = 0;
 	hi_loc = 0;
 	hiph = (hiphdr*) &data[location];
@@ -1655,101 +1527,18 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 				hip_a->keymat_index = proposed_keymat_index;
 			return(0);
 		} else if (type == PARAM_REG_RESPONSE) {  	/* R2 packet */
-			int i;
-			tlv_reg_response *resp = (tlv_reg_response *)
-				&data[location];
-			__u8 *reg_typep = &(resp->reg_type);
-			struct reg_info *reg;
-
-			for (i = 0; i < length - 1; i++, reg_type++) {
-				reg = hip_a->reg_offered->regs;
-				while (reg) {
-					if (reg->type == *reg_typep)
-						break;
-					reg = reg->next;
-				}
-				if (!reg)
-					continue;
-				log_(NORM,"Registration type %d ok\n",
-					*reg_typep);
-				reg->state = REG_GRANTED;
-				reg->granted_lifetime = resp->lifetime;
-				gettimeofday(&reg->state_time, NULL);
-				if (*reg_typep == REGTYPE_RVS  &&  !OPT.rvs) {
-				arg = (thread_arg *)malloc(sizeof(thread_arg));	
-				memset(arg, 0, sizeof(thread_arg));
-				
-				/* print the registered parameters */
-				log_(NORM, "Registration ok\n");
-				tmp = YLIFE (resp->lifetime);
-				tmp = pow (2, tmp);
-				log_(NORM,
-				    "Registered lifetime = %d (%f seconds)\n",
-				    resp->lifetime, tmp);
-				log_(NORM, "Registered type = %d\n",
-				    *reg_typep);
-				
-				memcpy(&arg->hip_header, hiph, sizeof(hiphdr));					
-				memcpy(&arg->resp, resp,
-					sizeof(tlv_reg_response));
-
-				/* set lifetime */
-#ifdef __WIN32__
-				_beginthread(set_lifetime_rvs_thread, 0, arg);
-#else /* __WIN32__ */
-				pthread_attr_init(&attr);
-                                pthread_attr_setdetachstate(&attr, 
-					PTHREAD_CREATE_DETACHED);
-				pthread_create(&thr, &attr, 
-					set_lifetime_thread, arg);
-#endif /* __WIN32__ */
-				} else if (*reg_typep == REGTYPE_MR  &&
-						OPT.mn) {
-				memcpy(mobile_router_hit, hip_a->peer_hi->hit,
-					sizeof(hip_hit));
-				log_(NORM, "Registered with Mobile Router\n");
-				}
+			log_(NORM, "Received response from registrar in the R2 "
+				"packet.\n");
+			if (handle_reg_response(hip_a, &data[location]) < 0) {
+				log_(WARN, "Problem with registration "
+					"response.\n");
 			}
 		} else if (type == PARAM_REG_FAILED) {		/* R2 packet */
-			int i;
-			tlv_reg_failed *fail = (tlv_reg_failed *)
-				&data[location];
-			__u8 *reg_typep = &(fail->reg_type);
-			struct reg_info *reg;
-
-			for (i = 0; i < length - 1; i++, reg_typep++) {
-				reg = hip_a->reg_offered->regs;
-				while (reg) {
-					if (reg->type == *reg_typep)
-						break;
-					reg = reg->next;
-				}
-				if (!reg)
-					continue;
-				log_(NORM,"Registration type %d failed"
-					"with failure code %d\n",
-					*reg_typep, fail->fail_type);
-				reg->state = REG_FAILED;
-				reg->failure_code = fail->fail_type;
-				gettimeofday(&reg->state_time, NULL);
-				if (*reg_typep == REGTYPE_RVS && !OPT.rvs) {
-				/* check what type of error received */
-				/* failed in the registration type */
-				if (fail->fail_type == 1)
-				{
-					log_(NORM,"Registration ko\nError");
-					log_(NORM,"in the registration type\n");
-					add_reg_request = TRUE;
-					repeat_reg = 1;
-					repeat_type = *reg_typep;	
-					log_(NORM,"Set new registration type ");
-					log_(NORM, "as the offered: %d\n",
-						repeat_type);
-					need_to_send_update2= TRUE;
-				}
-				} else if (*reg_typep == REGTYPE_MR  &&
-						OPT.mn) {
-				}
+			log_(NORM, "Received failure from registrar in "
+				"UPDATE packet.\n");
+			if (handle_reg_failed(hip_a, &data[location]) < 0) {
+				log_(WARN, "Problem with registration "
+					"failure.\n");
 			}
 		} else {
 			if (check_tlv_unknown_critical(type, length) < 0) {
@@ -1770,6 +1559,7 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
 {
 	int err=0;
+	hip_assoc *hip_mr;
 
 	/* R2 is only accepted in state I2_SENT */
 	if (hip_a->state != I2_SENT) {
@@ -1819,30 +1609,17 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
 		log_hipa_fromto(QOUT, "Base exchange completed", 
 				hip_a, TRUE, TRUE);
 		set_state(hip_a, ESTABLISHED);
-		if (need_to_send_update2) {
-			need_to_send_update2 = FALSE;
-			if ((err = hip_send_update(hip_a, NULL, NULL)) > 0) {
-				log_(NORM, "Sent UPDATE (%d bytes)\n", err);
+		hip_mr = search_registrations2(REGTYPE_MR, REG_GRANTED);
+		if (hip_mr && 
+		    !hits_equal(hip_mr->peer_hi->hit, hip_a->peer_hi->hit)) {
+			/* we are registered with a mobile router service and
+			 * this association is not the one with the mr, so
+			 * create a proxy ticket */
+			if (draw_mr_key(hip_a, hip_a->keymat_index) < 0) {
+				log_(WARN, "Failed to draw mobile router key");
 			} else {
-				log_(WARN, "Failed to send UPDATE: %s.\n",
-					strerror(errno));
-			}
-		}
-		if (OPT.mn  &&
-                    !hits_equal(mobile_router_hit, hip_a->peer_hi->hit)) {
-			hip_assoc *hip_mr =
-				find_hip_association4(mobile_router_hit);
-			if (hip_mr) {
-				__u16 keymat_index = hip_a->keymat_index;
-				if (draw_mr_key(hip_a, hip_a->keymat_index)
-					 < 0) {
-					log_(WARN, "Failed to draw mobile "
-						"router key");
-				} else {
-					hip_a->mr_keymat_index = keymat_index;
-					hip_send_update_proxy_ticket(
-						hip_mr, hip_a);
-				}
+				hip_a->mr_keymat_index = hip_a->keymat_index;
+				hip_send_update_proxy_ticket(hip_mr, hip_a);
 			}
 		}
 	} else {
@@ -1868,20 +1645,11 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
     __u32 *nonce, struct sockaddr *src)
 {
 	hiphdr *hiph;
-	int location, len, data_len, pos; 
+	int location, len, data_len; 
 	int type, length, last_type=0, status;
 	int loc_count, loc_len;
 	int sig_verified=FALSE, hmac_verified=FALSE, ticket_verified=FALSE;
 	tlv_head *tlv;
-	returned ret, *ret2 = &ret;
-	double tmp = 0;
-	hip_reg insert_key;
-	tlv_reg_info *inf;
-	hip_reg key;
-#ifndef __WIN32__
-	pthread_attr_t attr;
-	pthread_t thr;
-#endif /* __WIN32__ */
 	__u32 new_spi=0;
 	__u8 g_id=0, *hmac, *p;
 	locator *locators[MAX_LOCATORS];
@@ -2032,36 +1800,6 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 				len -= loc_len;
 				loc_count++;
 			}
-			/* in case it's registered in the rvs, 
-			 * change the IP address */
-			if(OPT.rvs) {
-				/* XXX clean this up to its own function:
-				 * 		handle_reg_locator()
-				 */
-				hip_reg key;
-         	                
-				memcpy(key.peer_hit, hiph->hit_sndr,
-					sizeof(hip_hit));
-                	        
-				/* XXX should verify src before using it,
-				 *     or instead use locator
-				 */
-				ret2 = search_reg_table(key,hip_reg_table,ret2);
-				if (ret2->position!= -1)
-					if(memcmp(SA2IP(&hip_reg_table[ret2->position].peer_addr), 
-						SA2IP((struct sockaddr_storage *)src), SAIPLEN(&hip_reg_table[ret2->position].peer_addr)) !=0)
-					{
-					    pthread_mutex_lock(&hip_reg_table[
-					     ret2->position].peer_addr_mutex);
-					    hip_reg_table[
-						ret2->position].peer_addr = 
-						*(struct sockaddr_storage *)src;
-				            pthread_mutex_unlock(&hip_reg_table[
-					     ret2->position].peer_addr_mutex);
-					}
-				print_reg_table(hip_reg_table);
-			}
-			add_reg_info = FALSE;
 		} else if (type == PARAM_ESP_INFO) {
 			esp_info = (tlv_esp_info *) tlv;
 			new_spi = ntohl(esp_info->new_spi);
@@ -2133,379 +1871,32 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 #else /* MOBILE_ROUTER */
 			log_(WARN, "Ignoring proxy ticket in UPDATE packet.\n");
 #endif /* MOBILE_ROUTER */
-		} else if (type == PARAM_REG_INFO){	/*update packet */
-			int i;
-			tlv_reg_info *info = (tlv_reg_info *) &data[location];
-			__u8 *reg_typep = &(info->reg_type);
-			struct reg_info *reg = NULL;
-
-			if (!hip_a->reg_offered) {
-				hip_a->reg_offered = (struct reg_entry *)
-					malloc(sizeof(struct reg_entry));
-				if (hip_a->reg_offered == NULL) {
-					log_(NORM,"Malloc err: "
-						"PARAM_REG_INFO\n");
-					return(-1);
-				}
-				hip_a->reg_offered->regs = NULL;
-				hip_a->reg_offered->number = 0;
-			}
-			hip_a->reg_offered->min_lifetime = info->min_lifetime;
-			hip_a->reg_offered->max_lifetime = info->max_lifetime;
-			for (i = 0; i < length - 2; i++, reg_typep++) {
-				log_(NORM,"Registration type %d offered\n",
-					*reg_typep);
-				reg = hip_a->reg_offered->regs;
-				while (reg) {
-					if (reg->type == *reg_typep)
-						break;
-					reg = reg->next;
-				}
-				if (!reg) {
-					reg = (struct reg_info *)
-						malloc(sizeof(struct reg_info));
-					if (reg == NULL) {
-						log_(NORM,
-							"Malloc err: "
-							"PARAM_REG_INFO\n");
-						return(-1);
-					}
-					reg->type = *reg_typep;
-					reg->state = REG_OFFERED;
-					gettimeofday(&reg->state_time, NULL);
-					reg->next = hip_a->reg_offered->regs;
-					hip_a->reg_offered->regs = reg;
-					hip_a->reg_offered->number++;
-				} else {
-					continue;
-				}
-				if (*reg_typep == REGTYPE_RVS  &&  !OPT.rvs) {
-				add_reg_request = TRUE;
-				inf = (tlv_reg_info*) &data[location];
-				/* global variables used in case of 
-				 * failed registration */
-				min_life = inf->min_lifetime;
-				max_life = inf->max_lifetime;
-					reg_type = *reg_typep;
-				
-				need_to_send_update2 = TRUE;
-				} else if (*reg_typep == REGTYPE_MR) {
-					/* Request mobile routing service */
-					/* in I2 if we are a mobile node */
-				}
+		} else if (type == PARAM_REG_INFO){	/* update packet */
+			log_(NORM, "Peer is a registrar providing registration "
+				"info in its UPDATE packet.\n");
+			if (handle_reg_info(hip_a, &data[location]) < 0) {
+				log_(WARN, "Problem with registration info.\n");
 			}
 		} else if (type == PARAM_REG_REQUEST){	/* update packet */
-			int i; 
-			tlv_reg_request *req = (tlv_reg_request *)
-				&data[location];
-			__u8 *reg_typep = &(req->reg_type);
-			struct reg_info *reg;
-
-			if (!hip_a->reg_requested) {
-				hip_a->reg_requested = (struct reg_entry *)
-					malloc(sizeof(struct reg_entry));
-				if (hip_a->reg_requested == NULL) {
-					log_(NORM,"Malloc err: "
-						"PARAM_REG_REQUEST\n");
-					return(-1);
-				}
-				hip_a->reg_requested->regs = NULL;
-				hip_a->reg_requested->number = 0;
-			}
-                	                
-					/* check if lt is a correct value */
-			/* Zero means cancel */
-
-						resp_lifetime = req->lifetime;
-
-			if (resp_lifetime == 0)
-				;
-			else if (resp_lifetime < HCNF.min_lifetime)
-						resp_lifetime=HCNF.min_lifetime;
-			else if (resp_lifetime > HCNF.max_lifetime)
-						resp_lifetime=HCNF.max_lifetime;
-
-			for (i = 0; i < length - 1; i++, reg_typep++) {
-				reg = hip_a->reg_requested->regs;
-				while (reg) {
-					if (reg->type == *reg_typep)
-						break;
-					reg = reg->next;
-				}
-				if (!reg) {
-					if (resp_lifetime == 0)
-						continue;
-					reg = (struct reg_info *)
-						malloc(sizeof(struct reg_info));
-					if (reg == NULL) {
-						log_(NORM,
-							"Malloc err: "
-							"PARAM_REG_REQUEST\n");
-						return(-1);
-					}
-					reg->type = *reg_typep;
-					reg->next = hip_a->reg_requested->regs;
-					hip_a->reg_requested->regs = reg;
-					hip_a->reg_requested->number++;
-				}
-				reg->requested_lifetime = req->lifetime;
-				gettimeofday(&reg->state_time, NULL);
-				if (resp_lifetime == 0) {
-					log_(NORM,"Registration type %d "
-						"cancelled\n", *reg_typep);
-					reg->state = REG_SEND_CANCELLED;
-					continue;
-				} else {
-					log_(NORM,"Registration type %d "
-						"requested\n", *reg_typep);
-					reg->state = REG_REQUESTED;
-				}
-			/* XXX clean this up to its own function:
-			 *  		handle_reg_request() 
-			 */
-				if (*reg_typep == REGTYPE_RVS)
-				{
-					if(OPT.rvs) {
-					add_reg_response = TRUE;
-					resp_reg_type = *reg_typep;
-					reg->state = REG_SEND_RESP;
-					reg->granted_lifetime = resp_lifetime;
-					gettimeofday(&reg->state_time, NULL);
-					memcpy(key.peer_hit, hiph->hit_sndr, 
-						sizeof(hip_hit));
-					ret2 = search_reg_table(
-						    key, hip_reg_table, ret2);
-					/* check if there is an entry in the
-					   registration table (update) or it's 
-					   an update from a failed 
-					   registration */
-					if (ret2->position != -1) {
-						/* entry found in 
-						 * registration table */
-						memcpy(hip_reg_table[
-						    ret2->position].peer_hit,
-						    hiph->hit_sndr,
-						    sizeof(hip_hit));
-						hip_reg_table[
-						    ret2->position].peer_addr =
-						     hip_a->peer_hi->addrs.addr;
-						tmp = YLIFE(resp_lifetime);
-						hip_reg_table[
-						     ret2->position].lifetime =
-						      pow(2,tmp);
-						hip_reg_table[
-						     ret2->position].update++;
-						if (req->lifetime <= 
-						    HCNF.max_lifetime && 
-						    req->lifetime >= 
-						    HCNF.min_lifetime)
-							log_(NORM, "Succesful update\n");
-						else if (req->lifetime < 
-							 HCNF.min_lifetime ||
-							 req->lifetime > 
-							 HCNF.max_lifetime)
-							log_(NORM, "Succesful update with granted lifetime different from the requested\n");
-						log_registration(hip_reg_table,
-							ret2->position);
-						print_reg_table(hip_reg_table);						
-						/* set lifetime */
-#ifdef __WIN32__
-						_beginthread(
-						    set_lifetime_rvs_thread,0,
-						    &hip_reg_table[
-						      ret2->position]);
-#else /* __WIN32__ */
-						pthread_attr_init(&attr);
-						pthread_attr_setdetachstate(
-						    &attr,
-						    PTHREAD_CREATE_DETACHED);
-						pthread_create(&thr, &attr,
-						    set_lifetime_rvs_thread,
-						    &hip_reg_table[
-						      ret2->position]);
-#endif /* __WIN32__ */
-						
-						need_to_send_update2 = TRUE;
-			/* entry not found. add a new one : HIT,IP, lifetime */
-					} else if (ret2->position == -1) {
-						memset(&insert_key, 0,
-							sizeof(hip_reg));
-						memcpy(insert_key.peer_hit,
-							hiph->hit_sndr,
-							sizeof(hip_hit));
-						insert_key.peer_addr = 
-						    hip_a->peer_hi->addrs.addr;
-						tmp = YLIFE(resp_lifetime);
-						insert_key.lifetime =pow(2,tmp);
-						insert_key.update++;
-						insert_key.hip_a = hip_a;
-						pos = insert_reg_table(
-								insert_key,
-								hip_reg_table);
-						if (pos >= 0) {
-						log_(NORM, "Registration ok\n");
-						log_registration(hip_reg_table,
-								pos);
- 	        		                       	
-						print_reg_table(hip_reg_table);
-							
-						/* set lifetime */
-#ifdef __WIN32__
-						_beginthread(
-						    set_lifetime_rvs_thread,0,
-						    &hip_reg_table[pos]);
-#else /* __WIN32__ */
-						pthread_attr_init(&attr);
-						pthread_attr_setdetachstate(
-						    &attr, 
-						    PTHREAD_CREATE_DETACHED);
-                                                
-						pthread_create(&thr, &attr,
-						    set_lifetime_rvs_thread,
-						    &hip_reg_table[pos]);
-#endif /* __WIN32__ */
-						need_to_send_update2 = TRUE;
-						}
-					}
-				} else {
-					/* error in the type of registration....
-					 * suppose fail_type 1 */
-					reg->state = REG_SEND_FAILED;
-					reg->failure_code = REG_FAIL_TYPE_UNAVAIL;
-					gettimeofday(&reg->state_time, NULL);
-					add_reg_failed = TRUE;
-					fail_type = 1;
-					fail_reg_type = *reg_typep;
-					log_(NORM,"Registration type failed\n");
-					/* Look for a registration entry in 
-					 * the registration table */
-					memcpy(key.peer_hit, hiph->hit_sndr,
-						sizeof(hip_hit));
-					pos = delete_reg_table(key,
-						hip_reg_table);
-					if (ret2->position == -1) {
-					    log_(NORM, "Unsuccessful update\n");
-					    print_reg_table(hip_reg_table);
-					}
-					/* send update packet with 
-					 * reg_failed included */
-					need_to_send_update2 = TRUE;
-			} /* if (OPT.rvs) */
-#ifdef MOBILE_ROUTER
-				} else if (*reg_typep == REGTYPE_MR && OPT.mr) {
-					reg->state = REG_SEND_RESP;
-					reg->granted_lifetime = resp_lifetime;
-					gettimeofday(&reg->state_time, NULL);
-#endif /* MOBILE_ROUTER */
-				} else { /* Unknown type */
-					reg->state = REG_SEND_FAILED;
-					reg->failure_code =
-						REG_FAIL_TYPE_UNAVAIL;
-					gettimeofday(&reg->state_time, NULL);
-				}
+			log_(NORM, "Peer has requested registration(s) in its "
+				"UPDATE packet.\n");
+			if (handle_reg_request(hip_a, &data[location]) < 0) {
+				log_(WARN, "Problem with registration "
+					"request.\n");
 			}
 		} else if (type == PARAM_REG_RESPONSE) { /* update packet */
-			int i;
-			tlv_reg_response *resp = (tlv_reg_response *)
-				&data[location];
-			__u8 *reg_typep = &(resp->reg_type);
-			struct reg_info *reg;
-
-			for (i = 0; i < length - 1; i++, reg_typep++) {
-				reg = hip_a->reg_offered->regs;
-				while (reg) {
-					if (reg->type == *reg_typep)
-						break;
-					reg = reg->next;
-				}
-				if (!reg)
-					continue;
-				reg->granted_lifetime = resp->lifetime;
-				gettimeofday(&reg->state_time, NULL);
-				if (resp->lifetime == 0) {
-					log_(NORM,"Registration type %d "
-						"cancelled\n", *reg_typep);
-					reg->state = REG_CANCELLED;
-					continue;
-				} else {
-					log_(NORM,"Registration type %d ok\n",
-						*reg_typep);
-					reg->state = REG_GRANTED;
-				}
-				if (*reg_typep == REGTYPE_RVS  &&  !OPT.rvs) {
-				/* if not in the rvs mode, we wait for 
-				 * the lifetime and send update */
-				tlv_reg_response *resp;
-				thread_arg *arg;
-				arg = (thread_arg *)malloc(sizeof(thread_arg));
-				resp = (tlv_reg_response *) &data[location];
-				/* print the registered parameters */
-				log_(NORM, "Registration update ok\n");
-				tmp = YLIFE (resp->lifetime);
-				tmp = pow (2, tmp);
-				log_(NORM, 
-				   "Registered lifetime (updated) = %f\n", tmp);
-				log_(NORM, "Registered type (updated) = %d\n",
-					*reg_typep);
-				memset(arg, 0, sizeof(thread_arg));
-				memcpy(&arg->hip_header, hiph, sizeof(hiphdr));
-				memcpy(&arg->resp, resp,
-					sizeof(tlv_reg_response));
-				/* set lifetime */
-#ifdef __WIN32__
-				_beginthread(set_lifetime_rvs_thread, 0, arg);
-#else /* __WIN32__ */
-				pthread_attr_init(&attr);
-				pthread_attr_setdetachstate(&attr, 
-					PTHREAD_CREATE_DETACHED);
-				pthread_create(&thr, &attr, 
-					set_lifetime_thread, arg);
-#endif /* __WIN32__ */
-				} else if (*reg_typep == REGTYPE_MR  &&
-					OPT.mn) {
-				log_(NORM, "Registered with Mobile Router\n");
-				}
+			log_(NORM, "Received response from registrar in "
+				"UPDATE packet.\n");
+			if (handle_reg_response(hip_a, &data[location]) < 0) {
+				log_(WARN, "Problem with registration "
+					"response.\n");
 			}
 		} else if (type == PARAM_REG_FAILED) { 	/* update packet */
-			int i;
-			tlv_reg_failed *fail = (tlv_reg_failed *)
-				&data[location];
-			__u8 *reg_typep = &(fail->reg_type);
-			struct reg_info *reg;
-
-			for (i = 0; i < length - 1; i++, reg_typep++) {
-				reg = hip_a->reg_offered->regs;
-				while (reg) {
-					if (reg->type == *reg_typep)
-						break;
-					reg = reg->next;
-				}
-				if (!reg)
-					continue;
-				log_(NORM,"Registration type %d failed"
-					"with failure code %d\n",
-					*reg_typep, fail->fail_type);
-				reg->state = REG_FAILED;
-				reg->failure_code = fail->fail_type;
-				gettimeofday(&reg->state_time, NULL);
-				if (*reg_typep == REGTYPE_RVS && !OPT.rvs) {
-				add_reg_request = TRUE;
-				/* check what type of error received */
-				/* failed in the registration type */
-				if (fail->fail_type == 1) {
-					repeat_reg = 1;
-					repeat_type = *reg_typep;
-					log_(NORM,"Registration ko\n");
-					log_(NORM,
-					    "Error in the registration type\n");
-					log_(NORM, "Set new registration type");
-					log_(NORM, "as the offered: %d\n",
-						repeat_type);
-					need_to_send_update2 = TRUE;
-				}
-				} else if (*reg_typep == REGTYPE_MR  &&
-						OPT.mn) {
-				}
+			log_(NORM, "Received failure from registrar in "
+				"UPDATE packet.\n");
+			if (handle_reg_failed(hip_a, &data[location]) < 0) {
+				log_(WARN, "Problem with registration "
+					"failure.\n");
 			}
 		} else if ((type == PARAM_HMAC) || 
 			   (type == PARAM_HIP_SIGNATURE) ||
@@ -2536,6 +1927,7 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 	struct sockaddr *addrcheck=NULL;
 	int need_to_send_update=FALSE;
 	__u32 nonce;
+	struct reg_info *reg;
 
 	/*
   	 * UPDATE only accepted in ESTABLISHED and R2_SENT states
@@ -2600,16 +1992,14 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 	/* 
 	 * Generate a new UPDATE because of REG_REQUEST?
 	 */
-	if (hip_a->reg_requested) {
-		struct reg_info *reg = hip_a->reg_requested->regs;
-		while (reg) {
+	if (hip_a->regs) {
+		for (reg = hip_a->regs->reginfos; reg; reg = reg->next) {
 			if (reg->state == REG_SEND_RESP  ||
 			    reg->state == REG_SEND_CANCELLED  ||
 			    reg->state == REG_SEND_FAILED) {
 				need_to_send_update = TRUE;
 				break;
 			}
-			reg = reg->next;
 		}
 	}
 
@@ -2631,16 +2021,6 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 		} else {
 			log_(WARN, "Failed to send UPDATE: %s.\n",
 			    strerror(errno));
-		}
-	}
-
-	if (need_to_send_update2) {
-		need_to_send_update2 = FALSE;
-		if ((err = hip_send_update(hip_a, NULL, NULL)) > 0) {
-			log_(NORM, "Sent UPDATE (%d bytes)\n", err);
-		} else {
-			log_(WARN, "Failed to send UPDATE: %s.\n",
-				strerror(errno));
 		}
 	}
 
@@ -3173,11 +2553,6 @@ int hip_handle_close(__u8 *buff, hip_assoc *hip_a)
 		log_hipa_fromto(QOUT, "Close completed (received ack)",
 				hip_a, TRUE, TRUE);
 		set_state(hip_a, UNASSOCIATED);
-		if (OPT.rvs) { /* delete any registration entry */
-			hip_reg key;
-			memcpy(key.peer_hit, hip_a->peer_hi->hit, HIT_SIZE);
-			delete_reg_table(key, hip_reg_table);
-		}
 		free_hip_assoc(hip_a);
 		return(0);
 	}
@@ -3188,11 +2563,6 @@ int hip_handle_close(__u8 *buff, hip_assoc *hip_a)
 	 * proceed with the deletes. */
 	err = 0;
 	set_state(hip_a, CLOSED);
-	if (OPT.rvs) { /* delete any registration entry */
-		hip_reg key;
-		memcpy(key.peer_hit, hip_a->peer_hi->hit, HIT_SIZE);
-		delete_reg_table(key, hip_reg_table);
-	}
 	log_hipa_fromto(QOUT, "Close completed (sent ack)",
 			hip_a, TRUE, TRUE);
 	err = delete_associations(hip_a, 0, 0);
@@ -4060,11 +3430,6 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 	int err = 0, new_policy = TRUE;
 	struct sockaddr *src_new, *dst_new, *src_old, *dst_old;
 
-	/* XXX TODO: clean this up
-	 * sadb_add_policy() should be atomic and should not contain special
-	 * cases for UDP mode. modify the calls to sadb_add_policy here.
-	 */
-
 	spi = (in) ? hip_a->spi_in : hip_a->spi_out;
 	src_old = in ? HIPA_DST(hip_a) : HIPA_SRC(hip_a);
 	dst_old = in ? HIPA_SRC(hip_a) : HIPA_DST(hip_a);
@@ -4366,57 +3731,306 @@ int check_tlv_unknown_critical(int type, int length)
 }
 
 /*
- * set_lifetime_rvs_thread()
+ * handle_reg_info()
  *
- */ 
-#ifdef __WIN32__
-void set_lifetime_rvs_thread(void *void_hip_reg)
-#else
-void *set_lifetime_rvs_thread(void *void_hip_reg)
-#endif
+ * Parse registration info received from a registrar in the R1 or UPDATE
+ * packets.
+ */
+int handle_reg_info(hip_assoc *hip_a, const __u8 *data)
 {
-	returned ret, *ret2 = &ret;
-	hip_reg key;
-	hip_reg *hi = (hip_reg*)void_hip_reg;
-	int update = hi->update;
-	
-	memcpy(key.peer_hit, &hi->peer_hit, sizeof(hip_hit));
-	hip_sleep((int)hi->lifetime);
-	pthread_mutex_lock(&hi->peer_addr_mutex);
-	ret2 = search_reg_table(key, hip_reg_table, ret2);
-	pthread_mutex_unlock(&hi->peer_addr_mutex);
-        
-	if(ret2->position != -1) {
-		/* if a new update has not arrived */
-		if (hip_reg_table[ret2->position].update - update == 0) {
-			delete_reg_table(key, hip_reg_table);
-		}
+	tlv_reg_info *info = (tlv_reg_info *) data;
+	int length, i, num_regs;
+	__u8 *reg_types, lifetime;
+	char str[128];
+
+	if (ntohs(info->type) != PARAM_REG_INFO)
+		return(-1);
+	length = ntohs(info->length);
+	num_regs = length - 2;
+	reg_types = &(info->reg_type);
+
+	if (!hip_a->regs) {
+		hip_a->regs = (struct reg_entry *)
+				malloc(sizeof(struct reg_entry));
+		if (!hip_a->regs)
+			return(-1);
+		memset(hip_a->regs, 0, sizeof(struct reg_entry));
+		hip_a->regs->reginfos = NULL;
+		hip_a->regs->number = 0;
 	}
-#ifndef __WIN32__
-	return(NULL);
-#endif
+	hip_a->regs->min_lifetime = info->min_lifetime;
+	hip_a->regs->max_lifetime = info->max_lifetime;
+	lifetime = info->max_lifetime; /* request the max lifetime */
+
+	for (i = 0; i < num_regs; i++) {
+		if (regtype_to_string(reg_types[i], str, sizeof(str)) < 0) {
+			log_(NORM, "Skipping registration type %d: %s\n",
+					reg_types[i], str);
+			continue;
+		}			
+		log_(NORM,"Registration type %d offered: %s\n",
+			reg_types[i], str);
+		add_reg_info(hip_a->regs, reg_types[i], REG_OFFERED, lifetime);
+	}
+	return(0);
+}
+
+
+/*
+ * handle_reg_request()
+ *
+ * As a registrar, handle requests to register from the I2 or UPDATE packets.
+ */
+int handle_reg_request(hip_assoc *hip_a, const __u8 *data)
+{
+	tlv_reg_request *req = (tlv_reg_request *)data;
+	int i, num_regs, length, state; 
+	__u8 *reg_types, lifetime;
+	char str[128];
+
+	if (ntohs(req->type) != PARAM_REG_REQUEST)
+		return(-1);
+	length = ntohs(req->length);
+	lifetime = req->lifetime;
+	num_regs = length - 1; /* lifetime occupies first byte */
+	reg_types = &(req->reg_type);
+
+	/* process canceled registrations here */
+	if (lifetime == 0) {
+		log_(NORM,"Request to cancel registration(s).\n");
+		if (!hip_a->regs) {
+			log_(WARN, "No registrations exist with this peer.\n");
+			return(-1);
+		}
+		for (i = 0; i < num_regs; i++) {
+			regtype_to_string(reg_types[i], str, sizeof(str));
+			log_(NORM,"Registration type %d canceled: %s\n",
+				reg_types[i], str);
+			add_reg_info(hip_a->regs, reg_types[i],
+					REG_SEND_CANCELLED, 0);
+		}
+		return(0);
+	}
+
+	/* prepare reg_entry structure */
+	if (hip_a->regs) {
+		log_(WARN, "Already have pending registration request(s), "
+			"ignoring new registration request(s).\n");
+		return(-1);
+	}
+	hip_a->regs = (struct reg_entry *) malloc(sizeof(struct reg_entry));
+	if (!hip_a->regs)
+		return(-1);
+	hip_a->regs->reginfos = NULL;
+	hip_a->regs->number = 0;
+	/* as registrar, we enforce min/max lifetimes specified
+	 * in the conf file */
+	if (lifetime < HCNF.min_reg_lifetime)
+		lifetime = HCNF.min_reg_lifetime;
+	else if (lifetime > HCNF.max_reg_lifetime)
+		lifetime = HCNF.max_reg_lifetime;
+
+	for (i = 0; i < num_regs; i++) {
+		regtype_to_string(reg_types[i], str, sizeof(str));
+		log_(NORM,"Registration type %d requested: %s\n",
+			reg_types[i], str);
+
+		state = REG_SEND_FAILED;
+		if (reg_types[i] == REGTYPE_RVS && OPT.rvs) {
+			state = REG_SEND_RESP;
+			log_(NORM, "Registration with Rendezvous Service "
+				"accepted.\n");
+#ifdef MOBILE_ROUTER
+		} else if (reg_types[i] == REGTYPE_MR && OPT.mr) {
+			if (init_hip_mr_client( hip_a->peer_hi->hit,
+						HIPA_DST(hip_a)) < 0) {
+				log_(WARN,"Error initializing mobile router "
+				    "client\n");
+			}
+			log_(NORM, "Registration with Mobile Router Service "
+				"accepted.\n");
+			state = REG_SEND_RESP;
+#endif /* MOBILE_ROUTER */
+		} else { /* Unknown or unsupported type */
+			state = REG_SEND_FAILED;
+		}
+
+		add_reg_info(hip_a->regs, reg_types[i], state, lifetime);
+	}
+	return(0);
+}
+
+
+/*
+ * handle_reg_response()
+ *
+ * Parse the registration response from the registrar in the R2 or 
+ * UPDATE packets.
+ */
+int handle_reg_response(hip_assoc *hip_a, const __u8 *data)
+{
+	int i, length, num_regs;
+	tlv_reg_response *resp = (tlv_reg_response *)data;
+	__u8 *reg_types = &(resp->reg_type);
+	char str[128];
+
+	if (ntohs(resp->type) != PARAM_REG_RESPONSE)
+		return(-1);
+	length = ntohs(resp->length);
+	num_regs = length - 1;
+
+	for (i = 0; i < num_regs; i++) {
+		if (regtype_to_string(reg_types[i], str, sizeof(str)) < 0) {
+			log_(NORM, "Skipping unknown registration type %d: "
+				"%s\n", reg_types[i], str);
+			continue;
+		}
+		if (resp->lifetime == 0) {
+			log_(NORM, "Registration type %d %s canceled.\n",
+				reg_types[i], str);
+			if (delete_reg_info(hip_a->regs, reg_types[i]) < 0)
+				log_(NORM, "Registration not found.\n");
+			else
+				log_(NORM, "Registration removed OK.\n");
+			continue;
+		}
+		log_(NORM,"Registration type %d %s succeeded with "
+			"lifetime %d.\n", reg_types[i], str, resp->lifetime);
+
+		add_reg_info(hip_a->regs, reg_types[i], REG_GRANTED, 
+				resp->lifetime);
+	}
+	return(0);
 }
 
 /*
- * set_lifetime_thread()
+ * handle_reg_failed()
  *
+ * Parse the registration failed response from the registrar.
  */
-#ifdef __WIN32__
-void set_lifetime_thread(void *void_thread_arg)
-#else
-void *set_lifetime_thread(void *void_thread_arg)
-#endif
+int handle_reg_failed(hip_assoc *hip_a, const __u8 *data)
 {
-	hip_assoc *hip_b;
-	thread_arg *arg2 = (thread_arg *)void_thread_arg;
-	double tmp = YLIFE(arg2->resp.lifetime);
+	tlv_reg_failed *fail = (tlv_reg_failed *)data;
+	int i, length, num_regs;
+	__u8 *reg_types = &(fail->reg_type);
+	struct reg_info *reg;
+	char str[128];
 
-	hip_b = find_hip_association2(&arg2->hip_header);
-	tmp = pow(2, tmp);
-	hip_sleep( (int)(tmp-1) );
-	add_reg_request = TRUE;
-	hip_send_update(hip_b, NULL, NULL);
-#ifndef __WIN32__
-	return(NULL);
-#endif
+	length = ntohs(fail->length);
+	num_regs = length - 1;
+
+	for (i = 0; i < num_regs; i++) {
+		regtype_to_string(reg_types[i], str, sizeof(str));
+		for (reg = hip_a->regs->reginfos; reg; reg = reg->next) {
+			if (reg->type == reg_types[i])
+				break;
+		}
+		if (!reg) {
+			log_(NORM, "Registration type %d %s failed with code %d"
+				" and there is no registration state.\n",
+				reg_types[i], str, fail->fail_type);
+			continue;
+		}
+		log_(NORM, "Registration type %d %s failed with failure "
+			"code %d.\n", reg_types[i], str, fail->fail_type);
+		reg->state = REG_FAILED;
+		reg->failure_code = fail->fail_type;
+		gettimeofday(&reg->state_time, NULL);
+	}
+	return(0);
+}
+
+
+/*
+ * add_reg_info()
+ *
+ * Add or update a reg_info structure to the given reg_entry.
+ */
+int add_reg_info(struct reg_entry *regs, __u8 type, int state, __u8 lifetime)
+{
+	struct reg_info *reg;
+
+	if (!regs)
+		return(-1);
+
+	/* search for existing registration */
+	for (reg = regs->reginfos; reg; reg = reg->next) {
+		if (type == reg->type)
+			break;
+	}
+
+	/* allocate new reg_info if it doesn't already exist */
+	if (!reg) {
+		reg = (struct reg_info*) malloc(sizeof(struct reg_info));
+		if (reg == NULL) return(-1);
+		memset(reg, 0, sizeof(struct reg_info));
+		reg->type = type;
+		reg->next = regs->reginfos; /* link it into the list */
+		regs->reginfos = reg;
+		regs->number++;
+	}
+	reg->state = state;
+	reg->lifetime = lifetime;
+	gettimeofday(&reg->state_time, NULL);
+	return(0);
+}
+
+/*
+ * Remove a reg_info structure from the given reg_entry.
+ */
+int delete_reg_info(struct reg_entry *regs, __u8 type)
+{
+	struct reg_info *reg, *prev=NULL;
+
+	if (!regs)
+		return(-1);
+
+	/* search for existing registration */
+	for (reg = regs->reginfos; reg; reg = reg->next) {
+		if (type == reg->type)
+			break;
+		prev = reg;
+	}
+
+	if (!reg)
+		return(-1);
+	if (!prev)
+		regs->reginfos = reg->next;
+	else
+		prev->next = reg->next;
+	memset(reg, 0, sizeof(struct reg_info));
+	free(reg);
+	return(0);
+}
+
+/*
+ * Add the from_via structure to a HIP association. This takes the form of the
+ * FROM or VIA RVS TLVs and contains the address given in sockaddr or byte
+ * string format. This is used for input functions to signal adding the FROM
+ * or VIA RVS rendevous parameters on I1 or R1 output.
+ */
+int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
+		__u8* address)
+{
+	if (!addr && !address) /* must specify either type of address */
+		return(-1);
+	if (!hip_a->from_via)
+		hip_a->from_via = malloc(eight_byte_align(sizeof(tlv_from)));
+	if (!hip_a->from_via)
+		return(-1); /* malloc error */
+	memset(hip_a->from_via, 0, eight_byte_align(sizeof(tlv_from)));
+	hip_a->from_via->type = htons(type);
+	hip_a->from_via->length = htons(sizeof(tlv_from) - 4);
+	if (addr && addr->sa_family == AF_INET6) {
+		memcpy(hip_a->from_via->address, SA2IP(addr), SAIPLEN(addr));
+	} else if (addr && addr->sa_family == AF_INET) {
+		/* IPv4-in-IPv6 address format */
+		memset(&hip_a->from_via->address[10], 0xFF, 2);
+		memcpy(&hip_a->from_via->address[12], SA2IP(addr), 
+				SAIPLEN(addr));
+	} else if (address) {
+		memcpy(hip_a->from_via->address, address,
+			sizeof(hip_a->from_via->address));
+	}
+	return(0);
 }

@@ -85,7 +85,7 @@
 #define MAX_LOCATORS 8	/* number of LOCATORs accepted in an UPDATE message */
 
 #define MAX_REGISTRATIONS 1024
-#define MAX_REGISTRATION_TYPES 255 /* number of registration services */
+#define MAX_REGISTRATION_TYPES 8 /* number of registration services */
 #ifdef SMA_CRAWLER
 #define MAX_LEGACY_HOSTS 255 /* how many legacy hosts can attached to endbox */
 #endif /* SMA_CRAWLER */
@@ -284,14 +284,13 @@ struct reg_info {
 	int state;
 	struct timeval state_time;
 	__u8 failure_code;
-	__u8 requested_lifetime;
-	__u8 granted_lifetime;
+	__u8 lifetime;
 	struct reg_info *next;
 };
 
 struct reg_entry {
 	int number;
-	struct reg_info *regs;
+	struct reg_info *reginfos;
 	__u8 min_lifetime;
 	__u8 max_lifetime;
 };
@@ -317,10 +316,10 @@ typedef struct _hip_assoc {
 	__u64     cookie_j;
 	struct hip_packet_entry rexmt_cache;
 	struct opaque_entry *opaque;
-	struct reg_entry *reg_offered;
-	struct reg_entry *reg_requested;
+	struct reg_entry *regs;   /* registrations with registrar or client */
 	struct rekey_info *rekey; /* new parameters to use after REKEY	*/
 	struct rekey_info *peer_rekey; /* peer's REKEY data from UPDATE */
+	struct _tlv_from *from_via; /* including FROM in I1 or VIA RVS in R1 */
 	/* Other crypto */
 	__u16 hip_transform;
 	__u16 esp_transform;
@@ -342,42 +341,6 @@ typedef struct _hip_assoc {
 } hip_assoc;
 #define HIPA_SRC(h) ((struct sockaddr*)&h->hi->addrs.addr)
 #define HIPA_DST(h) ((struct sockaddr*)&h->peer_hi->addrs.addr)
-
-/*
- * HIP registration entry
- *
-*/
-typedef struct _hip_reg {
-	hip_hit peer_hit;
-	hip_mutex_t peer_addr_mutex;
-	struct sockaddr_storage peer_addr;
-	double lifetime;
-	int update;
-	hip_assoc *hip_a;
-} hip_reg;
-
-/*
- * Struct to use with the search_reg_table
-*/
-typedef struct _returned {
-	int position;
-	int update;
-} returned;
-
-/*
- * Structs used in the relaying I1 process
-*/
-typedef struct _from {
-	int add_from;
-	hip_hit hit_from;
-	struct sockaddr_storage ip_rvs;
-	struct sockaddr_storage ip_from;
-} from; 
-
-typedef struct _via {
-	int add_via_rvs;
-	struct sockaddr_storage ip_from;
-} via;
 
 /*
  * list of struct sockaddrs
@@ -633,9 +596,9 @@ typedef struct _tlv_reg_info
 {
 	__u16 type;
 	__u16 length;
-	__u8 min_lifetime;  	/* defined as in draft-koponen-hip-registration-01 (exponential lifetime) */
-	__u8 max_lifetime;  	/* defined as in draft-koponen-hip-registration-01 (exponential lifetime) */
-	__u8 reg_type;  	/* reg_type_rvs = 1 by default. no other registration types defined yet */ 
+	__u8 min_lifetime;
+	__u8 max_lifetime;
+	__u8 reg_type;
 } tlv_reg_info;
 
 typedef struct _tlv_reg_request
@@ -661,14 +624,6 @@ typedef struct _tlv_reg_failed
 	__u8 fail_type;		/* if 1, error in registration type */
 	__u8 reg_type;  
 } tlv_reg_failed;
-
-
-#ifndef __WIN32__
-typedef struct _tlv_reg_required
-{
-	/* TBD */ /* parameter to use in a NOTIFY packet */
-} tlv_reg_required;
-#endif /* __WIN32__ */
 
 
 typedef struct _tlv_echo	/* response and request the same */
@@ -744,16 +699,8 @@ typedef struct _tlv_from
 {
 	__u16 type;
 	__u16 length;
-	unsigned char addr[16];
+	__u8 address[16];
 } tlv_from;
-
-typedef struct _tlv_rvs_hmac
-{
-	__u16 type;
-	__u16 length;
-	__u8 hmac[20];
-
-} tlv_rvs_hmac;
 
 typedef struct _tlv_via_rvs
 {
@@ -827,7 +774,6 @@ struct hip_opt {
 	int allow_any;
 	struct sockaddr *trigger;
 	int rvs;
-	int mn;
 #ifdef MOBILE_ROUTER
 	int mr;
 #endif
@@ -840,13 +786,6 @@ struct hip_opt {
  * Global configuration data
  */
 struct hip_conf {
-	__u8 min_lifetime; 		/* values offered by the rvs */
-	__u8 max_lifetime;
-	__u8 reg_type_rvs;
-	__u8 lifetime;	/* for registration with rvs. exponential lifetime */
-	__u8 reg_type;			/*for registration with rvs.	*/
-	__u8 reg_types[MAX_REGISTRATION_TYPES];
-	__u8 n_reg_types;
 	__u32 cookie_difficulty;	/* 2 raised to this power	*/
 	__u32 cookie_lifetime;		/* valid 2^(life-32) seconds	*/
 	__u32 packet_timeout;		/* seconds			*/
@@ -876,6 +815,10 @@ struct hip_conf {
 	char *preferred_iface;		/* preferred interface name */
 	char *outbound_iface;		/* if mobile router */
 	__u8 save_known_identities;	/* save known_host_id's on exit */
+	__u8 reg_types[MAX_REGISTRATION_TYPES]; /* registration types offered */
+	__u8 num_reg_types;		/* number of registration types */
+	__u8 min_reg_lifetime;		/* offered min registration lifetime */
+	__u8 max_reg_lifetime;		/* offered max registration lifetime */
 	__u8 peer_certificate_required;
 	__u8 use_smartcard;		/* use smartcard for hostid, RSA/DSA sign and X.509 certificate */
 #ifdef SMA_CRAWLER

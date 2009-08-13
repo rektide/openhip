@@ -1307,7 +1307,6 @@ int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
 		}
 		location += sizeof(tlv_locator);
 		location = eight_byte_align(location);
-		add_reg_request = FALSE;
 	}
 
 	/* 

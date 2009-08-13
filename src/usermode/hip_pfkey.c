@@ -865,13 +865,13 @@ int pfkey_send_hip_packet(char *data, int len)
 
 #ifdef __WIN32__
 	if (send(pfkeysp[0], buff, pf_len, 0) < 0) {
-		printf("pfkey_send_hip_packet() write error: %s",
+		printf("pfkey_send_hip_packet() write error: %s\n",
 			strerror(errno));
 		return(-1);
 	}
 #else
-	if (write(pfkeysp[0], buff, pf_len) != len) {
-		printf("pfkey_send_hip_packet() write error: %s",
+	if (write(pfkeysp[0], buff, pf_len) != pf_len) {
+		printf("pfkey_send_hip_packet() write error: %s\n",
 			strerror(errno));
 		return(-1);
 	}

@@ -24,41 +24,10 @@
 
 /* global variables */
 
-/* Registration global variables */
-extern long int num_entries;		/* number of entries to store in the registration table when -g option is activated (used in rvs mode) */
-
-extern int min_life; 		 /* to store info from rvs (used in normal mode) */
-extern int max_life;			
-extern int reg_type;
-
-extern int add_reg_info;   	/* to add the parameter (used in rvs mode) */
-extern int add_reg_request;			/* 	(used in normal mode) */ 
-extern int add_reg_response;			/*	(used in rvs mode) */
-extern int add_reg_failed;			/*	(used in rvs mode) */
-
-extern int resp_lifetime;	/* values received from a reg_response parameter (used in rvs mode) */
-extern int resp_reg_type;
-extern int fail_type;		/* values received from a reg_failed parameter (used in rvs mode) */
-extern int fail_reg_type;
-
-extern int repeat_reg;		/* in case we need to update the registration  (used in normal mode) */
-extern int repeat_type;
-
-extern int need_to_send_update2;
-
-/* Relaying global variables  (used only in rvs mode) */
-extern from fr;
-extern via fr2;
-extern int no_R1;
-
 /* Array storing HIP association structs (this is the state machine state) */
 extern hip_assoc hip_assoc_table[MAX_CONNECTIONS];
 extern int max_hip_assoc;
 extern const hip_hit zero_hit;
-
-/* Array storing HIP registrations structs */
-extern hip_reg hip_reg_table[MAX_REGISTRATIONS];
-extern long int num_hip_reg;
 
 /* Linked list of my host identities */
 extern hi_node *my_hi_head;

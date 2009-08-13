@@ -27,43 +27,8 @@
 
 /* globals */
 
-/* Registration global variables */
-long int num_entries = 0;
-
-int min_life = 0;
-int max_life = 0;
-int reg_type = 0;
-
-int add_reg_info = FALSE;
-int add_reg_request = FALSE;	
-int add_reg_response = FALSE;
-int add_reg_failed = FALSE;
-
-int resp_lifetime = 0;
-int resp_reg_type = 0;
-int fail_type = 0;
-int fail_reg_type = 0;
-
-int repeat_reg = FALSE;
-int repeat_type = 0;
-
-int need_to_send_update2 = FALSE;
-
-/* Relaying global variables (used only in rvs mode)	*/
-from fr;
-int no_R1 = FALSE;
-
-/* Relaying global variables (used in normal mode)	*/
-via fr2;
-
-/* table of active connections or exchanges */
 hip_assoc hip_assoc_table[MAX_CONNECTIONS];
 int max_hip_assoc=0;        /* last entry added to the table */
-
-/* table of active registrations */
-hip_reg hip_reg_table[MAX_REGISTRATIONS];
-long int num_hip_reg = 0;
-
 hi_node *my_hi_head = NULL;
 sockaddr_list *my_addr_head = NULL;
 hi_node *peer_hi_head = NULL;

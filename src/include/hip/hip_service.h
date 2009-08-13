@@ -40,8 +40,6 @@ void hip_dns(void *arg);
 void hipd_main(void *arg);
 void hip_netlink(void *arg);
 void hip_status(void *arg);
-void udp_esp_keepalive(void *arg);
-void udp_hip_keepalive(void *arg);
 extern int socketpair(int, int, int, int sv[2]);
 #define RETNULL ;
 #else
@@ -53,8 +51,6 @@ void *hip_dns(void *arg);
 void *hipd_main(void *arg);
 void *hip_netlink(void *arg);
 void *hip_status(void *arg);
-void *udp_esp_keepalive(void *arg);
-void *udp_hip_keepalive(void *arg);
 #define RETNULL NULL;
 #endif
 

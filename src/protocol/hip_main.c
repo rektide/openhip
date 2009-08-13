@@ -172,11 +172,8 @@ int main_loop(int argc, char **argv)
         struct rlimit limits;
 #endif
 
-	/* Predefining global variables */
+	/* Initializing global variables */
 	memset(hip_assoc_table, 0, sizeof(hip_assoc_table));
-	memset(hip_reg_table, 0, sizeof(hip_reg_table));
-	fr.add_from = FALSE;
-	fr2.add_via_rvs = FALSE;
 
 #ifndef __UMH__
 	/* Initialize OpenSSL crypto library, if not already done 
@@ -232,9 +229,9 @@ int main_loop(int argc, char **argv)
 	HCNF.disable_dns_thread = TRUE;
 	HCNF.disable_udp = FALSE;
 	HCNF.enable_bcast = FALSE;
-	HCNF.min_lifetime = 96;  /* min lt offered by rvs: 2^((96-64)/8) = s */
-	HCNF.max_lifetime = 255; /* max lt offered by rvs: 2^((255-64)/8) = s */
-	HCNF.lifetime = 255;     /* lt req by non rvs node: 2^((255-64)/8) = s*/
+	HCNF.num_reg_types = 0;
+	HCNF.min_reg_lifetime = 96;  /* min offered 2^((96-64)/8) = s */
+	HCNF.max_reg_lifetime = 255; /* max offered 2^((255-64)/8) = s */
 	HCNF.preferred_iface = NULL;
 	HCNF.outbound_iface = NULL;
 	HCNF.save_known_identities = TRUE;
@@ -335,34 +332,31 @@ int main_loop(int argc, char **argv)
 			argv++, argc--;
 			continue;
 		}
-		/* Mobile node client */
-		if (strcmp(*argv, "-mn") == 0){
-			OPT.mn = TRUE;
-			argv++,argc--;
-			continue;
-		}
 		/* Mobile router service or rendezvous server */
-		if ((strcmp(*argv, "-mr") == 0) || (strcmp(*argv, "-m") == 0)) {
-			if (HCNF.n_reg_types >= MAX_REGISTRATION_TYPES){
+		if ((strcmp(*argv, "-mr") == 0) ||
+		    (strcmp(*argv, "-rvs") == 0)) {
+			if (HCNF.num_reg_types >= MAX_REGISTRATION_TYPES){
 				log_(ERR, "Error: number of registration "
 					"types exceeds %d\n",
 					MAX_REGISTRATION_TYPES);
 				exit(1);
 			}
 			if (strcmp(*argv, "-mr") == 0) {
-#ifndef MOBILE_ROUTER
+#ifdef MOBILE_ROUTER
+				OPT.mr = TRUE;
+				HCNF.reg_types[HCNF.num_reg_types] = REGTYPE_MR;
+				HCNF.num_reg_types++;
+#else
 				log_(ERR, "Error: mobile router option specifie"
 					"d but daemon has not been configured a"
 					"nd built with --enable-mobile-router "
 					"option.\n");
 				exit(1);
-#else
-				OPT.mr = TRUE;
 #endif
-				HCNF.reg_types[HCNF.n_reg_types++] = REGTYPE_MR;
 			} else {
 				OPT.rvs = TRUE;
-				HCNF.reg_types[HCNF.n_reg_types++] =REGTYPE_RVS;
+				HCNF.reg_types[HCNF.num_reg_types] =REGTYPE_RVS;
+				HCNF.num_reg_types++;
 			}
 			argv++,argc--;
 			continue;
@@ -1274,19 +1268,20 @@ void hip_handle_registrations(struct timeval *time1)
 		hip_a = &hip_assoc_table[i];
 		if (hip_a->state != ESTABLISHED)
 			continue;
-		if (!hip_a->reg_offered)
+		if (!hip_a->regs)
 			continue;
-		for (reg = hip_a->reg_offered->regs; reg; reg = reg->next) {
-			if (reg->type == REGTYPE_RVS)
-				continue;
+		for (reg = hip_a->regs->reginfos; reg; reg = reg->next) {
+			/* we've requested a registration but haven't heard
+			 * back after a certain amount of time */
 			if (reg->state == REG_REQUESTED) {
 				if (TDIFF(*time1, reg->state_time) > 
 						(int)HCNF.ual) {
 					reg->state = REG_OFFERED;
 					do_update = 1;
 				}
+			/* an active registration has expired */
 			} else if (reg->state == REG_GRANTED) {
-				tmp = YLIFE (reg->granted_lifetime);
+				tmp = YLIFE (reg->lifetime);
 				tmp = pow (2, tmp);
 				tmp = 0.9*tmp;
 				if (TDIFF(*time1, reg->state_time) > (int)tmp) {
@@ -1419,7 +1414,7 @@ int hip_trigger(struct sockaddr *dst)
 	OPT.trigger = NULL;
 
 	/* Send the I1 */
-	if (hip_send_I1(hitp, hip_a, -1) > 0) {
+	if (hip_send_I1(hitp, hip_a) > 0) {
 		set_state(hip_a, I1_SENT);
 	}
 	return(0);
@@ -1488,7 +1483,7 @@ int hip_trigger_rvs(struct sockaddr *rvs, hip_hit *rsp)
         OPT.trigger = NULL;
 
         /* Send the I1 */
-        if (hip_send_I1(rsp, hip_a, -1) > 0) {
+        if (hip_send_I1(rsp, hip_a) > 0) {
                 set_state(hip_a, I1_SENT);
         }
 

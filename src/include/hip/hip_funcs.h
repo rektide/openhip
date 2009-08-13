@@ -96,9 +96,9 @@
  *  Function prototypes
  */
 /* hip_output.c */
-int hip_send_I1(hip_hit* hit, hip_assoc *hip_a, int pos);
+int hip_send_I1(hip_hit* hit, hip_assoc *hip_a);
 int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
-			hi_node *hi);
+			hi_node *hi, hip_assoc *hip_rvs);
 int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 			dh_cache_entry *dh_entry);
 int hip_send_I2(hip_assoc *hip_a);
@@ -112,21 +112,9 @@ int hip_send(__u8 *data, int len, struct sockaddr *src, struct sockaddr *dst,
 			hip_assoc *hip_a, int retransmit);
 int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len, struct sockaddr *src, 
 			struct sockaddr *dst);
-#ifdef __WIN32__
-void udp_hip_keepalive (void *arg);
-#else
-void *udp_hip_keepalive (void *arg);
-#endif
 int build_tlv_hostid_len(hi_node *hi, int use_hi_name);
 int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name);
-int build_tlv_reg_info(__u8 *data, int location);
-int build_tlv_reg_req(__u8 *data, int location, struct reg_entry *reg_offered);
-int build_tlv_reg_resp(__u8 *data, int location,
-			struct reg_entry *reg_requested);
-int build_tlv_reg_failed(__u8 *data, int location,
-			struct reg_entry *reg_requested);
 int build_rekey(hip_assoc *hip_a);
-int build_tlv_cert(__u8 *buff);
 
 /* hip_input.c */
 int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src, 
@@ -147,8 +135,6 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 			int in, int peer);
 int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
 			struct sockaddr *newdstaddr, __u32 newspi, int in);
-void handle_reg_info();
-void handle_reg_request(char *data, int location);
 
 /* hip_ipsec.c */
 __u32 get_next_spi(hip_assoc *hip_a);
@@ -248,12 +234,8 @@ hip_assoc* find_hip_association(struct sockaddr *src, struct sockaddr *dst,
 hip_assoc* find_hip_association2(hiphdr* hiph);
 hip_assoc* find_hip_association3(struct sockaddr *src, struct sockaddr *dst); 
 hip_assoc* find_hip_association4(hip_hit hit);
-void * binsert(const void *ky, const void *bs, size_t nel, size_t width, int (*compar)(const void *, const void *));
-void log_registration(hip_reg *hip_r, int a);
-void print_reg_table(hip_reg *hip_r);
-int delete_reg_table(hip_reg key, hip_reg *hip_r);
-int insert_reg_table(hip_reg key, hip_reg *hip_r);
-returned *search_reg_table(hip_reg p, hip_reg *hip_r, returned *ret);
+hip_assoc *search_registrations(hip_hit hit, __u8 type);
+hip_assoc *search_registrations2(__u8 type, int state);
 void cb(int p, int n, void *arg);
 void init_crypto();
 void deinit_crypto();
@@ -278,6 +260,7 @@ int do_bcast();
 void hip_sleep(int seconds);
 void hip_writelock();
 void hip_exit(int signal);
+int regtype_to_string(__u8 type, char *str, int str_len);
 
 /* hip_xml.c */
 int locate_config_file(char *filename, int filename_size, char *default_name);

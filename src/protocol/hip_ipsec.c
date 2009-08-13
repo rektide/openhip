@@ -1537,7 +1537,7 @@ void hip_handle_acquire(struct sockaddr *src, struct sockaddr *dst)
 	print_hex(hip_a->peer_hi->hit, HIT_SIZE);
 
 	/* Send the I1 */
-	if (hip_send_I1(hitp, hip_a, -1) > 0) {
+	if (hip_send_I1(hitp, hip_a) > 0) {
 		if ((hip_a->state != CLOSING) && (hip_a->state != CLOSED))
 			set_state(hip_a, I1_SENT);
 	}

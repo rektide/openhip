@@ -257,8 +257,7 @@ int calculate_r1_length(hi_node *hi)
 
 	hi_len = build_tlv_hostid_len(hi, HCNF.send_hi_name);
 	
-	if (HCNF.n_reg_types == 0)
-		len =	sizeof(hiphdr) + sizeof(tlv_esp_info) + 2*sizeof(tlv_locator) +
+	len =	sizeof(hiphdr) + sizeof(tlv_esp_info) + 2*sizeof(tlv_locator) +
 			sizeof(tlv_r1_counter) + sizeof(tlv_puzzle) + 
 			sizeof(tlv_diffie_hellman) + dhprime_len[HCNF.dh_group] + 
 			eight_byte_align(sizeof(tlv_hip_transform)-2 +
@@ -269,19 +268,9 @@ int calculate_r1_length(hi_node *hi)
 			eight_byte_align(sizeof(tlv_cert) + MAX_CERT_LEN - 1) + 
 			/* if opaque is used, add its length here */
 			eight_byte_align(sizeof(tlv_hip_sig) + MAX_SIG_SIZE - 1);
-	else
-		len =	sizeof(hiphdr) + sizeof(tlv_esp_info) + 2*sizeof(tlv_locator) +
-			sizeof(tlv_r1_counter) + sizeof(tlv_puzzle) + 
-			sizeof(tlv_diffie_hellman) + dhprime_len[HCNF.dh_group] + 
-			eight_byte_align(sizeof(tlv_hip_transform)-2 +
-				2*num_hip_transforms) +
-			eight_byte_align(sizeof(tlv_esp_transform)-2 +
-				2*num_esp_transforms) +
-			eight_byte_align(sizeof(tlv_reg_info)-1 + HCNF.n_reg_types) +
-			eight_byte_align(hi_len) +
-			eight_byte_align(sizeof(tlv_cert) + MAX_CERT_LEN - 1) + 
-			/* if opaque is used, add its length here */
-			eight_byte_align(sizeof(tlv_hip_sig) + MAX_SIG_SIZE - 1);
+	if (HCNF.num_reg_types > 0)
+		len +=	eight_byte_align(sizeof(tlv_reg_info) + 
+				HCNF.num_reg_types - 1);
 		
 	return(eight_byte_align(len));
 }
