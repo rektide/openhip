@@ -584,9 +584,6 @@ void generate_conf_file(char *filename)
 	xmlDocSetRootElement(doc, root_node);
 	xmlNewDocComment(doc, BAD_CAST "HIP Configuration File");
 
-	xmlNewChild(root_node, NULL, BAD_CAST "min_lifetime", BAD_CAST "96");	/* exponential lifetime 2^((x-64)/8) 	*/
-	xmlNewChild(root_node, NULL, BAD_CAST "max_lifetime", BAD_CAST "255");	/* exponential lifetime 2^((x-64)/8)	*/
-	xmlNewChild(root_node, NULL, BAD_CAST "lifetime", BAD_CAST "217");	/* by default more than 1 week 	*/
 	xmlNewChild(root_node, NULL, BAD_CAST "cookie_difficulty",BAD_CAST "10");
 	xmlNewChild(root_node, NULL, BAD_CAST "packet_timeout", BAD_CAST "10");
 	xmlNewChild(root_node, NULL, BAD_CAST "max_retries", BAD_CAST "5");
@@ -598,6 +595,8 @@ void generate_conf_file(char *filename)
 	xmlNewChild(root_node, NULL, BAD_CAST "failure_timeout", BAD_CAST "50");
 	xmlNewChild(root_node, NULL, BAD_CAST "msl", BAD_CAST "5");
 	xmlNewChild(root_node, NULL, BAD_CAST "ual", BAD_CAST "600");
+	xmlNewChild(root_node, NULL, BAD_CAST "min_reg_lifetime",BAD_CAST "96");
+	xmlNewChild(root_node, NULL,BAD_CAST "max_reg_lifetime",BAD_CAST "255");
 	node = xmlNewChild(root_node, NULL, BAD_CAST "hip_sa", NULL);
 	node = xmlNewChild(node, NULL, BAD_CAST "transforms", NULL);
 	xmlNewChild(node, NULL, BAD_CAST "id", BAD_CAST "1");

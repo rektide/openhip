@@ -279,50 +279,6 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
 	}
 }
 
-/*
- * Traverse the linked-list of child nodes stored in node, and
- * store the content of each element into the DSA structure or
- * into the HIT.
- */
-void parse_xml_reghostid(xmlNodePtr node, hip_reg *hi, int i)
-{
-	char *data=NULL;
-	struct sockaddr_storage ss_addr;
-	struct sockaddr *addr;
-	double tmp;
-
-	addr = (struct sockaddr*) &ss_addr;
-	for (; node; node = node->next) {
-		/* skip entity refs */
-		if (strcmp((char *)node->name, "text")==0)
-			continue;
-		data = (char *)xmlNodeGetContent(node);
-		if (strcmp((char *)node->name, "HIT")==0) {
-			memset(hi->peer_hit, 0, sizeof(hip_hit));
-			hex_to_bin(data, (char *)hi->peer_hit, sizeof(hip_hit));
-			memcpy(hip_reg_table[i].peer_hit, hi->peer_hit, sizeof(hip_hit));
-		} else if (strcmp((char *)node->name, "addr")==0) {
-			memset(addr, 0, sizeof(struct sockaddr_storage));
-			/* Determine address family - IPv6 must have a ':' */
-			addr->sa_family = ((strchr(data, ':')==NULL) ? AF_INET : AF_INET6);
-			if (str_to_addr((__u8*)data, addr) > 0) {
-				memcpy(&hip_reg_table[i].peer_addr, addr, 
-					SALEN(addr));
-                        } else {
-				log_(WARN, "Address '%s'is not valid.\n",
-					data);
-			}
-		}else if (strcmp((char *)node->name, "lifetime")==0) {
-			sscanf(data,"%lf", &tmp);
-			hip_reg_table[i].lifetime = tmp;
-		}
-		hip_reg_table[i].update = 0; 	/* set 0 number of updates */ 		
-	}
-
-	if (data)
-		xmlFree(data);
-}
-
 #ifdef SMA_CRAWLER
 /*
  * function read_peer identities_from_hipcfg()
@@ -943,18 +899,14 @@ int read_conf_file(char *filename)
 				HCNF.disable_udp = TRUE;
 			else
 				HCNF.disable_udp = FALSE;
-		} else if (strcmp((char *)node->name, "min_lifetime")==0) {
+		} else if (strcmp((char *)node->name, "min_reg_lifetime")==0) {
 			/* real_min_lifetime (sec) = 2^((min_lifetime-64)/8) */
 			sscanf(data, "%d", &tmp);
-			HCNF.min_lifetime = (__u8)tmp;
-		} else if (strcmp((char *)node->name, "max_lifetime")==0) {
+			HCNF.min_reg_lifetime = (__u8)tmp;
+		} else if (strcmp((char *)node->name, "max_reg_lifetime")==0) {
 			/* real_max_lifetime (sec) = 2^((max_lifetime-64)/8) */
 			sscanf(data, "%d", &tmp);
-			HCNF.max_lifetime = (__u8)tmp;
-		} else if (strcmp((char *)node->name, "lifetime")==0) {
-			/* real_lifetime (seconds) = 2^((lifetime-64)/8) */
-			sscanf(data, "%d", &tmp);
-			HCNF.lifetime = (__u8)tmp;
+			HCNF.max_reg_lifetime = (__u8)tmp;
 		} else if (strcmp((char*)node->name, "preferred")==0) {
 			addr = (struct sockaddr*)&HCNF.preferred;
 			memset(addr, 0, sizeof(struct sockaddr_storage));
