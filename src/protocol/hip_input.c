@@ -141,6 +141,7 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
 	struct sockaddr_in addr;
 	struct ip *iph;
 	udphdr *udph = NULL;
+	char typestr[12];
 
 	/* IPv4 - get source and destination addresses */
 	if (family == AF_INET) {
@@ -214,7 +215,9 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
 
 	checksum = checksum_packet((__u8*)hiph, src, dst); 
 	if (checksum != 0) {
-		log_(WARN, "Bad checksum: sum=%d, should be 0.\n", checksum);
+		hip_packet_type(hiph->packet_type, typestr);
+		log_(WARN, "HIP %s packet has bad checksum: sum=0x%x, should"
+			" be 0.\n", typestr, checksum);
 		return(-3);
 	}
 	return(0);
@@ -1638,6 +1641,8 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
  * in:		data = the data to be parsed
  * 		hip_a = the existing HIP association, for HMAC verification
  * 		rk = struct for storing the peer's rekeying data
+ * 		nonce =
+ * 		src = source of received UPDATE, for UDP port
  *
  * out:
  */
@@ -1911,7 +1916,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 	
 	/* update peer address list */
 	if (loc_count > 0) { 
-		if (handle_locators(hip_a, locators, loc_count, NULL,
+		if (handle_locators(hip_a, locators, loc_count, src,
 								new_spi) < 0) {
 			log_(WARN, "Problem with LOCATOR.\n");
 			status = -1;
@@ -3292,6 +3297,13 @@ int handle_esp_info(tlv_esp_info *ei, __u32 spi_out, struct rekey_info *rk)
 	return(0);
 }
 
+
+/*
+ * handle_locators()
+ *
+ * Following HIP packet parsing, handle the locator TLVs contained in the HIP
+ * packet.
+ */
 int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockaddr *src, __u32 new_spi)
 {
 	int i, preferred, first;
@@ -3368,11 +3380,6 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
 			/* IPv6 doesn't have broadcast addresses */
 		}
 
-		/* HIP_ESP_OVER_UDP */
-		if (src != NULL) {
-			addr = src;
-		}
-		
 		/* only check preferred (P) bit for 
 		 * the first address in LOCATOR */
 		preferred = FALSE;
@@ -3380,6 +3387,24 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
 			preferred = TRUE;
 		first = FALSE;
 
+		/* check the new preferred address against the source address
+		 * of the packet */
+		if (src && preferred) {
+			if ((addr->sa_family != src->sa_family) ||
+			    (memcmp(SA2IP(addr), SA2IP(src), SAIPLEN(src)))) {
+				log_(WARN, "Warning: source address is %s and ",
+					logaddr(src));
+				log_(NORM, "new preferred LOCATOR is %s.\n",
+					logaddr(addr));
+			} else if (src->sa_family == AF_INET) {
+				/* addresses are equal, copy the port number
+				 * so UDP will work */
+				((struct sockaddr_in *)addr)->sin_port =
+					((struct sockaddr_in *)src)->sin_port;
+				/* TODO: IPv6 UDP here */
+			}
+		}
+		
 		/* address already may already exists in peer list */
 		peer_list = &hip_a->peer_hi->addrs;
 		l = add_address_to_list(&peer_list, addr, 0);

@@ -158,7 +158,7 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
 		hiph->hdr_len = (location/8) - 1;
 
 		/* send the packet */
-		log_(NORMT, "relaying HIP_I1 packet (%d bytes)...\n", location);
+		log_(NORMT, "Relaying HIP_I1 packet (%d bytes)...\n", location);
 		do_retrans = FALSE;
 	} else { /* normal I1, not relayed by RVS */
 		if (VALID_FAM(&hip_a->peer_hi->rvs)){/* use RVS instead of DST*/
@@ -187,7 +187,7 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
 			memcpy(hiph->hit_rcvr, hit, sizeof(hip_hit));
 
 		location = sizeof(hiphdr);
-		log_(NORMT, "sending HIP_I1 packet (%d bytes)...\n", location);
+		log_(NORMT, "Sending HIP_I1 packet (%d bytes)...\n", location);
 		do_retrans = TRUE;
 	}
 	if (!hip_a->udp)
@@ -273,7 +273,7 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 	}
 
 	/* send the packet */
-	log_(NORMT, "sending HIP_R1 packet (%d bytes)...\n", total_len);
+	log_(NORMT, "Sending HIP_R1 packet (%d bytes)...\n", total_len);
 #ifdef HIP_I3
         if (OPT.i3)
                 err = send_i3(data, r1_entry->len, hiti, src, dst);
@@ -764,7 +764,7 @@ int hip_send_I2(hip_assoc *hip_a)
  
 
 	/* send the packet */
-	log_(NORMT, "sending HIP_I2 packet (%d bytes)...\n", location);
+	log_(NORMT, "Sending HIP_I2 packet (%d bytes)...\n", location);
 #ifdef HIP_I3
 	if (OPT.i3)
      		return(send_i3(buff, location, &hip_a->peer_hi->hit, HIPA_SRC(hip_a), HIPA_DST(hip_a)));
@@ -859,7 +859,7 @@ int hip_send_R2(hip_assoc *hip_a)
 		hiph->checksum = checksum_packet(buff, src, dst);
 
 	/* send the packet */
-	log_(NORMT, "sending HIP_R2 packet (%d bytes)...\n", location);
+	log_(NORMT, "Sending HIP_R2 packet (%d bytes)...\n", location);
 	/* R2 packet is not scheduled for retrans., but saved for retrans. */
 
 #ifdef HIP_I3

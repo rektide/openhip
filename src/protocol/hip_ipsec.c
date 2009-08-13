@@ -1531,6 +1531,7 @@ void hip_handle_acquire(struct sockaddr *src, struct sockaddr *dst)
 		/* this signals to hip_send() to perform UDP encapsulation */
 		((struct sockaddr_in*)HIPA_DST(hip_a))->sin_port = \
 							htons(HIP_UDP_PORT);
+		/* TODO: IPv6 over UDP here */
 	}
 
 	log_hipa_fromto(QOUT, "Base exchange initiated", hip_a, TRUE, TRUE);

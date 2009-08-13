@@ -1245,16 +1245,18 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 {
 	sockaddr_list *list, *l;
 	struct sockaddr *oldaddr;
-#ifdef ALWAYS_SEND_DH
-	dh_cache_entry *dh_entry;
-#endif
-	
 
 	/* 
 	 * If preferred address is deleted, do readdress and replace it
 	 */
 	if (hip_a->hi->addrs.status == DELETED) {
 		oldaddr = HIPA_SRC(hip_a);
+		/* make sure ports are the same, for UDP encapsulation */
+		if (oldaddr->sa_family == AF_INET) {
+			((struct sockaddr_in*)newaddr)->sin_port = 
+				((struct sockaddr_in*)oldaddr)->sin_port;
+			/* TODO: IPv6 UDP support here */
+		}
 		if (!memcmp(oldaddr, newaddr, SALEN(newaddr))) {
 			/* address is same, 'undelete' */
 			make_address_active(&hip_a->hi->addrs);
@@ -1266,6 +1268,13 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 	 * Add the new address to the end of the list (or unmark deleted status)
 	 */
 	} else {
+		/* set UDP port, as we do in hip_handle_acquire() if UDP
+		 * encapsulation is enabled */
+		if (hip_a->udp) {
+			((struct sockaddr_in *)newaddr)->sin_port = 
+							htons(HIP_UDP_PORT);
+			/* TODO: IPv6 UDP support here */
+		}
 		/* this function checks if the address already exists */
 		list = &hip_a->hi->addrs;
 		l = add_address_to_list(&list, newaddr, if_index);
