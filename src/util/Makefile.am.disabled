@@ -1,0 +1,46 @@
+#
+#
+# Host Identity Protocol
+# Copyright (c) 2006 the Boeing Comapny
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# utils/Makefile.am
+#
+# Author: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
+# 
+# This Makefile builds one of three possible configuration libraries,
+# controlled by the ./configure --enable-sma-crawler={file,LDAP,IFMAP} option
+#
+
+if WANT_SMA_CRAWLER_FILES_CFG
+lib_LTLIBRARIES = libhipcfgfiles.la
+SRC_HIPCFGLDAP = cfg-common/hip_cfg.cpp cfg-files/hip_cfg_files.cpp
+libhipcfgfiles_la_CPPFLAGS = -DSMA_CRAWLER -Wall -Woverloaded-virtual -Wcast-qual
+libhipcfgfiles_la_LDFLAGS = -version_info $(VERSION) -release $(VERSION)
+libhipcfgfiles_la_SOURCES = $(SRC_HIPCFGLDAP)
+endif
+
+if WANT_SMA_CRAWLER_LDAP_CFG
+lib_LTLIBRARIES = libhipcfgldap.la
+SRC_HIPCFGLDAP = cfg-common/hip_cfg.cpp cfg-ldap/hip_cfg_ldap.cpp
+libhipcfgldap_la_CPPFLAGS = -DSMA_CRAWLER -Wall -Woverloaded-virtual -Wcast-qual
+libhipcfgldap_la_LDFLAGS = -version_info $(VERSION) -release $(VERSION)
+libhipcfgldap_la_SOURCES = $(SRC_HIPCFGLDAP)
+endif
+
+if WANT_SMA_CRAWLER_IFMAP_CFG
+# TODO
+endif
+
+INCLUDES = -I$(top_srcdir)/src/include @libxml2_CFLAGS@
+LDADD = @libxml2_LIBS@
+
