@@ -556,9 +556,13 @@ void *hip_esp_input(void *arg)
 		max_fd = (s_esp > s_esp_udp) ? s_esp : s_esp_udp;
 #else
 		FD_SET((unsigned)s_esp_udp_dg, &fd);
+#ifdef __MACOSX__
+		max_fd = maxof(3, s_esp, s_esp_udp, s_esp_udp_dg);
+#else /* __MACOSX__ */
 		FD_SET((unsigned)s_esp6, &fd);
 		max_fd = maxof(4, s_esp, s_esp6, s_esp_udp, s_esp_udp_dg);
-#endif
+#endif /* __MACOSX__ */
+#endif /* __WIN32__ */
 		timeout.tv_sec = 1;
 		timeout.tv_usec = 0;
 		memset(buff, 0, sizeof(buff));
@@ -617,7 +621,7 @@ void *hip_esp_input(void *arg)
 			len = recv(s_esp_udp, buff, sizeof(buff), 0);
 #else
 			len = read(s_esp_udp, buff, sizeof(buff));
-#endif
+#endif /* __WIN32__ */
 
 			if (len < (sizeof(struct ip) + sizeof(udphdr)))
 				continue; /* packet too short */
@@ -680,6 +684,7 @@ void *hip_esp_input(void *arg)
 			 * s_esp_udp RAW socket. This bound datagram socket
 			 * prevents ICMP port unreachable messages. */
 			continue;
+#ifndef __MACOSX__
 		} else if (FD_ISSET(s_esp6, &fd)) {
 			len = read(s_esp6, buff, sizeof(buff));
 			/* there is no IPv6 header supplied */
@@ -700,6 +705,7 @@ void *hip_esp_input(void *arg)
 			if (write(tapfd, &data[offset], len) < 0) {
 				printf("hip_esp_input() write() failed.\n");
 			}
+#endif /* !__MACOSX__ */
 #endif /* !__WIN32__ */
 		} else if (err == 0) {
 			/* idle cycle */

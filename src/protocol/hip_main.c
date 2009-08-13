@@ -227,7 +227,11 @@ int main_loop(int argc, char **argv)
 	HCNF.disable_dns_lookups = FALSE;
 	HCNF.disable_notify = FALSE;
 	HCNF.disable_dns_thread = TRUE;
+#ifdef __MACOSX__
+	HCNF.disable_udp = TRUE;
+#else
 	HCNF.disable_udp = FALSE;
+#endif
 	HCNF.enable_bcast = FALSE;
 	HCNF.num_reg_types = 0;
 	HCNF.min_reg_lifetime = 96;  /* min offered 2^((96-64)/8) = s */
@@ -1044,6 +1048,7 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 	hip_assoc *hip_a;
 	hiphdr *hiph;
 	char typestr[12];
+	int offset;
 
 	for (i=0; i < max_hip_assoc; i++) {
 		hip_a = &hip_assoc_table[i];
@@ -1063,7 +1068,10 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 				log_(WARN, "Cannot determine source address for"
 				    " retransmission to %s.\n", logaddr(dst));
 			}
-			hiph = (hiphdr*) &hip_a->rexmt_cache.packet[0];
+			offset = 0;
+			if (hip_a->udp)
+				offset += sizeof(udphdr) + sizeof(__u32);
+			hiph = (hiphdr*) &hip_a->rexmt_cache.packet[offset];
 #ifdef DO_EXTRA_DHT_LOOKUPS
 			/* XXX note that this code has proven problematic */
 			/* has the address changed? do a DHT lookup */

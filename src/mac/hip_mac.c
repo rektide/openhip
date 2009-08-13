@@ -12,6 +12,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ *  hip_mac.c
+ *
  *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *              Tom Henderson <thomas.r.henderson@boeing.com>
  *              Jeff Meegan  jeff.r.meegan@boeing.com
@@ -97,12 +99,41 @@ return 0;
  */
 int select_preferred_address()
 {
-	int preferred_selected;
+	int preferred_selected, preferred_iface_index;
 	sockaddr_list *l;
 	__u32 ip;
 	/* Linux version */
 	/* XXX TODO: dump routing table and choose addr w/default route. */
 	preferred_selected = FALSE;
+	preferred_iface_index = -1;
+	/* first check for preferred from conf file */
+	if ((HCNF.preferred.ss_family) || (preferred_iface_index != -1)) {
+		for (l = my_addr_head; l; l=l->next) {
+		    /* preferred address takes priority */
+		    if ((l->addr.ss_family==HCNF.preferred.ss_family) &&
+			(memcmp(SA2IP(&l->addr), SA2IP(&HCNF.preferred), 
+				SAIPLEN(&l->addr))==0)) {
+			l->preferred = TRUE;
+			log_(NORM, "%s selected as the", logaddr(SA(&l->addr)));
+			log_(NORM, " preferred address (conf).\n");
+			preferred_selected = TRUE;
+			break;
+		    /* preferred interface next priority */
+		    } else if ((preferred_iface_index > 0) && 
+				(preferred_iface_index == l->if_index)) {
+			if (l->addr.ss_family != AF_INET)
+				continue;
+			ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
+			if ((ntohl(ip)==INADDR_LOOPBACK) || (IS_LSI32(ip)))
+				continue;
+			l->preferred = TRUE;
+			log_(NORM, "%s selected as the", logaddr(SA(&l->addr)));
+			log_(NORM, " preferred address (conf iface).\n");
+			preferred_selected = TRUE;
+			break;
+		    }
+		}
+	}
 	/* when a preferred address has not been found yet, choose
 	 * the first that is not a loopback address
 	 */

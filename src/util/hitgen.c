@@ -622,7 +622,11 @@ void generate_conf_file(char *filename)
 	xmlNewChild(root_node, NULL, BAD_CAST "enable_broadcast",BAD_CAST "no");
 #endif
 	xmlNewChild(root_node, NULL, BAD_CAST "disable_udp",
+#ifdef __MACOSX__
+			BAD_CAST "yes");
+#else
 			BAD_CAST "no");
+#endif
 	xmlSaveFormatFileEnc(filename, doc, "UTF-8", 1);
 	xmlFreeDoc(doc);
 }

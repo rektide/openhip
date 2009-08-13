@@ -12,7 +12,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- *  hip_umh.c
+ *  hip_linux_umh.c
  *
  *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  * 
@@ -286,6 +286,7 @@ void init_hip(int ac, char **av)
 		printf("Error creating IPv4 ESP input socket.\n");
 		exit(1);
 	}
+#endif
 	if ((s_esp_udp = init_esp_input(AF_INET, SOCK_RAW, IPPROTO_UDP, 
 					HIP_UDP_PORT, "IPv4 UDP")) < 0) {
 		printf("Error creating IPv4 UDP input socket.\n");
@@ -297,6 +298,7 @@ void init_hip(int ac, char **av)
 		printf("Error creating IPv4 UDP datagram socket.\n");
 		exit(1);
 	}
+#ifndef __MACOSX__
 	if ((s_esp6 = init_esp_input(AF_INET6, SOCK_RAW, IPPROTO_ESP, 0,
 					"IPv6 ESP")) < 0) {
 		printf("Error creating IPv6 ESP input socket.\n");
