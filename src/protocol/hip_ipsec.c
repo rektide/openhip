@@ -1526,7 +1526,7 @@ void hip_handle_acquire(struct sockaddr *src, struct sockaddr *dst)
 	add_other_addresses_to_hi(hip_a->peer_hi, FALSE);
 
 	/* use HIP over UDP unless disabled in conf file */
-	if (!HCNF.disable_udp) {
+	if (!HCNF.disable_udp && (dst->sa_family == AF_INET)) {
 		hip_a->udp = TRUE;
 		/* this signals to hip_send() to perform UDP encapsulation */
 		((struct sockaddr_in*)HIPA_DST(hip_a))->sin_port = \
