@@ -588,22 +588,8 @@ int main_loop(int argc, char **argv)
 #endif
 	}
 
-#ifndef __WIN32__
-	/* setup message header with control and receive buffers */
-	msg.msg_name = &addr_from;
-   	msg.msg_namelen = sizeof(struct sockaddr_storage);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-#if !defined(__MACOSX__)
-	memset(cbuff, 0, sizeof(cbuff));
-	msg.msg_control = cbuff;
-	msg.msg_controllen = sizeof(cbuff);
-	msg.msg_flags = 0;
-#endif
-	memset(buff, 0, sizeof(buff));
-	iov.iov_len = sizeof(buff);
-	iov.iov_base = buff;
 
+#ifndef __WIN32__
 #if !defined(__MACOSX__)
 	/* indicate that socket wants to receive ICMP messages */
 	setsockopt(s_hip, SOL_IP, IP_RECVERR, &optval, sizeof(optval));
@@ -617,11 +603,8 @@ int main_loop(int argc, char **argv)
 
 #ifdef IPV6_HIP
 	setsockopt(s6_hip, IPPROTO_IPV6, IPV6_RECVERR, &optval, sizeof(optval));
-#ifdef IPV6_2292PKTINFO
-	setsockopt(s6_hip, IPPROTO_IPV6, IPV6_2292PKTINFO, &optval, sizeof(optval));
-#else
-	setsockopt(s6_hip, IPPROTO_IPV6, IPV6_PKTINFO, &optval, sizeof(optval));
-#endif
+	setsockopt(s6_hip, IPPROTO_IPV6, IPV6_RECVPKTINFO, &optval, 
+			sizeof(optval));
 	if (bind(s6_hip, (struct sockaddr*)&addr6, sizeof(addr6)) < 0) {
 		log_(ERR, "bind() for IPv6 HIP socket failed.\n");
 		goto hip_main_error_exit;
@@ -661,6 +644,22 @@ int main_loop(int argc, char **argv)
 		timeout.tv_sec = 1;
 		timeout.tv_usec = 0;
 
+		/* setup message header with control and receive buffers */
+#ifndef __WIN32__
+		msg.msg_name = &addr_from;
+	   	msg.msg_namelen = sizeof(struct sockaddr_storage);
+		msg.msg_iov = &iov;
+		msg.msg_iovlen = 1;
+#if !defined(__MACOSX__)
+		memset(cbuff, 0, sizeof(cbuff));
+		msg.msg_control = cbuff;
+		msg.msg_controllen = sizeof(cbuff);
+		msg.msg_flags = 0;
+#endif
+		memset(buff, 0, sizeof(buff));
+		iov.iov_len = sizeof(buff);
+		iov.iov_base = buff;
+#endif /* __WIN32__ */
 #ifdef SMA_CRAWLER
                 now_time = time(NULL);
                 if (now_time - last_time > 60) {
@@ -722,7 +721,6 @@ int main_loop(int argc, char **argv)
 		} else if (FD_ISSET(s_hip, &read_fdset)) { 
 			/* Something on HIP socket */
 			flags = 0;
-			memset(buff, 0, sizeof(buff));
 #ifdef __UMH__
 			/* extra check to prevent recvmsg() from blocking */
 			if (g_state != 0)
@@ -765,7 +763,6 @@ int main_loop(int argc, char **argv)
 		} else if (FD_ISSET(s6_hip, &read_fdset)) { 
 			/* Something on HIP v6 socket */
 			flags = 0;
-			memset(&buff, 0, sizeof(buff));
 #ifdef __WIN32__
 			addr_from_len = sizeof(addr_from);
 			length = recvfrom(s6_hip, buff, sizeof(buff), flags,
@@ -820,7 +817,6 @@ int main_loop(int argc, char **argv)
 		} else if (FD_ISSET(s_stat, &read_fdset)) { 
 			/* Something on Status socket */
 			flags = 0;
-			memset(&buff, 0, sizeof(buff));
 			addr_from_len = sizeof(addr_from);
 			length = sizeof(buff);
 			if ((length = recvfrom(s_stat, buff, length, flags,
@@ -899,13 +895,8 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
 		/* destination address comes from ancillary data passed
 		 * with msg due to IPV6_PKTINFO socket option */
 		for (cmsg=CMSG_FIRSTHDR(msg); cmsg; cmsg=CMSG_NXTHDR(msg,cmsg)){
-#ifdef IPV6_2292PKTINFO
-			if ((cmsg->cmsg_level == IPPROTO_IPV6) && 
-			    (cmsg->cmsg_type == IPV6_2292PKTINFO)) {
-#else
 			if ((cmsg->cmsg_level == IPPROTO_IPV6) && 
 			    (cmsg->cmsg_type == IPV6_PKTINFO)) {
-#endif
 				pktinfo = (struct in6_pktinfo*)CMSG_DATA(cmsg);
 				break;
 			}
