@@ -36,8 +36,7 @@ fi;
 echo "Running aclocal..." && aclocal $EXTRA_INC \
     && $LIBTOOLIZE_MSG && $LIBTOOLIZE \
     && echo "Running automake..." && automake --add-missing --copy --foreign \
-    && echo "Running autoconf..." && autoconf
-
-echo ""
-echo "You are now ready to run \"./configure\"$CONFOPTS."
+    && echo "Running autoconf..." && autoconf \
+    && echo "" \
+    && echo "You are now ready to run \"./configure\"$CONFOPTS."
 
