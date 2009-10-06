@@ -278,6 +278,7 @@ void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 	else
 		cp = (__u8 *)&ip6h->ip6_dst;
 	memcpy(SA2IP(&spi_nats->peer_addr), cp, SAIPLEN(&spi_nats->peer_addr));
+	/* XXX need to fix out_addr family != peer family here */
 	rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
 	return;
 }
@@ -812,10 +813,11 @@ unsigned char *check_hip_packet(int family, unsigned char *payload,
 	}
 	memset(ipstr, 0, sizeof(ipstr));
 	inet_ntop(family, SA2IP(src), ipstr, sizeof(ipstr));
-	printf("addresses are now %s, ", ipstr);
+	log_(NORM, "mobile router SPINAT: rewriting addresses to (src,dst) = "
+		"%s, ", ipstr);
 	memset(ipstr, 0, sizeof(ipstr));
 	inet_ntop(family, SA2IP(dst), ipstr, sizeof(ipstr));
-	printf("%s\n", ipstr);
+	log_(NORM, "%s\n", ipstr);
 	hiph->checksum = 0;
 	hiph->checksum = checksum_packet((__u8 *)hiph, src, dst);
 
@@ -1257,6 +1259,7 @@ int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
 	tlv_auth_ticket *auth_ticket;
 	locator *loc1;
 	__u32 loc_spi;
+	hip_assoc *hip_a;
 
 	memset(buff, 0, sizeof(buff));
 
@@ -1336,9 +1339,12 @@ int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
 	/* send the packet */
 	log_(NORMT, "sending UPDATE packet (%d bytes)...\n", location);
 
+	hip_a = search_registrations(*mn_hit, REGTYPE_MR);
+	if (hip_a) retransmit = TRUE;
+
 	/* Retransmit UPDATEs unless it contains a LOCATOR or address check */
 	log_(NORM, "Sending UPDATE packet to dst : %s \n", logaddr(dst));
-	return(hip_send(buff, location, src, dst, NULL, retransmit));
+	return(hip_send(buff, location, src, dst, hip_a, retransmit));
 }
 
 /*
@@ -1446,6 +1452,13 @@ int hip_mr_set_external_if()
 		for (l = my_addr_head; l; l=l->next) {
 			if (l->if_index != external_iface_index)
 				continue;
+			/* external address is the same */
+			if ((external_address.ss_family == l->addr.ss_family) &&
+			    (memcmp(SA2IP(&l->addr), SA2IP(&external_address),
+			     SAIPLEN(&l->addr ))==0)) {
+				log_(NORM, "External address unchanged.\n");
+				return(0);
+			}
 			if (TRUE == l->preferred) {
 				l_new_external = l;
 				break;
