@@ -128,6 +128,9 @@ void endbox_init();
 int hipcfg_init();
 extern __u32 get_preferred_lsi(struct sockaddr *);
 #endif
+#ifdef MOBILE_ROUTER
+extern struct sockaddr_storage out_addr;
+#endif
 
 /*
  * main():  HIP daemon main event loop
@@ -1051,8 +1054,8 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 		if ((OPT.no_retransmit == FALSE) &&
 		    (hip_a->rexmt_cache.retransmits < (int)HCNF.max_retries) && 
 		    (hip_a->state != R2_SENT)) {
-			src = (struct sockaddr*) &hip_a->hi->addrs.addr;
-			dst = (struct sockaddr*) &hip_a->rexmt_cache.dst;
+			src = SA(&hip_a->hi->addrs.addr);
+			dst = SA(&hip_a->rexmt_cache.dst);
 			if ((src->sa_family != dst->sa_family) &&
 			   (get_addr_from_list(my_addr_head, 
 					       dst->sa_family, src) < 0)) {
@@ -1063,6 +1066,18 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 			if (hip_a->udp)
 				offset += sizeof(udphdr) + sizeof(__u32);
 			hiph = (hiphdr*) &hip_a->rexmt_cache.packet[offset];
+#ifdef MOBILE_ROUTER
+			/* MR UPDATE retransmission has different source...
+			 * TODO: clean this up */
+			if (OPT.mr && (hiph->packet_type == UPDATE) &&
+			    (!hits_equal(hip_a->peer_hi->hit, 
+					hiph->hit_rcvr)) ) {
+				src = SA(&out_addr);
+				log_(NORM, "Mobile router retransmitted UPDATE "
+					"from %s to ", logaddr(src));
+				log_(NORM, "%s\n", logaddr(dst));
+			}
+#endif /* MOBILE_ROUTER */
 #ifdef DO_EXTRA_DHT_LOOKUPS
 			/* XXX note that this code has proven problematic */
 			/* has the address changed? do a DHT lookup */
@@ -1093,9 +1108,9 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 			}
 #endif /* DO_EXTRA_DHT_LOOKUPS */
 			hip_packet_type(hiph->packet_type, typestr);
-			log_(NORMT, "Retransmitting %s packet to %s ",
-			    typestr, logaddr(dst));
-			log_(NORM,  "(attempt %d of %d)...\n",
+			log_(NORMT, "Retransmitting %s packet from %s to ",
+			    typestr, logaddr(src));
+			log_(NORM,  "%s (attempt %d of %d)...\n", logaddr(dst),
 				hip_a->rexmt_cache.retransmits+1, 
 				HCNF.max_retries);
 			hip_retransmit(hip_a, hip_a->rexmt_cache.packet, 

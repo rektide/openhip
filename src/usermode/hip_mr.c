@@ -59,7 +59,7 @@ static int external_iface_index = -1;
 static struct sockaddr_storage external_address;
 
 static char *external_interface;
-static struct sockaddr_storage out_addr;
+struct sockaddr_storage out_addr;
 
 /*
  * local functions
@@ -1339,6 +1339,11 @@ int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
 	/* send the packet */
 	log_(NORMT, "sending UPDATE packet (%d bytes)...\n", location);
 
+	/* use the mr<-->mr_client association for storing the UPDATE for
+	 * retransmission; note that this structure is limited to having only
+	 * one packet in the retransmission buffer, so only one of the SPINAT
+	 * associations will have transmissions; TODO: fix this
+	 */
 	hip_a = search_registrations(*mn_hit, REGTYPE_MR);
 	if (hip_a) retransmit = TRUE;
 
