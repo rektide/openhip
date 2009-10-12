@@ -266,8 +266,10 @@ int get_my_addresses()
 			len = h->nlmsg_len - NLMSG_LENGTH(sizeof(*ifa));
 
 			if ((ifa->ifa_family != AF_INET) &&
-			    (ifa->ifa_family != AF_INET6))
+			    (ifa->ifa_family != AF_INET6)) {
+				h = NLMSG_NEXT(h, status);
 				continue;
+			}
 
 			/* parse list of attributes into table
 			 * (same as parse_rtattr()) */
