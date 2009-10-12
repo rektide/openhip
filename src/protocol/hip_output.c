@@ -298,10 +298,12 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie, 
 		    dh_cache_entry *dh_entry)
 {
+#ifdef MOBILE_ROUTER
 	struct sockaddr *preferred_addr = NULL, *second_addr = NULL;
 	sockaddr_list *l;
 	tlv_locator *loc;
 	locator *loc1;
+#endif /* MOBILE_ROUTER */
 	hiphdr *hiph;
 	int location=0, cookie_location=0;
 	int len;
@@ -340,7 +342,8 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 		location += sizeof(tlv_r1_counter);
 		location = eight_byte_align(location);
 	}
-	
+
+#ifdef MOBILE_ROUTER
 	/* add LOCATOR parameter for preferred address and secondary
 	 * address of different address family if available
 	 */
@@ -407,6 +410,7 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 		location += sizeof(tlv_locator);
 		location = eight_byte_align(location);
 	}
+#endif /* MOBILE_ROUTER */
 
 	/* build the PUZZLE TLV */
 	puzzle = (tlv_puzzle*) &data[location];
