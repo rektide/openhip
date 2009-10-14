@@ -12,7 +12,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- *  hip_netlink.c
+ *  hip_addr.c
  *
  *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *              Tom Henderson <thomas.r.henderson@boeing.com>
@@ -1321,6 +1321,8 @@ void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 	 */
 	l = NULL;
 	for (l = list->next; l; l=l->next) { /* look for same family */
+		if (l->status == DELETED)
+			continue;
 		if (newaddr->sa_family != l->addr.ss_family) {
 			if (!new_af)
 				new_af = l;
