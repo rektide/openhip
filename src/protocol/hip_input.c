@@ -613,6 +613,11 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 			/* compute key from our dh and peer's pub_key and
 			 * store in dh_secret_key */
 			dh_secret_key = malloc(DH_size(hip_a->dh));
+			if (!dh_secret_key) {
+				log_(WARN, "hip_parse_R1() malloc() error");
+				return(-1);
+			}
+			memset(dh_secret_key, 0, DH_size(hip_a->dh));
 			len = DH_compute_key(dh_secret_key,
 					     hip_a->peer_dh->pub_key,
 					     hip_a->dh);
@@ -947,6 +952,11 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 			/* compute key from our dh and peer's pub_key and
 			 * store in dh_secret_key */
 			dh_secret_key = malloc(DH_size(hip_a->dh));
+			if (!dh_secret_key) {
+				log_(WARN, "hip_parse_I2() malloc() error");
+				return(-1);
+			}
+			memset(dh_secret_key, 0, DH_size(hip_a->dh));
 			len = DH_compute_key(dh_secret_key,
 					     hip_a->peer_dh->pub_key,
 					     hip_a->dh);
@@ -2321,6 +2331,11 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 		 * and recompute the keymat
 		 */
 		dh_secret_key = malloc(DH_size(hip_a->dh));
+		if (!dh_secret_key) {
+			log_(WARN, "hip_finish_rekey() malloc() error");
+			return(-1);
+		}
+		memset(dh_secret_key, 0, DH_size(hip_a->dh));
 		len = DH_compute_key(dh_secret_key, 
 				     hip_a->peer_dh->pub_key,
 				     hip_a->dh);
