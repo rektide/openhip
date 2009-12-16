@@ -3,7 +3,7 @@
 # libtool is only used to build the configuration libraries associated
 #  with the --enable-sma-crawler configure option
 if [ "$1a" = "--enable-sma-crawlera" ]; then
-	LIBTOOLIZE_MSG="echo Running libtoolize..."
+	LIBTOOLIZE_MSG="echo '(1.5/3) Running libtoolize...'"
 	LIBTOOLIZE="libtoolize --force --copy --automake"
 	CONFOPTS=" --enable-sma-crawler"
 	if [ -e src/util/Makefile.am.disabled ]; then
@@ -33,10 +33,11 @@ else
 	EXTRA_INC=""
 fi;
 
-echo "Running aclocal..." && aclocal $EXTRA_INC \
+echo "(1/3) Running aclocal..." && aclocal $EXTRA_INC \
     && $LIBTOOLIZE_MSG && $LIBTOOLIZE \
-    && echo "Running automake..." && automake --add-missing --copy --foreign \
-    && echo "Running autoconf..." && autoconf \
+    && echo "(2/3) Running automake..." \
+    && automake --add-missing --copy --foreign \
+    && echo "(3/3) Running autoconf..." && autoconf \
     && echo "" \
     && echo "You are now ready to run \"./configure\"$CONFOPTS."
 
