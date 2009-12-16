@@ -530,6 +530,12 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 					"HIT.\n");
 			}
 		} else if (!sig_verified && (type == PARAM_HIP_SIGNATURE_2)) {
+			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+				log_(WARN, "Received signature parameter "
+					"without any Host Identity context for "
+					"verification.\n");
+				return(-1);
+			}
 			len = eight_byte_align(location);
 			memset(hiph->hit_rcvr, 0, sizeof(hip_hit));
 			/* cookie has already been zeroed */
@@ -1199,6 +1205,12 @@ I2_ERROR:
 				log_(NORM, "HMAC verified OK.\n");
 			}
 		} else if (type == PARAM_HIP_SIGNATURE) {
+			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+				log_(WARN, "Received signature parameter "
+					"without any Host Identity context for "
+					"verification.\n");
+				return(-1);
+			}
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
 			hiph->hdr_len = (len/8) - 1;
@@ -1489,6 +1501,12 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 			memcpy(&hmac_tlv_tmp, tlv, sizeof(tlv_hmac));
 			hi_loc = eight_byte_align(location);
 		} else if (type == PARAM_HIP_SIGNATURE) {
+			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+				log_(WARN, "Received signature parameter "
+					"without any Host Identity context for "
+					"verification.\n");
+				return(-1);
+			}
 			/* save SIG and do HMAC_2 verification */
 			memcpy(sig_tlv_tmp, tlv, length+4);
 			/* When building host identity tlv for HMAC_2 verify,
@@ -1728,6 +1746,12 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 			}
 			continue;
 		} else if (!sig_verified && (type == PARAM_HIP_SIGNATURE)) {
+			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+				log_(WARN, "Received signature parameter "
+					"without any Host Identity context for "
+					"verification.\n");
+				return(-1);
+			}
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
 			hiph->hdr_len = (len/8) - 1;
@@ -2464,6 +2488,12 @@ int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
 			memcpy(&received_nonce, 
 			    ((tlv_echo*)tlv)->opaque_data, length);
 		} else if (type == PARAM_HIP_SIGNATURE) {
+			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+				log_(WARN, "Received signature parameter "
+					"without any Host Identity context for "
+					"verification.\n");
+				return(-1);
+			}
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
 			hiph->hdr_len = (len/8) - 1;
@@ -2625,6 +2655,12 @@ int hip_parse_notify(__u8 *data, hip_assoc *hip_a, __u16 *code, __u8 *nd, __u16 
 				nd = notify->notify_data;
 			}
 		} else if (type == PARAM_HIP_SIGNATURE) {
+			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+				log_(WARN, "Received signature parameter "
+					"without any Host Identity context for "
+					"verification.\n");
+				return(-1);
+			}
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
 			hiph->hdr_len = (len/8) - 1;
