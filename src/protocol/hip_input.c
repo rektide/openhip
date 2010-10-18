@@ -852,6 +852,11 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 		tlv = (tlv_head*) &data[location];
 		type = ntohs(tlv->type);
 		length = ntohs(tlv->length);
+		/* check if hip_a has been initalized*/
+		if(type > PARAM_SOLUTION && !hip_a){
+			log_(NORM, "I2 packet does not contain puzzle solution.\n");
+			return(-1);
+		}
 		if (check_tlv_type_length(type, length, last_type, "I2") < 0)
 			return(-1);
 		else
