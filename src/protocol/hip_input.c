@@ -346,7 +346,7 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 		 * verification if this is a relayed I1 */
 		hip_a_rvs = find_hip_association3(src, dst);
 		if (hip_parse_I1(hip_a_rvs, buff, &hiti, &hitr) < 0) {
-			log_(WARN, "Bad I1, dropping.\n");
+			log_(WARN, "Error while processing I1, dropping.\n");
 			return(-1);
 		}
 		/* 
@@ -759,7 +759,7 @@ int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src)
 	 * to control which suites are used with which host */
 	/* Parse R1 */
 	if (hip_parse_R1(buff, hip_a) < 0) {
-		log_(NORMT, "Bad R1, dropping.\n");
+		log_(NORMT, "Error while processing R1, dropping.\n");
 		if (hip_a->state == I1_SENT) {
 			clear_retransmissions(hip_a);
 			set_state(hip_a, E_FAILED);
@@ -1372,7 +1372,7 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 	 */
 	hip_a = hip_a_existing; /* may be NULL */
 	if (hip_parse_I2(buff, &hip_a, my_host_id, src, dst) < 0) {
-		log_(WARN, "Bad I2, dropping.\n");
+		log_(WARN, "Error while processing I2, dropping.\n");
 		/* stay in same state here */
 		return(-1);
 	}
@@ -1608,7 +1608,7 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
 		return(-1);
 	}
 	if (hip_parse_R2(buff, hip_a) < 0) {
-		log_(WARN, "Bad R2, dropping.\n");
+		log_(WARN, "Error while processing R2, dropping.\n");
 		clear_retransmissions(hip_a);
 		set_state(hip_a, E_FAILED);
 		return(-1);
@@ -1989,7 +1989,7 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 	memset(&rk, 0, sizeof(struct rekey_info));
 	nonce = 0;
 	if ((err = hip_parse_update(data, hip_a, &rk, &nonce, src)) < 0) {
-		log_(WARN, "Bad UPDATE, dropping.\n");
+		log_(WARN, "Error while processing UPDATE, dropping.\n");
 		return(-1);
 	}
 	
@@ -2575,7 +2575,8 @@ int hip_handle_close(__u8 *buff, hip_assoc *hip_a)
 		return(-1);
 	}
 	if (hip_parse_close(buff, hip_a, &nonce) < 0) {
-		log_(WARN, "Bad CLOSE%s, dropping.\n", is_ack ? "_ACK" : "");
+		log_(WARN, "Error while processing CLOSE%s, dropping.\n",
+			is_ack ? "_ACK" : "");
 		/* stay in the same state */
 		return(-1);
 	}
@@ -2707,7 +2708,7 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
 	}
 
 	if (hip_parse_notify(buff, hip_a, &code, data, &data_len) < 0) {
-		log_(WARN, "Bad NOTIFY, dropping.\n");
+		log_(WARN, "Error while processing NOTIFY, dropping.\n");
 		/* stay in the same state */
 		return(-1);
 	}
