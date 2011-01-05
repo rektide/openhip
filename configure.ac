@@ -69,6 +69,10 @@ AC_CHECK_LIB([ipsec], [pfkey_send_hip_x1])
 # FIXME: Replace `main' with a function in `-lutils':
 #AC_CHECK_LIB([utils], [main])
 
+# the simple check below does not work; this could be improved
+#AC_CHECK_LIB([m], [pow])
+LIBS="$LIBS -lm"
+
 # Checks for header files.
 AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
