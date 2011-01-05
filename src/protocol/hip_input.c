@@ -771,9 +771,13 @@ int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src)
 		log_(WARN, "Error: after parsing R1, DH is null.\n");
 	/* Need to send an SPI to peer */
 	hip_a->spi_in = get_next_spi(hip_a);
-	/* Fill in the destination address when an RVS was used */
-	if (VALID_FAM(&hip_a->peer_hi->lsi))
+	/* Fill in the destination address for when an RVS was used,
+	 * and ensure that the LSI mapping exists */
+	if (VALID_FAM(&hip_a->peer_hi->lsi)) {
 		memcpy(HIPA_DST(hip_a), src, SALEN(src));
+		update_lsi_mapping(HIPA_DST(hip_a), SA(&hip_a->peer_hi->lsi),
+				   hip_a->peer_hi->hit);
+	}
 	/* Update peer_hi_head and fill in LSI*/
 	update_peer_list(hip_a);
 	/* hip_send_I2 takes cookie from R1 */

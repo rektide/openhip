@@ -92,7 +92,8 @@ typedef struct _hip_sadb_dst_entry
 
 /* HIP LSI table entry */
 #define LSI_PKT_BUFFER_SIZE 2000
-#define LSI_ENTRY_LIFETIME 5
+/* number of seconds to keep LSI entries */
+#define LSI_ENTRY_LIFETIME 120
 typedef struct _hip_lsi_entry
 {
 	struct _hip_lsi_entry *next;
