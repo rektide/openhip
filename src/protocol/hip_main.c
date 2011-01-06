@@ -781,6 +781,17 @@ int main_loop(int argc, char **argv)
 					    ++num_icmp_errors, 
 					    errno, strerror(errno));
 				}
+#ifndef __MACOSX__
+#ifndef __WIN32__
+		    		/* retrieve ICMP message before looping */ 
+		    		flags = MSG_ERRQUEUE;
+		    		length = recvmsg(s6_hip, &msg, flags);
+				/*
+				 * Presently, we do not do anything
+				 * with ICMP messages
+				 */
+#endif
+#endif
 			} else {
 #ifdef __WIN32__
 				hip_handle_packet(buff, length, SA(&addr_from), FALSE);
