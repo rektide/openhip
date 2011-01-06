@@ -69,6 +69,7 @@ typedef struct _hip_sadb_entry
 	__u8 *a_key;			/* raw crypto keys */
 	__u8 *e_key;
 	__u64 lifetime;			/* seconds until expiration */
+	struct timeval exptime;		/* expiration timestamp */
 	__u64 bytes;			/* bytes transmitted */
 	struct timeval usetime;		/* last used timestamp */
 	__u32 sequence;			/* sequence number counter */
@@ -141,6 +142,7 @@ hip_lsi_entry *hip_lookup_lsi(struct sockaddr *lsi);
 hip_sadb_entry *hip_sadb_lookup_spi(__u32 spi);
 hip_sadb_entry *hip_sadb_lookup_addr(struct sockaddr *addr);
 hip_sadb_entry *hip_sadb_get_next(hip_sadb_entry *placemark);
+void hip_sadb_expire();
 
 int hip_select_family_by_proto(__u32 lsi, __u8 proto, __u8 *header,
         struct timeval *now);

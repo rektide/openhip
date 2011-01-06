@@ -48,6 +48,7 @@
 #include <hip/hip_types.h>
 #include <hip/hip_sadb.h>
 #include <hip/hip_funcs.h> /* gettimeofday() for win32 */
+#include <hip/hip_usermode.h> /* pfkey_send_expire() */
 #include <win32/pfkeyv2.h>
 
 
@@ -233,10 +234,13 @@ int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *src_hit,
 	hip_lsi_entry *lsi_entry;
 	int hash, err, key_len;
 	__u8 key1[8], key2[8], key3[8]; /* for 3-DES */
+	struct timeval now;
 
 	/* type is currently ignored */	
 	if (!src || !dst || !a_key)
 		return(-1);
+
+	gettimeofday(&now, NULL);
 
 	hash = sadb_hashfn(spi);
 	pthread_mutex_lock(&hip_sadb_locks[hash]); /* lock this chain */
@@ -272,6 +276,8 @@ int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *src_hit,
 	if (e_keylen > 0)
 		entry->e_key = (__u8*)malloc(e_keylen);
 	entry->lifetime = lifetime;
+	entry->exptime.tv_sec = now.tv_sec + lifetime;
+	entry->exptime.tv_usec = now.tv_usec;
 	entry->bytes = 0;
 	entry->usetime.tv_sec = 0;
 	entry->usetime.tv_usec = 0;
@@ -871,6 +877,30 @@ hip_sadb_entry *hip_sadb_get_next(hip_sadb_entry *placemark)
 	}
 	return(r);
 }
+
+/*
+ * hip_sadb_expire()
+ *
+ * Check the lifetime of SAs and generate expire messages.
+ */
+void hip_sadb_expire()
+{
+	int i;
+	struct timeval now;
+	hip_sadb_entry *e;
+
+	gettimeofday(&now, NULL);
+
+	for (i=0; i < SADB_SIZE; i++) {
+		pthread_mutex_lock(&hip_sadb_locks[i]);
+		for (e = hip_sadb[i]; e; e = e->next) {
+		    if (now.tv_sec > e->exptime.tv_sec)
+			pfkey_send_expire(e->spi);
+		}		
+		pthread_mutex_unlock(&hip_sadb_locks[i]);
+	}
+}
+
 
 /*
  * hip_select_family_by_proto()

@@ -66,6 +66,7 @@ int pfkey_handle_spddelete(int sock, char *data, int len);
 int pfkey_handle_readdress(int sock, char *data, int len);
 int pfkey_handle_acquire(char *data, int len);
 int pfkey_send_acquire(struct sockaddr *target);
+int pfkey_send_expire(__u32 spi);
 int pfkey_send_hip_packet(char *data, int len);
 extern int get_preferred_lsi(struct sockaddr *lsi);
 
@@ -826,6 +827,61 @@ int pfkey_send_acquire(struct sockaddr *target)
 #else
 	if (write(pfkeysp[0], buff, len) != len) {
 		printf("pfkey_send_acquire() write error: %s", strerror(errno));
+		return(-1);
+	}
+#endif
+
+	return(0);
+}
+
+/*
+ * pfkey_send_expire()
+ *
+ * Sends a SADB_HIP_EXPIRE message to the HIP daemon to inform of SA expiration.
+ * Note that RFC 2367 specifies sending:
+ *   <base, SA, lifetime(C and one of HS), address(SD)>
+ * The HIP daemon only parses the SPI, so only the SA extension is used here.
+ */
+int pfkey_send_expire(__u32 spi)
+{
+	char buff[32];
+	struct sadb_msg *msg = (struct sadb_msg*) buff;
+	struct sadb_sa *sa;
+	int len, extlen, location;
+
+	len = sizeof(struct sadb_msg) + sizeof(struct sadb_sa);
+
+	memset(buff, 0, len);
+	
+	msg->sadb_msg_version = PF_KEY_V2;
+	msg->sadb_msg_type = SADB_EXPIRE;
+	msg->sadb_msg_errno = 0;
+	msg->sadb_msg_satype = SADB_SATYPE_ESP;
+	msg->sadb_msg_len = PFKEY_UNIT64(len);
+	msg->sadb_msg_reserved = 0;
+	msg->sadb_msg_seq = ++pfk_seqno;
+	msg->sadb_msg_pid = 0;
+
+	location = sizeof(struct sadb_msg);
+	sa = (struct sadb_sa *)&buff[location];
+	extlen = sizeof(struct sadb_sa);
+	sa->sadb_sa_len = PFKEY_UNIT64(extlen);
+	sa->sadb_sa_exttype = SADB_EXT_SA;
+	sa->sadb_sa_spi = htonl(spi);
+	sa->sadb_sa_replay = 0;
+	sa->sadb_sa_state = 0;
+	sa->sadb_sa_auth = 0;
+	sa->sadb_sa_encrypt = 0;
+	sa->sadb_sa_flags = 0;
+
+#ifdef __WIN32__
+	if (send(pfkeysp[0], buff, len, 0) < 0) {
+		printf("pfkey_send_expire() write error: %s", strerror(errno));
+		return(-1);
+	}
+#else
+	if (write(pfkeysp[0], buff, len) != len) {
+		printf("pfkey_send_expire() write error: %s", strerror(errno));
 		return(-1);
 	}
 #endif

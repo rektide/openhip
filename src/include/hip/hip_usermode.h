@@ -60,6 +60,7 @@ int main_loop(int argc, char **argv);
 int str_to_addr(unsigned char *data, struct sockaddr *addr);
 
 int pfkey_send_acquire(struct sockaddr *target);
+int pfkey_send_expire(__u32 spi);
 int pfkey_send_hip_packet(char *data, int len);
 
 /*

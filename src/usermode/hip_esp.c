@@ -711,7 +711,7 @@ void *hip_esp_input(void *arg)
 			/* idle cycle */
 			hip_remove_expired_lsi_entries();
 			hip_remove_expired_sel_entries();
-			/* TODO: implement SA timeout here */
+			hip_sadb_expire();
 		}
 	}
 
