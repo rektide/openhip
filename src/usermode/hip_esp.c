@@ -223,7 +223,7 @@ void *hip_esp_output(void *arg)
 #endif
 	while (g_state == 0) {
 		/* periodic select loop */
-		gettimeofday(&now, NULL); /* XXX does this cause perf. hit? */
+		gettimeofday(&now, NULL);
 		FD_ZERO(&fd);
 		FD_SET((unsigned)readsp[1], &fd);
 #ifdef __MACOSX__
@@ -563,15 +563,20 @@ void *hip_esp_input(void *arg)
 		max_fd = maxof(4, s_esp, s_esp6, s_esp_udp, s_esp_udp_dg);
 #endif /* __MACOSX__ */
 #endif /* __WIN32__ */
-		timeout.tv_sec = 1;
-		timeout.tv_usec = 0;
+		timeout.tv_sec = 0;
+		timeout.tv_usec = g_read_usec;
 		memset(buff, 0, sizeof(buff));
 		memset(data, 0, sizeof(data));
 
+		/* periodic functions called every g_read_usec timeout */
 #ifdef SMA_CRAWLER
 		endbox_periodic_heartbeat(&now_time, &last_time, &packet_count,
 			"input", touchHeartbeat);
 #endif
+		hip_remove_expired_lsi_entries(&now); /* unbuffer packets */
+		hip_remove_expired_sel_entries(&now); /* this is rate-limited */
+		hip_sadb_expire(&now);
+
 		if ((err = select(max_fd+1, &fd, NULL, NULL, &timeout)) < 0 ) {
 			if (IS_EINTR_ERROR())
 				continue;
@@ -709,9 +714,6 @@ void *hip_esp_input(void *arg)
 #endif /* !__WIN32__ */
 		} else if (err == 0) {
 			/* idle cycle */
-			hip_remove_expired_lsi_entries();
-			hip_remove_expired_sel_entries();
-			hip_sadb_expire();
 		}
 	}
 

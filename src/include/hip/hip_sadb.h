@@ -133,7 +133,7 @@ int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *src_hit,
     __u32 spinat);
 int hip_sadb_delete(__u32 type, struct sockaddr *src, struct sockaddr *dst,
     __u32 spi);
-void hip_remove_expired_lsi_entries();
+void hip_remove_expired_lsi_entries(struct timeval *now);
 void hip_add_lsi(struct sockaddr *addr, struct sockaddr *lsi4, 
 	struct sockaddr *lsi6);
 int buffer_packet(struct sockaddr *lsi, __u8 *data, int len);
@@ -142,11 +142,11 @@ hip_lsi_entry *hip_lookup_lsi(struct sockaddr *lsi);
 hip_sadb_entry *hip_sadb_lookup_spi(__u32 spi);
 hip_sadb_entry *hip_sadb_lookup_addr(struct sockaddr *addr);
 hip_sadb_entry *hip_sadb_get_next(hip_sadb_entry *placemark);
-void hip_sadb_expire();
+void hip_sadb_expire(struct timeval *now);
 
 int hip_select_family_by_proto(__u32 lsi, __u8 proto, __u8 *header,
         struct timeval *now);
 int hip_add_proto_sel_entry(__u32 lsi, __u8 proto, __u8 *header, int family,
         int dir, struct timeval *now);
-void hip_remove_expired_sel_entries();
+void hip_remove_expired_sel_entries(struct timeval *now);
 void print_sadb();

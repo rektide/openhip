@@ -518,17 +518,15 @@ hip_lsi_entry *create_lsi_entry(struct sockaddr *lsi)
  * mapping and for embargoed packets that are buffered. This checks the
  * creation time and removes those entries older than LSI_ENTRY_LIFETIME.
  */
-void hip_remove_expired_lsi_entries()
+void hip_remove_expired_lsi_entries(struct timeval *now)
 {
-	struct timeval now;
 	hip_lsi_entry *entry, *tmp, *prev = NULL;
 
-	gettimeofday(&now, NULL);
 	entry = lsi_temp;
 	while (entry) {
 		if (entry->send_packets)
 			unbuffer_packets(entry);
-		if ((now.tv_sec - entry->creation_time.tv_sec) > 
+		if ((now->tv_sec - entry->creation_time.tv_sec) > 
 			LSI_ENTRY_LIFETIME) {
 			/* unlink the entry */
 			if (prev)
@@ -883,18 +881,15 @@ hip_sadb_entry *hip_sadb_get_next(hip_sadb_entry *placemark)
  *
  * Check the lifetime of SAs and generate expire messages.
  */
-void hip_sadb_expire()
+void hip_sadb_expire(struct timeval *now)
 {
 	int i;
-	struct timeval now;
 	hip_sadb_entry *e;
-
-	gettimeofday(&now, NULL);
 
 	for (i=0; i < SADB_SIZE; i++) {
 		pthread_mutex_lock(&hip_sadb_locks[i]);
 		for (e = hip_sadb[i]; e; e = e->next) {
-		    if (now.tv_sec > e->exptime.tv_sec)
+		    if (now->tv_sec > e->exptime.tv_sec)
 			pfkey_send_expire(e->spi);
 		}		
 		pthread_mutex_unlock(&hip_sadb_locks[i]);
@@ -1058,20 +1053,18 @@ __u32 hip_proto_header_to_selector(__u32 lsi, __u8 proto, __u8 *header, int dir)
 /*
  * hip_remove_expired_sel_entries()
  */
-void hip_remove_expired_sel_entries()
+void hip_remove_expired_sel_entries(struct timeval *now)
 {
 	static unsigned int last = 0;
-	struct timeval now;
 	int i;
 	hip_proto_sel_entry *entry, *prev, *next;
 
 
 	/* rate limit - every 30 seconds */
-	gettimeofday(&now, NULL);
-	if ((last > 0) && ((now.tv_sec - last) < 30))
+	if ((last > 0) && ((now->tv_sec - last) < 30))
 		return;
 	else
-		last = now.tv_sec;
+		last = now->tv_sec;
 		
 		
 	for (i=0; i<PROTO_SEL_SIZE; i++) {
@@ -1081,7 +1074,7 @@ void hip_remove_expired_sel_entries()
 		while (entry) {
 			next = entry->next;
 			/* check for expiration */
-			if ((now.tv_sec - entry->last_used.tv_sec) > 
+			if ((now->tv_sec - entry->last_used.tv_sec) > 
 				PROTO_SEL_ENTRY_LIFETIME) {
 				free(entry);
 				if (prev)
