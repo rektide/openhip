@@ -36,7 +36,7 @@
 
 
 #define H_PROTO_UDP 17
-#define HIP_UDP_PORT 50500
+#define HIP_UDP_PORT 10500
 
 #define HIP_PROTO_VER 1
 #define H_PROTO_HIP 139 /* IP layer protocol number for private encryption */
