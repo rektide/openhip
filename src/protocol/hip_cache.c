@@ -402,7 +402,7 @@ void unuse_dh_entry(DH *dh)
  */
 void expire_old_dh_entries()
 {
-	dh_cache_entry *entry, *last=NULL, *old;
+	dh_cache_entry *entry, *last=NULL, *next, *old;
 	struct timeval now;
 
 	gettimeofday(&now, NULL);
@@ -410,6 +410,7 @@ void expire_old_dh_entries()
 	entry = dh_cache; 
 	while (entry != NULL) 
 	{
+		next = entry->next;
 		if (TDIFF(now, entry->creation_time) > (int)HCNF.dh_lifetime) {
 			/* mark entry as stale */
 			entry->is_current = FALSE;
@@ -420,25 +421,27 @@ void expire_old_dh_entries()
 				if (old->group_id == HCNF.dh_group) {
 					entry = 
 					    new_dh_cache_entry(old->group_id);
-					entry->next = old->next;
+					entry->next = next;
 					if (last) 
 						last->next = entry;
 					else
 						dh_cache = entry;
 				/* remove non-default entries */
 				} else {
+					entry = NULL;
 					if (last)
-						last->next = old->next;
+						last->next = next;
 					else
-						dh_cache = old->next;
+						dh_cache = next;
 				}
-				/*log_(NORMT, "Freeing old DH entry.\n");*/
 				DH_free(old->dh);
+				memset(old, 0, sizeof(dh_cache_entry));
 				free(old);
 			}
 		}
-		last = entry;
-		entry=entry->next;
+		if (entry)
+			last = entry;
+		entry = next;
 	}
 	
 }
