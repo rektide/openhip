@@ -890,12 +890,12 @@ void hip_sadb_expire(struct timeval *now)
 		pthread_mutex_lock(&hip_sadb_locks[i]);
 		for (e = hip_sadb[i]; e; e = e->next) {
 		    if (now->tv_sec > e->exptime.tv_sec) {
-		    	/* wait another lifetime before expiring this SA again;
+			/* wait another lifetime before expiring this SA again;
 			 * this causes only one expire message to be sent */
-			e->exptime.tv_sec = now->tv_sec + e->lifetime;
+			e->exptime.tv_sec = now->tv_sec + (time_t)e->lifetime;
 			pfkey_send_expire(e->spi);
 		    }
-		}		
+		}
 		pthread_mutex_unlock(&hip_sadb_locks[i]);
 	}
 }
