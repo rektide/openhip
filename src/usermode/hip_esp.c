@@ -563,8 +563,13 @@ void *hip_esp_input(void *arg)
 		max_fd = maxof(4, s_esp, s_esp6, s_esp_udp, s_esp_udp_dg);
 #endif /* __MACOSX__ */
 #endif /* __WIN32__ */
+#ifdef __MACOSX__
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0;
+#else
 		timeout.tv_sec = 0;
 		timeout.tv_usec = g_read_usec;
+#endif /* __MACOSX__ */
 		memset(buff, 0, sizeof(buff));
 		memset(data, 0, sizeof(data));
 
