@@ -71,7 +71,7 @@
 #define HIP_PUB_SUFFIX		"_host_identities.pub.xml"
 
 #define HIP_LOCK_FILENAME	"hip.pid"
-#define HIP_LOG_FILENAME	"hipd.log"
+#define HIP_LOG_FILENAME	"hip.log"
 
 /*
  * Implementation limits

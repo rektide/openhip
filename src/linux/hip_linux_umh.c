@@ -211,8 +211,9 @@ void init_hip(int ac, char **av)
 	int i;
 	char timestr[26];
 	struct timeval time1;
+	int do_daemon = 0;
 	
-	printf("init_hip()\n");
+	/*printf("init_hip()\n");*/
 
 	/* get arguments for hipd */
 	memset(hipd_args, 0, sizeof(hipd_args));
@@ -220,17 +221,33 @@ void init_hip(int ac, char **av)
 		ac--, av++;
 	i = 0;
 	while (ac > 0) {
-		// printf("adding arg: %s\n", *av);
+		/* printf("adding arg: %s\n", *av); */
 		if (i > 0) /* add a space between parameters */
 			hipd_args[i++] = ' ';
 		snprintf(&hipd_args[i], sizeof(hipd_args) - i, "%s", *av);
 		i += strlen(*av);
+		if ((*av)[0] == '-' && (*av)[1] == 'd')
+			do_daemon = 1;
 		av++, ac--;
 	}
 
 	init_crypto();
 	hip_sadb_init();
 	g_state = 0;
+
+	/*
+	 * Run in background as daemon.
+	 */
+	if (do_daemon) {
+		/* Do not fork() later in hipd_main since that is a child
+		 * thread. The '-d' option is still passed to hipd_main in
+		 * order to log output. Output from the other threads is lost;
+		 * they need to be converted from printf() to a logging
+		 * function. */
+		printf("Running in background as daemon.\n");
+		if (daemon(0, 0) < 0)
+			fprintf(stderr, "error running as daemon\n");
+	}
 
 	/*
 	 * Kernel helpers

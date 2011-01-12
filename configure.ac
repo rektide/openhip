@@ -38,6 +38,12 @@ CFLAGS="$CFLAGS -O3 -Werror -D_GNU_SOURCE -fno-strict-aliasing"
 
 # HIP files go in /etc/hip or /usr/local/etc/hip
 sysconfdir=$sysconfdir/hip
+# HIP state directory for /var/log/hip.log and /var/run/hip.pid
+if test "$localstatedir" = "\${prefix}/var" ; then
+  # use /var instead of /usr/local/var (/usr/local/var/log isn't standard)
+  localstatedir="/var"
+fi
+ 
 
 # Checks for programs.
 AC_PROG_CXX
