@@ -351,7 +351,7 @@ int read_peer_identities_from_hipcfg()
 			/* address not listed, perform DNS, then
 		 	 * DHT lookup */	
 		       if (add_addresses_from_dns(name, hi) < 0)
-			    add_addresses_from_dht(hi, TRUE);
+			    hip_dht_resolve_hi(hi, TRUE);
 		}
 		log_(NORM, "%s = [ ", name);
 		for (l = &hi->addrs; l; l = l->next)
@@ -467,7 +467,7 @@ int read_identities_file(char *filename, int mine)
 				 * DHT lookup */	
 				} else {
 				    if (add_addresses_from_dns(name, hi) < 0)
-					    add_addresses_from_dht(hi, TRUE);
+					    hip_dht_resolve_hi(hi, TRUE);
 				}
 			}
 			/* link this HI into a global list */

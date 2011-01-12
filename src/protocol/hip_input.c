@@ -1,6 +1,6 @@
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-06 the Boeing Company
+ * Copyright (C) 2002-09 the Boeing Company
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -81,15 +81,12 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 			struct sockaddr *src, struct sockaddr *dst);
 int hip_parse_R2(__u8 *data, hip_assoc *hip_a);
 int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce);
-int validate_signature(const __u8 *data, int data_len, tlv_head *tlv, 
-			DSA *dsa, RSA *rsa);
 int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
 			__u8 *key, int type);
 hi_node *check_if_my_hit(hip_hit *hit);
 int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp);
 int handle_cert(hip_assoc *hip_a, const __u8 *data);
 int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh);
-int handle_hi(hi_node **hi_p, const __u8 *data);
 int handle_acks(hip_assoc *hip_a, tlv_ack *ack);
 int handle_esp_info(tlv_esp_info *ei, __u32 spi_out, struct rekey_info *rk);
 int handle_locators(hip_assoc *hip_a, locator **locators,

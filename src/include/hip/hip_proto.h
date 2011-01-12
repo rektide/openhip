@@ -74,6 +74,7 @@ typedef enum {
         NOTIFY=17, /* 17 */
         CLOSE=18,  /* 18 */
         CLOSE_ACK=19, /* 19 */
+	HIP_HDRR, /* 20 */
 } HIP_PACKETS;
 
 /* HIP controls */

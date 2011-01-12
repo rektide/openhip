@@ -114,6 +114,7 @@ int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len, struct sockaddr *src,
 			struct sockaddr *dst);
 int build_tlv_hostid_len(hi_node *hi, int use_hi_name);
 int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name);
+int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1);
 int build_rekey(hip_assoc *hip_a);
 
 /* hip_input.c */
@@ -131,6 +132,9 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a);
 int hip_finish_rekey(hip_assoc *hip_a, int rebuild);
 int hip_handle_BOS(__u8 *data, struct sockaddr *src);
 int hip_handle_CER(__u8 *data, hip_assoc *hip_a);
+int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
+			DSA *dsa, RSA *rsa);
+int handle_hi(hi_node **hi_p, const __u8 *data);
 int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi, 
 			int in, int peer);
 int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
@@ -307,12 +311,12 @@ int hip_status_open();
 void hip_handle_status_request(__u8 *buff, int len, struct sockaddr *addr);
 
 /* hip_dht.c */
-int hip_dht_lookup_hit(struct sockaddr *lsi, hip_hit *hit, int retry);
+void hip_dht_update_my_entries(int flags);
+int  hip_dht_resolve_hi(hi_node *hi, int retry);
+/* int hip_dht_lookup_hit_by_name(char *name, hip_hit *hit, int retry);
 int hip_dht_lookup_address(hip_hit *hit, struct sockaddr *addr, int retry);
 int hip_dht_publish(hip_hit *hit, struct sockaddr *addr, int retry);
-int hip_dht_select_server(struct sockaddr *addr);
-int add_addresses_from_dht(hi_node *hi, int retry);
-void publish_my_hits();
+int hip_dht_select_server(struct sockaddr *addr); */
 
 #ifdef MOBILE_ROUTER
 /* hip_mr.c */

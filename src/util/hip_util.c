@@ -2165,9 +2165,8 @@ int hip_header_offset(const __u8 *data)
 }
 
 /*
- * Formula for taking the length field in a TLV and computing the parameter
- * length
- * Section 3.4 in HIP packets draft
+ * Compute real parameter length using the length field in the TLV header;
+ * from RFC 5201 section 5.2.1
  */
 int tlv_length_to_parameter_length(int length)
 {
@@ -2844,6 +2843,7 @@ void hip_exit(int signal)
 		    ((signal == SIGINT) || (signal == SIGTERM)) )
 			save_identities_file(FALSE); 	/* store peer HIs */
 	}
+	hip_dht_update_my_entries(2);	/* DHT cleanup */
 #ifndef __WIN32__
 	snprintf(lockname, sizeof(lockname), "%s/run/%s",
 		 LOCALSTATEDIR, HIP_LOCK_FILENAME);

@@ -1555,9 +1555,11 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 	struct sockaddr *src, struct sockaddr *dst)
 {
 	hi_node *peer_hi = NULL;
-	int err, want_family = 0, dns_ok = TRUE;
+	int want_family = 0, dns_ok = TRUE;
 	struct sockaddr addr;
+#if 0
 	struct sockaddr_storage lsi_save;
+#endif
 
 	memset(hitp, 0, HIT_SIZE);
 	
@@ -1571,38 +1573,9 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 		peer_hi = lsi_lookup(lsi);
 		if (!peer_hi || hits_equal(peer_hi->hit, zero_hit)) {
 			/* Peer doesn't exist locally or has an empty HIT.
-			 * Do DHT lookup and adopt if opportunistic is enabled.
+			 * TODO: perform DHT lookup to retrieve HIT and adopt
+			 * if opportunistic is enabled.
 			 */
-			log_(NORM, "(Doing HIT lookup using the LSI %s "
-				"in the DHT...)\n", logaddr(lsi));
-			memcpy(&lsi_save, lsi, SALEN(lsi));
-			/* XXX FIXME this line destroys the lsi on win32... */
-			err = hip_dht_lookup_hit(lsi, hitp, FALSE);
-			if ( !OPT.opportunistic && (err < 0)) {
-				log_(NORM, "(Cannot determine HIT for this "
-					"LSI)\n");
-				return(-1);
-			}
-			memcpy(lsi, &lsi_save, SALEN(&lsi_save));
-			if (err == 0) {
-				log_(NORM, "(HIT for LSI (%s) found in DHT)\n",
-					logaddr(lsi));
-			}
-			/* Now we have a HIT, */
-			if (peer_hi) {
-				memcpy(peer_hi->hit, hitp, HIT_SIZE);
-			} else { /* create a new peer entry */
-				memset(&addr, 0, sizeof(struct sockaddr));
-				addr.sa_family = AF_INET;
-				add_peer_hit(*hitp, &addr);
-				peer_hi = find_host_identity(peer_hi_head,
-						*hitp);
-				if (!peer_hi)
-					return(-1);
-				memcpy(&peer_hi->lsi, lsi, SALEN(lsi));
-				peer_hi->addrs.addr.ss_family = 0;
-				dns_ok = FALSE;
-			}
 		} else { /* valid peer_hi with non-zero HIT */
 			memcpy(hitp, peer_hi->hit, HIT_SIZE);
 		}
@@ -1653,19 +1626,25 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 	/* peer has no address, try to fill it in */
 		if (dns_ok && 
 		    (add_addresses_from_dns(peer_hi->name, peer_hi) < 0)) {
-			if ((add_addresses_from_dht(peer_hi, FALSE) < 0)) {
+			/* note: this DHT lookup is blocking */
+			if ((hip_dht_resolve_hi(peer_hi, FALSE) < 0)) {
 				log_(NORM, "(Peer address not found for %s)\n",
 					peer_hi->name);
 				add_addresses_from_dns(NULL, NULL);
 				return(-1);
 			}
 		} else if (!dns_ok &&
-			   (add_addresses_from_dht(peer_hi, FALSE) < 0)) {
+			   (hip_dht_resolve_hi(peer_hi, FALSE) < 0)) {
 			log_(NORM, "(Peer address not found for ");
 			print_hex(*hitp, HIT_SIZE);
 			log_(NORM, ")\n");
 			return(-1);
 		}
+	}
+
+	/* return HIT from peer_hi if needed, which may come from DHT lookup */
+	if (hits_equal(*hitp, zero_hit) && !hits_equal(peer_hi->hit, zero_hit)){
+		memcpy(hitp, peer_hi->hit, HIT_SIZE);
 	}
 
 	/* copy from peer_hi address list into dst by matching the address

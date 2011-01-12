@@ -525,7 +525,7 @@ int main_loop(int argc, char **argv)
 	init_all_R1_caches();
 	gettimeofday(&time1, NULL);
 	last_expire = time1.tv_sec;
-	publish_my_hits();
+	hip_dht_update_my_entries(1); /* initalize and publish */
 #ifdef __UMH__
 #ifndef __WIN32__
 	post_init_tap();
@@ -719,7 +719,7 @@ int main_loop(int argc, char **argv)
 			if (need_select_preferred) {
 				need_select_preferred = FALSE;
 				select_preferred_address();
-				publish_my_hits();
+				hip_dht_update_my_entries(0);
 			}
 		} else if (FD_ISSET(s_hip, &read_fdset)) { 
 			/* Something on HIP socket */
@@ -1089,35 +1089,9 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 				log_(NORM, "%s\n", logaddr(dst));
 			}
 #endif /* MOBILE_ROUTER */
-#ifdef DO_EXTRA_DHT_LOOKUPS
-			/* XXX note that this code has proven problematic */
-			/* has the address changed? do a DHT lookup */
-			if (!hits_equal(hip_a->peer_hi->hit, zero_hit) &&
-			    (err = hip_dht_lookup_address(&hip_a->peer_hi->hit, 
-				    			addr_tmp, FALSE) >= 0)) {
-				if (memcmp(SA2IP(addr_tmp), SA2IP(dst),
-								SAIPLEN(dst))) {
-					/* switch to new address and
-					 * rewrite checksum */
-					log_(NORM, "DHT Address for %s changed",
-						logaddr(dst));
-					log_(NORM, " to %s.\n", 
-						logaddr(addr_tmp));
-					update_peer_list_address(
-							hip_a->peer_hi->hit,
-							dst, addr_tmp);
-					memcpy(dst, addr_tmp, SALEN(addr_tmp));
-					hiph->checksum = 0;
-					hiph->checksum = checksum_packet(
-						hip_a->rexmt_cache.packet,
-						src, dst);
-				} else if (err == 0) {
-					log_(NORM, "DHT Address unchanged ");
-					log_(NORM, "for %s.\n",
-						logaddr(addr_tmp));
-				}
-			}
-#endif /* DO_EXTRA_DHT_LOOKUPS */
+			/* TODO: the address may have changed, could
+			 * perform a DHT lookup here and retransmit using the
+			 * different address. */
 			hip_packet_type(hiph->packet_type, typestr);
 			log_(NORMT, "Retransmitting %s packet from %s to ",
 			    typestr, logaddr(src));

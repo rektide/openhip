@@ -14,7 +14,7 @@
  *
  * 		Definitions for the HIP protocol.
  *
- *  Version:	@(#)hip.h	1.5	08/12/04
+ *  Version:	@(#)hip_types.h	1.5	08/12/04
  *
  *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *		Tom Henderson, <thomas.r.henderson@boeing.com>

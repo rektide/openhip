@@ -1423,6 +1423,9 @@ int add_other_addresses_to_hi(hi_node *hi, int mine)
 {
 	sockaddr_list *l, *tolist, *fromlist;
 
+	if (hits_equal(hi->hit, zero_hit))
+		return(-1);
+
 	/*
 	 * Determine to and from lists.
 	 */

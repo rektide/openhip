@@ -84,7 +84,6 @@ int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug);
 int build_tlv_transform(__u8 *data, int type, __u16 transforms[], __u16 single);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
 int build_tlv_cert(__u8 *buff);
-int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1);
 int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type);
 int build_tlv_reg_info(__u8 *data);
 int build_tlv_reg_req(__u8 *data, struct reg_entry *regs);
@@ -1719,11 +1718,7 @@ int hip_check_bind(struct sockaddr *src, int num_attempts)
 		}
 	}
 
-#ifdef __WIN32__
 	closesocket(s);
-#else
-	close(s);
-#endif
 	return(ret);
 }
 
@@ -1995,7 +1990,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
 
 	/* build tlv header */
 	sig = (tlv_hip_sig*) &data[location];
-	sig->type = htons((__u16)(R1 ?  PARAM_HIP_SIGNATURE_2 : 
+	sig->type = htons((__u16)((R1==TRUE) ? PARAM_HIP_SIGNATURE_2 : 
 					PARAM_HIP_SIGNATURE));
 	sig->length = 0; /* set this later */
 	sig->algorithm = hi->algorithm_id;
