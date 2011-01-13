@@ -694,6 +694,7 @@ int devname_to_index(char *dev, __u64 *mac)
 	struct nlmsghdr *h;
 	int status;
 	char done;
+	int ifindex = -1;
 
 	struct iovec iov = { buf, sizeof(buf) };
 	/* message response */
@@ -764,6 +765,7 @@ int devname_to_index(char *dev, __u64 *mac)
 			}
 			/* Retrieve interface name and MAC address
 			 * for the specified dev. */
+
 			if (RTA_DATA(tb[IFLA_IFNAME]) && tb[IFLA_ADDRESS] &&
 			    (strcmp(dev, RTA_DATA(tb[IFLA_IFNAME])) == 0)) {
 				len = RTA_PAYLOAD(tb[IFLA_ADDRESS]);
@@ -771,7 +773,7 @@ int devname_to_index(char *dev, __u64 *mac)
 				if (mac)
 					memcpy(mac, RTA_DATA(tb[IFLA_ADDRESS]),
 						len);
-				return(ifi->ifi_index);
+				ifindex = (ifi->ifi_index);
 			}
 			h = NLMSG_NEXT(h, status);
 		} /* end while(NLMSG_OK) - loop 2 */
@@ -779,7 +781,7 @@ int devname_to_index(char *dev, __u64 *mac)
 
 	/* no match on dev name */
 #endif
-	return(-1);	
+	return(ifindex);
 }
 
 /*
