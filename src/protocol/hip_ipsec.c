@@ -1664,6 +1664,8 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 			 * could do BEX for IPv6 and update to v4 addr?
 			 */
 		}
+	} else if (VALID_FAM(&peer_hi->rvs)) {
+			memcpy(SA(dst), SA(&peer_hi->rvs), SALEN(&peer_hi->rvs));
 	}
 
 	/* my preferred address becomes src (instead of LSI) */

@@ -251,7 +251,7 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 	hiph = (hiphdr*) data;
 	memcpy(data, r1_entry->packet, r1_entry->len);
 	if (add_via) {
-		memcpy(&data[r1_entry->len], &hip_rvs->from_via,
+		memcpy(&data[r1_entry->len], hip_rvs->from_via,
 			sizeof(tlv_via_rvs));
 		hiph->hdr_len = (total_len/8) - 1;
 		free(hip_rvs->from_via);
