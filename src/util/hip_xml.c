@@ -521,6 +521,8 @@ void print_hi_to_buff(uint8_t **bufp, int *buf_len, hi_node *hi, int mine)
 		i += snprintf(&tmp[i], sizeof(tmp)-i, "[");
 		pthread_mutex_lock(&hi->addrs_mutex);
 		for (l = &hi->addrs; l; l = l->next) {
+			if (!VALID_FAM(SA(&l->addr)))
+				continue;
 			addr_to_str(SA(&l->addr), addr_str, INET6_ADDRSTRLEN);
 			i += snprintf(&tmp[i], sizeof(tmp)-i, "%s ", addr_str);
 		}

@@ -138,6 +138,8 @@ int add_addresses_from_dns(char *name, hi_node *hi)
 		if ((r->ai_family != AF_INET) &&
 		    (r->ai_family != AF_INET6))
 			continue;
+		if (IS_LSI(r->ai_addr)) /* skip LSIs */
+			continue;
 		memcpy(addr, r->ai_addr, r->ai_addrlen);
 		if (first) { /* start the address list in hi_node */
 			memset(list, 0, sizeof(sockaddr_list));
