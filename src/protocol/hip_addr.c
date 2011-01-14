@@ -684,6 +684,7 @@ int set_link_params(char *dev, int mtu)
  */
 int devname_to_index(char *dev, __u64 *mac)
 {
+	int ifindex = -1;
 #ifdef USE_LINUX_NETLINK
 	struct {
 		struct nlmsghdr n;
@@ -694,7 +695,6 @@ int devname_to_index(char *dev, __u64 *mac)
 	struct nlmsghdr *h;
 	int status;
 	char done;
-	int ifindex = -1;
 
 	struct iovec iov = { buf, sizeof(buf) };
 	/* message response */
