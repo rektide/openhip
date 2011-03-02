@@ -397,7 +397,32 @@ typedef struct _hi_node {
 	struct _hi_node *next;
 	hip_hit hit;
 	struct sockaddr_storage lsi;
-	struct sockaddr_storage rvs;
+	
+	hip_mutex_t	*rvs_mutex; /* Sync for DNS rvs resolving threads */
+	
+	/*
+	 * Do not try to contact the node until the
+	 * RVS servers are resolved.
+	 */
+	pthread_cond_t	*rvs_cond;
+	int		*rvs_count; /* Number of RVS DNS petitions still to resolve */
+	int		*copies; /* Number of copies of the mutex structures */
+	
+	/*
+	 * List of hostnames of all RVS servers as received from the
+	 * DNS server.
+	 * (Double zero ended list)
+	 */
+	char **rvs_hostnames;
+	
+	/*
+	 * List of IP addresses corresponding to the RVS hostnames.
+	 * Each hostname can be resolved to multiple addresses or
+	 * to none, so there cannot be direct 1-1 reationship between
+	 * RVS hostnames and addresses.
+	 */
+	struct _sockaddr_list **rvs_addrs;
+	
 	/* 
 	 * IP address is needed to select a HIT corresponding to
 	 * an IP address.  This value needs update upon readdress.

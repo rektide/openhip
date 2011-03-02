@@ -160,8 +160,16 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
 		log_(NORMT, "Relaying HIP_I1 packet (%d bytes)...\n", location);
 		do_retrans = FALSE;
 	} else { /* normal I1, not relayed by RVS */
-		if (VALID_FAM(&hip_a->peer_hi->rvs)){/* use RVS instead of DST*/
-			dst = SA(&hip_a->peer_hi->rvs);
+		pthread_mutex_lock(hip_a->peer_hi->rvs_mutex);
+		/* Block in case of RVS DNS resolution is NOT ready */
+		if(*(hip_a->peer_hi->rvs_count) > 0) {
+    			log_(NORMT, "Waiting for RVS DNS resolution\n");
+			pthread_cond_wait(hip_a->peer_hi->rvs_cond, hip_a->peer_hi->rvs_mutex);
+			log_(NORMT, "Waiting done, sending I1 now.\n");
+		}
+		pthread_mutex_unlock(hip_a->peer_hi->rvs_mutex);
+		if (*(hip_a->peer_hi->rvs_addrs) != NULL){/* use RVS instead of DST*/
+			dst = SA(&(*(hip_a->peer_hi->rvs_addrs))->addr);
 			if (hip_a->udp && dst->sa_family == AF_INET) {
 				((struct sockaddr_in *)dst)->sin_port = 
 					((struct sockaddr_in *)
@@ -2094,7 +2102,6 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
 	memcpy( hmac->hmac, 
 		&hmac_md[hmac_md_len-sizeof(hmac->hmac)],
 		sizeof(hmac->hmac));
-
 	return(eight_byte_align(sizeof(tlv_hmac)));
 }
 

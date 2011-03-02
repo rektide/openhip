@@ -264,7 +264,7 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
 					memcpy(&hi->lsi, addr, SALEN(addr));
 				/* rendevous server (RVS)  */
 				} else if (strcmp((char *)node->name,"RVS")==0){
-					memcpy(&hi->rvs, addr, SALEN(addr));
+					add_address_to_list(hi->rvs_addrs, addr, 0);
 				/* first (preferred) entry in address list */
 				} else {
 					memcpy(&list->addr, addr, SALEN(addr));
@@ -650,8 +650,9 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
 		addr_to_str(SA(&h->lsi), (__u8*)addr, INET6_ADDRSTRLEN);
 		xmlNewChild(hi, NULL, BAD_CAST "LSI", BAD_CAST addr);
 	}
-	if (VALID_FAM(&h->rvs)) {
-		addr_to_str(SA(&h->rvs), (__u8*)addr, INET6_ADDRSTRLEN);
+	sockaddr_list *l;
+	for(l = *(h->rvs_addrs); l != NULL; l = l->next) {
+		addr_to_str(SA(&l->addr), (__u8*)addr, INET6_ADDRSTRLEN);
 		xmlNewChild(hi, NULL, BAD_CAST "RVS", BAD_CAST addr);
 	}
 

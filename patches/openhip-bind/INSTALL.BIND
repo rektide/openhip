@@ -1,0 +1,21 @@
+HIP RR for BIND 9.x
+Supports RFC 5205
+
+Files:
+	hip_55.h
+	hip_55.c
+
+This patch has been tested with the bind production release 9.7.2-P3.
+To enable BIND 9.x to process the HIP RR, follow these steps.
+
+1. Download and unpack the BIND 9.x server
+	tar xzf bind-9.7.2-P3.tar.gz
+2. Copy the HIP RR files to the proper directory:
+	cp hip_55.c bind-9.7.2-P3/lib/dns/rdata/generic/
+	cp hip_55.h bind-9.7.2-P3/lib/dns/rdata/generic/
+3. Compile BIND in the usual fashion (run make clean if recompiling)
+	./configure
+	make
+	make install
+4. Use the included hi2dns utility to add HIP RRs to your zone files.
+

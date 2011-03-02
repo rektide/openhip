@@ -1,0 +1,23 @@
+This patch implements the HIP extension to DNS as specified by RFC 5205.
+It allows DNS servers to store and return HIP resource records (RRs) with
+a Host Identity (HI, the public component of the public-private key pair),
+Host Identity Tag (HIT, a truncated hash of the public key), and an optional
+number of Domain Names of rendezvous servers (RVSs).
+
+The general steps are:
+
+Apply the patch hip_55 to bind and build.
+
+Compile hi2dns and generate HIP RRs using hi2dns.
+
+Edit named.conf and the zone file adding the HIP RRs.
+
+Start the named.
+
+Use dig to check your RRs.
+
+See INSTALL.BIND for building and installing bind.  See README.simple.example
+for details of the other steps.  For more information, see the wiki page:
+
+http://www.openhip.org/wiki/index.php?title=Usage#HIP_DNS_records
+

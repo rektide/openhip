@@ -327,9 +327,7 @@ void init_hip(int ac, char **av)
 		printf("Error creating ESP input thread.\n");
 		exit(1);
 	}
-#ifdef SMA_CRAWLER
 	hip_sleep(1); /* Wait a sec for config */
-#endif /* SMA_CRAWLER */
 	if (!is_dns_thread_disabled()) {
 		/* XXX hip.conf may not be loaded yet */
 		if (pthread_create(&dns_thrd, NULL, hip_dns, NULL)) {

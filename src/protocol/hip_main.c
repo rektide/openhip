@@ -1054,6 +1054,7 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 	hiphdr *hiph;
 	char typestr[12];
 	int offset;
+	struct _sockaddr_list *item;
 
 	for (i=0; i < max_hip_assoc; i++) {
 		hip_a = &hip_assoc_table[i];
@@ -1103,16 +1104,64 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 			gettimeofday(&hip_a->rexmt_cache.xmit_time, NULL);
 			hip_a->rexmt_cache.retransmits++;
 		} else {
-		/* move to state E_FAILED for I1_SENT/I2_SENT */
 			switch (hip_a->state) {
 			case I1_SENT:
+				/* try next RVS address if there is one */
+				if(*(hip_a->peer_hi->rvs_addrs)){
+					for(item = *(hip_a->peer_hi->rvs_addrs); item; item = item->next) {
+						if(item->status != DEPRECATED){
+							struct sockaddr *cur_rvs;
+							cur_rvs = SA(&item->addr);
+							log_(NORMT, "RVS server %s not reachable, changing status to DEPRECATED.\n", logaddr(cur_rvs));
+							item->status = DEPRECATED; /* set currently used RVS address to DEPRECATED */
+							break;
+						}
+					}
+
+					if(item->next){
+						/* Send the I1 to next RVS server */
+						src = SA(&hip_a->hi->addrs.addr);
+						dst = SA(&item->next->addr);
+						offset = 0;
+						if (hip_a->udp)
+							offset += sizeof(udphdr) + sizeof(__u32);
+						hiph = (hiphdr*) &hip_a->rexmt_cache.packet[offset];
+						hip_packet_type(hiph->packet_type, typestr);
+						if (!hip_a->udp){
+							/* recalcualte HIP checksum because of changed destination IP/HIT*/
+							hiph->checksum = 0;
+							hiph->checksum = checksum_packet( hip_a->rexmt_cache.packet, src, dst);
+						}
+						memcpy(&hip_a->rexmt_cache.dst, &item->next->addr, sizeof(struct sockaddr_storage));
+						log_(NORMT, "Retransmitting %s packet from %s to ",
+							typestr, logaddr(src));
+						log_(NORM,  "next RVS server in list: %s\n", logaddr(dst));
+						hip_retransmit(hip_a, hip_a->rexmt_cache.packet, 
+							hip_a->rexmt_cache.len, src, dst);
+						gettimeofday(&hip_a->rexmt_cache.xmit_time, NULL);
+						hip_a->rexmt_cache.retransmits = 0; /* reset retransmit counter */
+					} else {
+						/* reset the status of all RVS servers */
+						for(item = *(hip_a->peer_hi->rvs_addrs); item; item = item->next) {
+							item->status = UNVERIFIED;
+						}
+						set_state(hip_a, E_FAILED);
+						clear_retransmissions(hip_a);
+					}
+				} else {
+					set_state(hip_a, E_FAILED);
+					clear_retransmissions(hip_a);
+				}
+				break;
+			/* move to state E_FAILED for I2_SENT */
 			case I2_SENT:
 				set_state(hip_a, E_FAILED);
+				clear_retransmissions(hip_a);
 				break;
 			default:
+				clear_retransmissions(hip_a);
 				break;
 			}
-			clear_retransmissions(hip_a);
 		}
 	}
 }

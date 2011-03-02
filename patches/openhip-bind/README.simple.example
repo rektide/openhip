@@ -1,0 +1,117 @@
+This file gives the steps and configuration files for a simple example case.
+
+In the simple example, we have a HIP-enable host alice, trying to contact
+another HIP-enable host bob.  The host alice does not have any of bob's data
+in her known_hosts_identities.xml file.  The host bob will register with a RVS
+and will have his HIP RR stored with a HIP-enable DNS server.  Our domain
+name for the example is domain.com.  The IP address of our HIP-enable DNS
+server is 192.168.0.159 and the IP address of our RVS is 192.168.0.166.
+
+Generate bob's HIP RR.
+
+Compile the program hi2dns by typing make hit2dns.
+Before running this program on bob, make sure that the name in the
+my_host_identities.xml file is the same name that will be used in DNS.
+
+# /usr/local/sbin/hi2dns /usr/local/etc/hip/my_host_identities.xml 
+Loading Host Identities from XML file '/usr/local/etc/hip/my_host_identities.xml'...
+Loading Host Identity...(DSA 1024-bit) bob.domain.com
+done.
+
+HIP RRs:
+bob.domain.com.              IN  HIP ( 1 200100126706037C58F879BC9411E48B
+                             CMdzIYxzfsjumTtPLe0w9I7azpFf11cmLEWExEwhHxi9luXwYcTwpCP3/mtrhbNM73LOFKDTpSIv4Izs5lvmwmWFSIncHtvRPsiydNqfdbomzLmHcjYCeH6SK6hEIfIsPInLmwb9YP4BlB3dd/5rEok9p27rwdEo2X8GeNdyK1NByFBvNYIUsWovrEs2iVA4eBHH2jOCJpAJ4U7EdLryky5p07HxhRetlZQYTM386uluxNXvkxM+hLRwk8UrIM010CSSs5WexkmWJbxPpQguIsWzdOFt0AEyznGwICFwkaxxe2EjkcdsH7LogxfBvYFx1B7Lg+IQwDzJsy6BBWHCFiHHPW2qwCj0sVhdp/QlGXGMybCe74dqUHHUurpDAXW4kra0ljUG2IahK8S4c3hi+5FZ8zmgjAW6h1BHl3DIFTFt+Eimp6rR83cnvjaykpxRZ/uhK5qsglDbPDlGjBVMwua3dl/Npoe2jZdEY3z8/1cZW5ug0ZqYHbKI9BJApUhl2RBjEQc69JKMgPxkYn/wazFYJxtY
+ )
+
+Create named.conf and zone file on the HIP-enabled DNS server.
+
+Simple example of named.conf for the domain "domain.com":
+
+options {
+        directory "/usr/local/var/named";
+};
+
+zone "domain.com" IN {
+        type master;
+        file "db.domain.com";
+};
+
+Thus, the zone file will be /usr/local/var/named/db.domain.com.
+
+Create the zone file for "domain.com" and copy the previously generated HIP RR
+into it.  Note that in the example below, we have added the RVS FQDN to the
+HIP RR and added the A record for the RVS.  The A record for the RVS can be
+in the HIP-enabled DNS server or a normal DNS server.  The IP address of the
+HIP-enabled DNS is specified by the dns_server parameter in the hip.conf
+file on alice.  The IP address of the DNS server having the A record of
+the RVS should be listed in the /etc/resolv.conf file on alice.  In our case
+they are the same.
+
+Simple example of zone file "db.domain.com":
+
+$TTL    86400
+@       IN SOA  @       root (
+                                42      ; serial
+                                3H      ; refresh
+                                15M     ; retry
+                                1W      ; expiry
+                                1D )    ; minimum
+        IN NS   @
+        IN A    192.168.0.159
+bob.domain.com.       IN  HIP ( 1 200100126706037C58F879BC9411E48B
+                      CMdzIYxzfsjumTtPLe0w9I7azpFf11cmLEWExEwhHxi9luXwYcTwpCP3/mtrhbNM73LOFKDTpSIv4Izs5lvmwmWFSIncHtvRPsiydNqfdbomzLmHcjYCeH6SK6hEIfIsPInLmwb9YP4BlB3dd/5rEok9p27rwdEo2X8GeNdyK1NByFBvNYIUsWovrEs2iVA4eBHH2jOCJpAJ4U7EdLryky5p07HxhRetlZQYTM386uluxNXvkxM+hLRwk8UrIM010CSSs5WexkmWJbxPpQguIsWzdOFt0AEyznGwICFwkaxxe2EjkcdsH7LogxfBvYFx1B7Lg+IQwDzJsy6BBWHCFiHHPW2qwCj0sVhdp/QlGXGMybCe74dqUHHUurpDAXW4kra0ljUG2IahK8S4c3hi+5FZ8zmgjAW6h1BHl3DIFTFt+Eimp6rR83cnvjaykpxRZ/uhK5qsglDbPDlGjBVMwua3dl/Npoe2jZdEY3z8/1cZW5ug0ZqYHbKI9BJApUhl2RBjEQc69JKMgPxkYn/wazFYJxtY
+                        rvs.domain.com.
+ )
+
+rvs.domain.com.         A 192.168.0.166
+
+Start the patched named daemon on your HIP-enable DNS server:
+
+# /usr/local/sbin/named -c /usr/local/etc/named/named.conf -g
+
+You can can test your DNS configuration using the dig command from the patched
+bind software:
+
+# /usr/local/bin/dig hip bob.domain.com
+
+and
+
+# /usr/local/bin/dig a rvs.domain.com
+
+Start the HIP daemon on rvs.domain.com with
+
+# /usr/local/sbin/hip -v -a -rvs
+
+Start the HIP daemon on bob (note the known_hosts_identities.xml on bob
+should have the HI and IP address for rvs.domain.com)
+
+# /usr/local/sbin/hip -v -a
+
+Have bob register with rvs, for example just ping <LSI of rvs.domain.com>
+
+On alice, ensure that there is no information on bob in the
+known_hosts_identities.xml file and that the following is in the hip.conf file:
+
+  <disable_dns_lookups>no</disable_dns_lookups>
+  <disable_notify>yes</disable_notify>
+  <disable_dns_thread>no</disable_dns_thread>
+  <dns_server>192.168.0.159</dns_server>
+  <enable_broadcast>no</enable_broadcast>
+  <disable_udp>yes</disable_udp>
+  <preferred_interface>eth1</preferred_interface>
+  <save_known_identities>no</save_known_identities>
+ 
+where the dns_server is the IP address of the HIP-enabled DNS server and
+the preferred_interface is set to the appropriate interface.  Also, make
+sure that the IP address of the DNS server holding the A record of the RVS
+is in /etc/resolv.conf.  This can be the same as the HIP-enabled DNS server
+as in our example.
+
+Start the hip daemon on alice
+
+# /usr/local/sbin/hip -v
+
+and then
+
+# ping -n bob.domain.com.hip
+

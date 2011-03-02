@@ -79,6 +79,7 @@
 #include <libxml/tree.h>
 
 #ifndef HITGEN
+
 /*
  * function add_addresses_from_dns()
  *
@@ -333,6 +334,15 @@ hi_node *create_new_hi_node()
 	}
 	memset(ret, 0, sizeof(hi_node));
 	pthread_mutex_init(&ret->addrs_mutex, NULL);
+	ret->rvs_addrs = malloc(sizeof(struct _sockaddr_list *));
+	*(ret->rvs_addrs) = NULL;
+	ret->rvs_count = malloc(sizeof(int));
+	*(ret->rvs_count) = 0;
+	ret->rvs_mutex = malloc(sizeof(pthread_mutex_t));
+	pthread_mutex_init(ret->rvs_mutex, NULL);
+	ret->rvs_cond = malloc(sizeof(pthread_cond_t));
+	pthread_cond_init (ret->rvs_cond, NULL);
+
 	return(ret);
 }
 
@@ -470,12 +480,11 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
 
 	/* prepare *hi_p */
 	if (*hi_p == NULL) {
-		*hi_p = (hi_node *) malloc(sizeof(hi_node));
+		*hi_p = create_new_hi_node();
 		if (*hi_p == NULL) {
 			log_(WARN, "Malloc error for storing HI\n");
 			return(-1);
 		}
-		memset(*hi_p, 0, sizeof(hi_node));
 	}
 	hi = *hi_p;
 	if (alg==HI_ALG_DSA && hi->dsa) {
@@ -544,6 +553,9 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
 		log_(WARN, "Unknown DI type (%d) in HI", di_type);
 		return(-1);
 	}
+	
+	hi->rvs_hostnames = malloc(sizeof(char *));
+	hi->rvs_hostnames[0] = NULL;
 
 	return(offset);
 }
@@ -780,8 +792,18 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
 			    stored_hi->skip_addrcheck;
 			memcpy(&hip_a->peer_hi->lsi, &stored_hi->lsi,
 			       SALEN(&stored_hi->lsi));
-			memcpy(&hip_a->peer_hi->rvs, &stored_hi->rvs,
-			       SALEN(&stored_hi->rvs));
+			memcpy(&hip_a->peer_hi->name, &stored_hi->name,
+			       stored_hi->name_len);
+			hip_a->peer_hi->rvs_mutex = stored_hi->rvs_mutex;
+			hip_a->peer_hi->rvs_cond = stored_hi->rvs_cond;
+			hip_a->peer_hi->rvs_count = stored_hi->rvs_count;
+			hip_a->peer_hi->rvs_addrs = stored_hi->rvs_addrs;
+			if(stored_hi->copies == NULL) {
+				stored_hi->copies = malloc(sizeof(int));
+				*(stored_hi->copies) = 1;
+			}
+			(*(stored_hi->copies))++;
+			hip_a->peer_hi->copies = stored_hi->copies;
 		}
 	}
 	memset(&hip_a->peer_hi->addrs, 0, sizeof(sockaddr_list));
@@ -894,6 +916,25 @@ void free_hi_node(hi_node *hi)
 	if (hi->rsa)
 		hip_rsa_free(hi->rsa);
 	pthread_mutex_destroy(&hi->addrs_mutex);
+	if(hi->copies != NULL) {
+		(*(hi->copies))--;
+		if(*(hi->copies) == 0) { /* Last instance of this node */
+			free(hi->rvs_count);
+			free(hi->copies);
+			free(hi->rvs_addrs);
+			pthread_cond_destroy(hi->rvs_cond);
+			pthread_mutex_destroy(hi->rvs_mutex);
+			free(hi->rvs_cond);
+			free(hi->rvs_mutex);
+		}
+	} else { /* Only instance of this node */
+		free(hi->rvs_count);
+		free(hi->rvs_addrs);
+		pthread_cond_destroy(hi->rvs_cond);
+		pthread_mutex_destroy(hi->rvs_mutex);
+		free(hi->rvs_cond);
+		free(hi->rvs_mutex);
+	}
 	free(hi);
 }
 
@@ -1138,6 +1179,91 @@ int is_dns_thread_disabled()
 	return(HCNF.disable_dns_thread);
 }
 
+int add_rvs_hostname_to_node(hi_node *hi, char *dnsName) {
+	int	i = 0, len;
+	
+	/* Calculate current size of list */
+	while(hi->rvs_hostnames[i] != NULL) {
+		/*printf("     Pos %d: %s\n", i, hi->rvs_hostnames[i]);*/
+		i++;
+	}
+	
+	/* Alloc memory for current i + 1 new name + NULL  */
+	hi->rvs_hostnames = realloc(hi->rvs_hostnames, (i+2) * sizeof(char *));
+	hi->rvs_hostnames[i+1] = NULL;
+	if (hi->rvs_hostnames == NULL) return -1;
+	len = strnlen(dnsName, 255) + 1;
+	/* printf("     Adding %s (%d)\n", dnsName, len); */
+	hi->rvs_hostnames[i] = malloc(len);
+	memcpy(hi->rvs_hostnames[i], dnsName, len);
+	return 0;
+}
+
+struct rvs_dns_request {
+	char	*name;
+	hi_node	*node;
+};
+
+void print_rvs_addr_list(sockaddr_list *list)
+{
+	sockaddr_list *l;
+	log_(NORM, "Address list: [");
+	for (l = list; l; l=l->next) {
+		log_(NORM, "(%d)%s, ", l->if_index,
+		    logaddr((struct sockaddr*)&l->addr));
+	}
+	log_(NORM, "]\n");
+}
+
+#ifndef HITGEN
+void *background_resolve(void *arg) {
+	hi_node	*hi;
+	char	*name;
+	int	addr, err;
+	struct addrinfo hints, *aux, *res = NULL;
+	struct sockaddr_in *a;
+	struct rvs_dns_request *req;
+	
+	req = (struct rvs_dns_request *) arg;
+	name = req->name;
+	hi = req->node;
+	
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_RAW;
+	
+	log_(NORM, "*** Trying resolve %s ***\n", name);
+	err = getaddrinfo(name, NULL, &hints, &res);
+	log_(NORM, "*** RESOLVE %s FINISHED!! ***\n", name);
+
+	/* Start critical section */
+	pthread_mutex_lock(hi->rvs_mutex);
+	
+	for(aux = res; aux !=NULL; aux = aux->ai_next) {
+		a = (struct sockaddr_in *)aux->ai_addr;
+ 		/* addr = ntohl(a->sin_addr.s_addr); */
+		addr = a->sin_addr.s_addr;
+		add_address_to_list(hi->rvs_addrs, aux->ai_addr, 0);
+		print_rvs_addr_list(*(hi->rvs_addrs));
+	}
+	
+	(*(hi->rvs_count))--;
+	if(*(hi->rvs_count) == 0) {
+	  log_(NORM, "*** RESOLVE OF ALL RVS FINISHED!! ***\n");
+		pthread_cond_broadcast(hi->rvs_cond);
+	} else {
+		log_(NORM, "*** Still %d to go... ***\n", *(hi->rvs_count));
+	}
+	
+	pthread_mutex_unlock(hi->rvs_mutex);
+	/* End critical section */
+	
+	freeaddrinfo(res);
+	free(arg);
+	pthread_exit(NULL);
+}
+#endif /* HITGEN */
+
 /*
  * receive_hip_dns_response()
  *
@@ -1236,10 +1362,51 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 			} else {
 				/* printf("%s: HIT validated OK.\n", fn); */
 			}
-			/* TODO: read in RVS names here and 
-			 * 	 store them somewhere 
+
+			int pos = p - ((unsigned char*)&dnsans->ans_len + sizeof(dnsans->ans_len));
+			int remainingBytes = ntohs(dnsans->ans_len) - pos;
+			int rvsCount = 0;
+			while (remainingBytes > 0) {
+				char dnsName[255];
+				int dnsLen = strnlen((char*) p, remainingBytes) + 1;
+				memcpy(dnsName, p+1, dnsLen - 1); /* First char is metadata */
+				int i = 0;
+				for (;i < dnsLen - 2; i++) {
+					if (dnsName[i] < 22) {
+						dnsName[i] = '.';
+					}
+				}
+				fprintf(stderr, "RVS: %s\n", dnsName);
+				add_rvs_hostname_to_node(hi, dnsName); /* Add hostanmes to hi_node struct */
+				rvsCount++;
+				p += dnsLen;
+				remainingBytes -= dnsLen;
+			}
+
+			/* TODO: handle pthread_t values correctly (IF NEEDED) 
+			 * 	 Dynamic thread ID creation would need a non-blocking pthread_join
+			 * 	 to liberate the memory reserved for the IDs...
+			 * 	 Note: pthread_create does not accept NULL as a first argument,
+			 * 	 unlike other implementations found online (QNX)
 			 */
-			/* printf("Found HI, %d bytes remain\n", p - buff); */
+			
+			#ifndef HITGEN
+			int j;
+			pthread_t pt;
+			struct rvs_dns_request *argument;
+			if(rvsCount > 0) {
+				*(hi->rvs_count) += rvsCount;
+				for(j = 0; hi->rvs_hostnames[j] != NULL; j++) {
+					printf("  %d: %s\n", j, hi->rvs_hostnames[j]);
+					argument = malloc(sizeof(struct rvs_dns_request));
+					argument->name = hi->rvs_hostnames[j];
+					argument->node = hi;
+					/* Created thread will free allocated memory */
+					pthread_create(&pt, NULL, background_resolve, (void *)argument);
+				} /* for */
+			} /* if */
+			#endif
+
 			append_hi_node(&peer_hi_head, hi);
 			lsi = ntohl(HIT2LSI(hi->hit));
 			return(lsi);
