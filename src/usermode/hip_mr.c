@@ -34,7 +34,6 @@
 #include <string.h>             /* strerror() */
 #include <errno.h>              /* errno */
 #include <openssl/rand.h>	/* RAND_bytes() */
-#include <linux/netfilter.h>    /* NF_DROP */
 #include <libipq.h>		/* ipq_create_handle() */
 #include <hip/hip_service.h>
 #include <hip/hip_types.h>
@@ -42,6 +41,7 @@
 #include <hip/hip_globals.h>
 #include <hip/hip_mr.h>
 #include <win32/checksum.h> 	/* ip_fast_csum() */
+#include <linux/netfilter.h>    /* NF_DROP */
 
 #define BUFSIZE 2048
 #define MR_TIMEOUT_US 500000 /* microsecond timeout for mobile_router select()*/
@@ -75,7 +75,9 @@ void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		unsigned char *payload);
 __u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		unsigned char *payload);
-void mr_process_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
+__u32 mr_process_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
+		unsigned char *payload);
+__u32 mr_process_I1_or_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		unsigned char *payload);
 void mr_process_CLOSE(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		unsigned char *payload, int packet_type);
@@ -237,21 +239,31 @@ hip_mr_client *mr_client_lookup(hip_hit hit)
  * \param hiph		pointer to the HIP header in the packet
  * \param payload 	pointer to a copy of the actual packet
  *
- * \brief Process the I1 from the mobile node, create SPINAT state.
+ * \brief Process the I1 from/to the mobile node, create SPINAT state.
  */
 void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		unsigned char *payload)
 {
+	int inbound;
+	hip_hit *peer_hit;
 	struct ip *ip4h = NULL;
 	struct ip6_hdr *ip6h = NULL;
 	__u8 *cp;
 
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
+	if (hits_equal(hiph->hit_sndr, hip_mr_c->mn_hit)) {
+		inbound = 0;
+		peer_hit = &(hiph->hit_rcvr);
+	} else {
+		inbound = 1;
+		peer_hit = &(hiph->hit_sndr);
+	}
+
 	printf("mr_process_I1 %s\n", family==AF_INET ? "IPv4" : "IPv6");
 
 	while (spi_nats) {
-		if (hits_equal(hiph->hit_rcvr, spi_nats->peer_hit)) {
+		if (hits_equal(*peer_hit, spi_nats->peer_hit)) {
 			break;
 		}
 		spi_nats = spi_nats->next;
@@ -265,7 +277,7 @@ void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		memset(spi_nats, 0, sizeof(hip_spi_nat));
 		spi_nats->next = hip_mr_c->spi_nats;
 		hip_mr_c->spi_nats = spi_nats;
-        	memcpy(spi_nats->peer_hit, hiph->hit_rcvr, sizeof(hip_hit));
+        	memcpy(spi_nats->peer_hit, peer_hit, sizeof(hip_hit));
 	}
 
 	spi_nats->private_spi = 0;
@@ -274,12 +286,16 @@ void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 	ip4h = (struct ip *) payload;
 	ip6h = (struct ip6_hdr *) payload;
 	if (family == AF_INET)  
-		cp = (__u8*) &ip4h->ip_dst;
+		cp = (inbound) ? (__u8*)&ip4h->ip_src : (__u8*)&ip4h->ip_dst;
 	else
-		cp = (__u8 *)&ip6h->ip6_dst;
+		cp = (inbound) ? (__u8*)&ip6h->ip6_src : (__u8 *)&ip6h->ip6_dst;
 	memcpy(SA2IP(&spi_nats->peer_addr), cp, SAIPLEN(&spi_nats->peer_addr));
 	/* XXX need to fix out_addr family != peer family here */
-	rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
+	if (inbound)
+		rewrite_addrs(payload, SA(&spi_nats->peer_addr),
+			SA(&hip_mr_c->mn_addr));
+	else
+		rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
 	return;
 }
 
@@ -294,11 +310,13 @@ void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \return  Perform SPINAT on packet.
  *
- * \brief  Process the R1 from the peer node, grab the LOCATOR info of the peer.
+ * \brief  Process the R1 from/to the peer node, grab the LOCATOR info of the peer from peer node.
  */
 void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		unsigned char *payload)
 {
+	int inbound;
+	hip_hit *peer_hit;
 	int location = 0;
 	__u8 *data = (__u8 *)hiph;
 	int data_len;
@@ -310,8 +328,16 @@ void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
+	if (hits_equal(hiph->hit_sndr, hip_mr_c->mn_hit)) {
+		inbound = 0;
+		peer_hit = &(hiph->hit_rcvr);
+	} else {
+		inbound = 1;
+		peer_hit = &(hiph->hit_sndr);
+	}
+
 	while (spi_nats) {
-		if (hits_equal(hiph->hit_sndr, spi_nats->peer_hit)) {
+		if (hits_equal(*peer_hit, spi_nats->peer_hit)) {
 			break;
 		}
 		spi_nats = spi_nats->next;
@@ -319,6 +345,8 @@ void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 
 	if (!spi_nats)
 		return;
+
+	if (inbound) {
 
 	data_len = (hiph->hdr_len+1) * 8;
 	location += sizeof(hiphdr);
@@ -370,27 +398,35 @@ void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 
 		location += tlv_length_to_parameter_length(length);
 	}
+	}
 
-	rewrite_addrs(payload, SA(&spi_nats->peer_addr),
+        if (inbound)
+		rewrite_addrs(payload, SA(&spi_nats->peer_addr),
 			SA(&hip_mr_c->mn_addr));
+        else
+		rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
 }
 
 /*
  *
- * \fn mr_process_I2()
+ * \fn mr_process_I2_or_R2()
  *
  * \param hip_mr_c 	pointer to the mobile node client structure
  * \param family	address family of packet, either AF_INET or AF_INET6
  * \param hiph		pointer to the HIP header in the packet
  * \param payload	pointer to a copy of the actual packet
  *
- * Process the I2 from the mobile node, get external SPI.
+ * Process the I2/R2 from/to the mobile node, get external SPI if from mobile
+ * node and grab the SPI of the peer.
  */
 
 
-__u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
+__u32 mr_process_I2_or_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		unsigned char *payload)
 {
+	int inbound;
+	hip_hit *peer_hit;
+	__u32 new_spi = 0;
 	int location = 0;
 	__u8 *data = (__u8 *)hiph;
 	int data_len;
@@ -400,8 +436,16 @@ __u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
+	if (hits_equal(hiph->hit_sndr, hip_mr_c->mn_hit)) {
+		inbound = 0;
+		peer_hit = &(hiph->hit_rcvr);
+	} else {
+		inbound = 1;
+		peer_hit = &(hiph->hit_sndr);
+	}
+
 	while (spi_nats) {
-		if (hits_equal(hiph->hit_rcvr, spi_nats->peer_hit)) {
+		if (hits_equal(*peer_hit, spi_nats->peer_hit)) {
 			break;
 		}
 		spi_nats = spi_nats->next;
@@ -419,17 +463,60 @@ __u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		length = ntohs(tlv->length);
 		if (type == PARAM_ESP_INFO) {
 			esp_info = (tlv_esp_info *)tlv;
-			spi_nats->private_spi = ntohl(esp_info->new_spi);
-			spi_nats->public_spi = get_next_spinat();
-			log_(NORM, "Mobile node SPI 0x%x\n", spi_nats->private_spi);
-			log_(NORM, "External SPI 0x%x added\n", spi_nats->public_spi);
-			break;
+			if (inbound) {
+				spi_nats->peer_spi = ntohl(esp_info->new_spi);
+				log_(NORM, "Peer SPI 0x%x added\n",
+					spi_nats->peer_spi);
+			} else {
+				spi_nats->private_spi =
+					ntohl(esp_info->new_spi);
+				spi_nats->public_spi = get_next_spinat();
+				log_(NORM, "Mobile node SPI 0x%x\n",
+					spi_nats->private_spi);
+				log_(NORM, "External SPI 0x%x added\n",
+					spi_nats->public_spi);
+					new_spi = spi_nats->public_spi;
+				break;
+			}
+		}
+		else if (type == PARAM_ESP_INFO_NOSIG) {
+			esp_info = (tlv_esp_info *)tlv;
+			if (inbound) {
+				spi_nats->peer_spi = ntohl(esp_info->new_spi);
+				log_(NORM, "Peer SPI 0x%x added\n",
+					spi_nats->peer_spi);
+				break;
+			}
 		}
 		location += tlv_length_to_parameter_length(length);
 	}
 
-	rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
-	return spi_nats->public_spi;
+        if (inbound)
+		rewrite_addrs(payload, SA(&spi_nats->peer_addr),
+			SA(&hip_mr_c->mn_addr));
+        else
+		rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
+
+	return new_spi;
+}
+
+/*
+ *
+ * \fn mr_process_I2()
+ *
+ * \param hip_mr_c 	pointer to the mobile node client structure
+ * \param family	address family of packet, either AF_INET or AF_INET6
+ * \param hiph		pointer to the HIP header in the packet
+ * \param payload	pointer to a copy of the actual packet
+ *
+ * Process the I2 from/to the mobile node, get external SPI if from mobile node.
+ */
+
+
+__u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
+		unsigned char *payload)
+{
+	return mr_process_I2_or_R2(hip_mr_c, family, hiph, payload);
 }
 
 /*
@@ -445,46 +532,10 @@ __u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \brief  Process the R2 from the peer node, grab the SPI of the peer.
  */
-void mr_process_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
+__u32 mr_process_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		unsigned char *payload)
 {
-	int location = 0;
-	__u8 *data = (__u8 *)hiph;
-	int data_len;
-	int type, length;
-	tlv_head *tlv;
-	tlv_esp_info *esp_info;
-
-	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
-
-	while (spi_nats) {
-		if (hits_equal(hiph->hit_sndr, spi_nats->peer_hit)) {
-			break;
-		}
-		spi_nats = spi_nats->next;
-	}
-
-	if (!spi_nats)
-		return;
-
-	data_len = (hiph->hdr_len+1) * 8;
-	location += sizeof(hiphdr);
-
-	while (location < data_len) {
-		tlv = (tlv_head *) &data[location];
-		type = ntohs(tlv->type);
-		length = ntohs(tlv->length);
-		if (type == PARAM_ESP_INFO) {
-			esp_info = (tlv_esp_info *)tlv;
-			spi_nats->peer_spi = ntohl(esp_info->new_spi);
-			log_(NORM, "Peer SPI 0x%x added\n", spi_nats->peer_spi);
-			break;
-		}
-		location += tlv_length_to_parameter_length(length);
-	}
-
-	rewrite_addrs(payload, SA(&spi_nats->peer_addr),
-			SA(&hip_mr_c->mn_addr));
+	return mr_process_I2_or_R2(hip_mr_c, family, hiph, payload);
 }
 
 /*
@@ -504,16 +555,16 @@ void mr_process_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 void mr_process_CLOSE(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		unsigned char *payload, int packet_type)
 {
-	int in_bound;
+	int inbound;
 	hip_hit *peer_hit;
 
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
 	if (hits_equal(hiph->hit_sndr, hip_mr_c->mn_hit)) {
-		in_bound = 0;
+		inbound = 0;
 		peer_hit = &(hiph->hit_rcvr);
 	} else {
-		in_bound = 1;
+		inbound = 1;
 		peer_hit = &(hiph->hit_sndr);
 	}
 
@@ -527,7 +578,7 @@ void mr_process_CLOSE(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 	if (!spi_nats)
 		return;
 
-	if (in_bound) {
+	if (inbound) {
 		rewrite_addrs(payload, SA(&spi_nats->peer_addr), 
 				SA(&hip_mr_c->mn_addr));
 	} else { 
@@ -682,6 +733,10 @@ void check_ext_address_change(void)
 	if (!new_external_address)
 		return;
 
+	if (!HCNF.outbound_iface) {
+		log_(WARN,"No outbound interface defined for mobile router!\n");
+		return;
+	}
 	pthread_mutex_lock(&hip_mr_client_mutex);
 	memcpy(&out_addr, &external_address, sizeof(out_addr));
 	new_external_address = FALSE;
@@ -736,13 +791,9 @@ unsigned char *check_hip_packet(int family, unsigned char *payload,
 	pthread_mutex_lock(&hip_mr_client_mutex);
 	switch(hiph->packet_type) {
 		case HIP_I1:
-		case HIP_I2: /* source HIT lookup */
-			client = mr_client_lookup(hiph->hit_sndr);
-			break;
+		case HIP_I2:
 		case HIP_R1:
-		case HIP_R2: /* destination HIT lookup */
-			client = mr_client_lookup(hiph->hit_rcvr);
-			break;
+		case HIP_R2:
 		case CLOSE:
 		case CLOSE_ACK: /* source or destination HIT lookup */
 			client = mr_client_lookup(hiph->hit_sndr);
@@ -779,7 +830,11 @@ unsigned char *check_hip_packet(int family, unsigned char *payload,
 			}
 			break;
 		case HIP_R2:
-			mr_process_R2(client, family, hiph, payload);
+			new_spi = mr_process_R2(client, family, hiph, payload);
+			if (new_spi) {
+				buff = add_tlv_spi_nat(family, payload,
+						data_len, new_len, new_spi);
+			}
 			break;
 		case CLOSE:
 		case CLOSE_ACK:
@@ -1131,11 +1186,29 @@ void *hip_mobile_router(void *arg)
 		}
 
 		/* Determine if packet is from external side or not */
-		if (external_interface &&
-		    (strcmp(m->indev_name, external_interface) == 0))
-			inbound = TRUE;
-		else
-			inbound = FALSE;
+		if (m->hook == NF_INET_PRE_ROUTING) {
+			if (external_interface &&
+			    (strcmp(m->indev_name, external_interface) == 0))
+				inbound = TRUE;
+			else {
+				ipq_set_verdict((family == PF_INET) ? h4 : h6,
+					m->packet_id, NF_ACCEPT, 0, NULL);
+				continue;
+			}
+		} else if (m->hook == NF_INET_POST_ROUTING) {
+			if (external_interface &&
+			    (strcmp(m->outdev_name, external_interface) == 0))
+				inbound = FALSE;
+			else {
+				ipq_set_verdict((family == PF_INET) ? h4 : h6,
+					m->packet_id, NF_ACCEPT, 0, NULL);
+				continue;
+			}
+		} else {
+			ipq_set_verdict((family == PF_INET) ? h4 : h6,
+				m->packet_id, NF_ACCEPT, 0, NULL);
+			continue;
+		}
 
 		/* 
 		 * Process HIP and ESP packets 
@@ -1428,6 +1501,7 @@ int hip_mr_set_external_if()
 {
 	sockaddr_list *l, *l_new_external = NULL;
 	int preferred_iface_index = -1;
+
 	if (!OPT.mr)
 		return(0);
 	external_iface_index = -1;

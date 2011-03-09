@@ -1474,7 +1474,7 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 {
 	hiphdr *hiph;
-	int location, hi_loc, len, data_len; 
+	int location, hi_loc, len, data_len, next_location; 
 	int type, length, last_type=0;
 	tlv_head *tlv;
 	char sig_tlv_tmp[sizeof(tlv_hip_sig) + MAX_SIG_SIZE + 2];
@@ -1512,6 +1512,23 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 					"without any Host Identity context for "
 					"verification.\n");
 				return(-1);
+			}
+			/* The PARAM_ESP_INFO_NOSIG seems to get overwritten
+			 * Should be reworked in future.
+			 * OTB (2/22/2010) */
+			next_location = location +
+				tlv_length_to_parameter_length(length);
+			if (next_location < data_len) {
+				tlv_head *temp_tlv =
+					(tlv_head*) &data[next_location];
+				if (ntohs(temp_tlv->type) ==
+					PARAM_ESP_INFO_NOSIG) {
+					esp_info = (tlv_esp_info*)temp_tlv;
+					hip_a->spi_nat =
+						ntohl(esp_info->new_spi);
+					log_(NORMT, "Adding SPI NAT 0x%x\n",
+						hip_a->spi_nat);
+				}
 			}
 			/* save SIG and do HMAC_2 verification */
 			memcpy(sig_tlv_tmp, tlv, length+4);
