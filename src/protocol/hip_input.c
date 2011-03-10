@@ -1429,12 +1429,24 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 		}
 
 		if (hip_a->spi_nat) {
+			hip_assoc *hip_mr;
 			__u16 keymat_index = hip_a->keymat_index;
+			hip_mr = search_registrations2(REGTYPE_MR, REG_GRANTED);
 			if (draw_mr_key(hip_a, hip_a->keymat_index) < 0) {
 				log_(WARN, "Failed to draw mobile "
 					"router key");
 			} else {
 				hip_a->mr_keymat_index = keymat_index;
+				log_(NORM, "Drawing MR proxy key %d\n",
+					hip_a->mr_keymat_index);
+				/* If we are a mobile router client */
+				/* use the same key for our mobile router */
+				if (hip_mr && 
+				    !hits_equal(hip_mr->peer_hi->hit,
+						hip_a->peer_hi->hit)) {
+					hip_send_update_proxy_ticket(hip_mr,
+						hip_a);
+				}
 			}
 		}
 
@@ -1669,10 +1681,13 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
 			/* we are registered with a mobile router service and
 			 * this association is not the one with the mr, so
 			 * create a proxy ticket */
+			__u16 keymat_index = hip_a->keymat_index;
 			if (draw_mr_key(hip_a, hip_a->keymat_index) < 0) {
 				log_(WARN, "Failed to draw mobile router key");
 			} else {
-				hip_a->mr_keymat_index = hip_a->keymat_index;
+				hip_a->mr_keymat_index = keymat_index;
+				log_(NORM, "Drawing MR proxy key %d\n",
+					hip_a->mr_keymat_index);
 				hip_send_update_proxy_ticket(hip_mr, hip_a);
 			}
 		}

@@ -305,12 +305,6 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie, 
 		    dh_cache_entry *dh_entry)
 {
-#ifdef MOBILE_ROUTER
-	struct sockaddr *preferred_addr = NULL, *second_addr = NULL;
-	sockaddr_list *l;
-	tlv_locator *loc;
-	locator *loc1;
-#endif /* MOBILE_ROUTER */
 	hiphdr *hiph;
 	int location=0, cookie_location=0;
 	int len;
@@ -349,75 +343,6 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 		location += sizeof(tlv_r1_counter);
 		location = eight_byte_align(location);
 	}
-
-#ifdef MOBILE_ROUTER
-	/* add LOCATOR parameter for preferred address and secondary
-	 * address of different address family if available
-	 */
-	for (l = my_addr_head; l; l = l->next) {
-		if (l->preferred) {
-			int index = l->if_index;
-			int family = l->addr.ss_family;
-			preferred_addr = SA(&l->addr);
-			for (l = my_addr_head; l; l = l->next) {
-				if (l->if_index == index && l->addr.ss_family != family) {
-					second_addr = SA(&l->addr);
-					break;
-				}
-			}
-			break;
-		}
-	}
-
-	/* TODO: move this to UPDATE packet instead, as change in locators 
-	 *       will invalidate these precreated R1s */
-	if (preferred_addr) {
-		loc = (tlv_locator*) &data[location];
-		loc->type = htons(PARAM_LOCATOR);
-		loc->length = htons(sizeof(tlv_locator) - 4);
-		loc1 = &loc->locator1[0];
-		loc1->traffic_type = LOCATOR_TRAFFIC_TYPE_BOTH;
-		loc1->locator_type = LOCATOR_TYPE_IPV6;
-		loc1->locator_length = 4; /* (128 bits) / (8 * 4) */
-		loc1->reserved = LOCATOR_PREFERRED; /* set the P-bit */
-		loc1->locator_lifetime = htonl(HCNF.loc_lifetime);
-		memset(loc1->locator, 0, sizeof(loc1->locator));
-		if (preferred_addr->sa_family == AF_INET6) {
-			memcpy(&loc1->locator[0], SA2IP(preferred_addr),
-			    SAIPLEN(preferred_addr));
-		} else {/* IPv4-in-IPv6 address format */
-			memset(&loc1->locator[10], 0xFF, 2);
-			memcpy(&loc1->locator[12], SA2IP(preferred_addr),
-			    SAIPLEN(preferred_addr));
-		}
-		location += sizeof(tlv_locator);
-		location = eight_byte_align(location);
-	}
-
-	/* TODO: move this to UPDATE packet instead, as change in locators 
-	 *       will invalidate these precreated R1s */
-	if (second_addr) {
-		loc = (tlv_locator*) &data[location];
-		loc->type = htons(PARAM_LOCATOR);
-		loc->length = htons(sizeof(tlv_locator) - 4);
-		loc1 = &loc->locator1[0];
-		loc1->traffic_type = LOCATOR_TRAFFIC_TYPE_BOTH;
-		loc1->locator_type = LOCATOR_TYPE_IPV6;
-		loc1->locator_length = 4; /* (128 bits) / (8 * 4) */
-		loc1->locator_lifetime = htonl(HCNF.loc_lifetime);
-		memset(loc1->locator, 0, sizeof(loc1->locator));
-		if (second_addr->sa_family == AF_INET6) {
-			memcpy(&loc1->locator[0], SA2IP(second_addr),
-			    SAIPLEN(second_addr));
-		} else {/* IPv4-in-IPv6 address format */
-			memset(&loc1->locator[10], 0xFF, 2);
-			memcpy(&loc1->locator[12], SA2IP(second_addr),
-			    SAIPLEN(second_addr));
-		}
-		location += sizeof(tlv_locator);
-		location = eight_byte_align(location);
-	}
-#endif /* MOBILE_ROUTER */
 
 	/* build the PUZZLE TLV */
 	puzzle = (tlv_puzzle*) &data[location];
