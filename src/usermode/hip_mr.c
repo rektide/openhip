@@ -640,10 +640,22 @@ void mr_process_CLOSE(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
 	}
 
-	/* TODO: Remove state for SA */
+	/* TODO: Remove state for SA if CLOSE_ACK never received */
 
 	if (packet_type == CLOSE_ACK) {
-		;
+		if (spi_nats == hip_mr_c->spi_nats) {
+			hip_mr_c->spi_nats = spi_nats->next;
+			free(spi_nats);
+		} else {
+			hip_spi_nat *p;
+			for (p = hip_mr_c->spi_nats; p; p = p->next) {
+				if (spi_nats == p->next) {
+					p->next = spi_nats->next;
+					free(spi_nats);
+					break;
+				}
+			}
+		}
 	}
 
 }
@@ -857,7 +869,6 @@ unsigned char *check_hip_packet(int family, unsigned char *payload,
 			if (!client)
 				client = mr_client_lookup(hiph->hit_rcvr);
 			break;
-		/* TODO: handle UPDATE packets here */
 		default:
 			client = NULL;
 	}

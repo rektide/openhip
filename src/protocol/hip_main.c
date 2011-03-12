@@ -1166,6 +1166,34 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 	}
 }
 
+/*
+ * check_reg_info()
+ *
+ * Check if the given registration type is in the given reg_info structure.
+ */
+int check_reg_info(struct reg_entry *regs, __u8 type, int state,
+	struct timeval *now)
+{
+	double tmp;
+	struct reg_info *reg;
+
+	if (!regs)
+		return(0);
+
+	/* search for existing registration */
+	for (reg = regs->reginfos; reg; reg = reg->next) {
+		if (type == reg->type && state == reg->state) {
+			tmp = YLIFE(reg->lifetime);
+			tmp = pow(2, tmp);
+			if (TDIFF(*now, reg->state_time) > (int)tmp)
+				return(0);
+			else
+				return(1);
+		}
+	}
+	return(0);
+}
+
 
 /* Iterate over HIP connections and handle state timeout.
  */
@@ -1253,6 +1281,12 @@ void hip_handle_state_timeouts(struct timeval *time1)
 			/* don't send SADB_GETs multiple times per second! */
 			if (TDIFF(*time1, hip_a->use_time) < 2)
 				break;
+			/* Do not timeout SAs for MR registration */
+			if (check_reg_info(hip_a->regs, REGTYPE_MR, REG_GRANTED,
+				time1)) {
+				hip_a->use_time.tv_sec = time1->tv_sec;
+				hip_a->use_time.tv_usec = time1->tv_usec;
+			}
 			err = check_last_used(hip_a, 1, time1);
 			err += check_last_used(hip_a, 0, time1);
 			/* no use time available, first check state time for UAL
