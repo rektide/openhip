@@ -240,7 +240,7 @@ int main_loop(int argc, char **argv)
 	HCNF.min_reg_lifetime = 96;  /* min offered 2^((96-64)/8) = s */
 	HCNF.max_reg_lifetime = 255; /* max offered 2^((255-64)/8) = s */
 	HCNF.preferred_iface = NULL;
-	HCNF.outbound_iface = NULL;
+	HCNF.outbound_ifaces = NULL;
 	HCNF.save_known_identities = TRUE;
 	HCNF.peer_certificate_required = FALSE;
 	memset(HCNF.conf_filename, 0, sizeof(HCNF.conf_filename));
@@ -520,6 +520,9 @@ int main_loop(int argc, char **argv)
 	}
 	get_my_addresses();
 	select_preferred_address();
+#ifdef MOBILE_ROUTER
+	hip_mr_set_external_ifs();
+#endif /* MOBILE_ROUTER */
 	/* Precompute R1s, cookies, DH material */
 	init_dh_cache();
 	init_all_R1_caches();

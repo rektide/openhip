@@ -926,12 +926,25 @@ int read_conf_file(char *filename)
 					"error!\n");
 			else
 				strcpy(HCNF.preferred_iface, data);
+#ifdef MOBILE_ROUTER
 		} else if (strcmp((char*)node->name, "outbound_interface")==0){
-			HCNF.outbound_iface = malloc(strlen(data + 1));
-			if (!HCNF.outbound_iface)
-				log_(WARN, "Warning: outbound_iface malloc error!\n");
-			else
-				strcpy(HCNF.outbound_iface, data);
+			struct name *temp = malloc(sizeof(struct name));
+			if (!temp) {
+				log_(WARN, "Warning: outbound_iface malloc "
+					"error!\n");
+			} else {
+				temp->name = malloc(strlen(data) + 1);
+				if (!temp->name) {
+					log_(WARN, "Warning: outbound_iface "
+						"malloc error!\n");
+					free(temp);
+				} else { /* Should we check for duplicates? */
+					strcpy(temp->name, data);
+					temp->next = HCNF.outbound_ifaces;
+					HCNF.outbound_ifaces = temp;
+				}
+			}
+#endif /* MOBILE_ROUTER */
 		} else if (strcmp((char*)node->name, 
 				"save_known_identities")==0){
 			if (strncmp(data, "yes", 3)==0)

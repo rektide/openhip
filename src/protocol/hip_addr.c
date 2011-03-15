@@ -499,9 +499,6 @@ int select_preferred_address()
 		}
 	}
 
-#ifdef MOBILE_ROUTER
-	return (hip_mr_set_external_if());
-#endif /* MOBILE_ROUTER */
 	return(0);
 }
 

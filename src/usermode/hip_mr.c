@@ -46,19 +46,28 @@
 #define BUFSIZE 2048
 #define MR_TIMEOUT_US 500000 /* microsecond timeout for mobile_router select()*/
 #define MAX_MR_CLIENTS MAX_CONNECTIONS
+#define MAX_EIFACES 8
+
+enum { EIF_UNAVAILABLE, EIF_AVAILABLE };
 
 /*
  * local data
  */
+
+struct if_data {
+	char *name;
+	int ifindex;
+	int state;
+	struct sockaddr_storage address;
+};
+
 static hip_mr_client hip_mr_client_table[MAX_MR_CLIENTS];
 static hip_mutex_t hip_mr_client_mutex;
 static int max_hip_mr_clients;
-static int new_external_address;
-static int external_iface_index = -1;
-static struct sockaddr_storage external_address;
-
-static char *external_interface;
 struct sockaddr_storage out_addr;
+
+static int neifs = 0;
+static struct if_data external_interfaces[MAX_EIFACES];
 
 /*
  * local functions
@@ -82,7 +91,6 @@ void mr_process_CLOSE(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 unsigned char *add_tlv_spi_nat(int family, unsigned char *payload,
 		size_t data_len, size_t *new_len, __u32 new_spi);
 void mr_send_updates();
-void check_ext_address_change(void);
 unsigned char *check_hip_packet(int family, unsigned char *payload,
 		size_t data_len, size_t *new_len);
 unsigned char *new_header(int family, unsigned char *payload);
@@ -323,7 +331,7 @@ void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \return  Perform SPINAT on packet.
  *
- * \brief  Process the R1 from/to the peer node, grab the LOCATOR info of the peer from peer node.
+ * \brief  Process the R1 from/to the peer node.
  */
 void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		unsigned char *payload)
@@ -351,10 +359,10 @@ void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 	if (!spi_nats)
 		return;
 
-        if (inbound)
+	if (inbound)
 		rewrite_addrs(payload, SA(&spi_nats->peer_addr),
 			SA(&hip_mr_c->mn_addr));
-        else
+	else
 		rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
 }
 
@@ -442,11 +450,15 @@ __u32 mr_process_I2_or_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		location += tlv_length_to_parameter_length(length);
 	}
 
-        if (inbound)
+        if (inbound) {
 		rewrite_addrs(payload, SA(&spi_nats->peer_addr),
 			SA(&hip_mr_c->mn_addr));
-        else
+        } else {
 		rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
+		spi_nats->last_out_addr.ss_family = family;
+		memcpy(SA(&spi_nats->last_out_addr), SA(&out_addr),
+			SALEN(&spi_nats->last_out_addr));
+	}
 
 	return new_spi;
 }
@@ -572,7 +584,9 @@ void mr_process_update(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 					memset(addr, 0, sizeof(struct sockaddr_storage));
 				if (((struct sockaddr_in*)addr)->sin_addr.s_addr == INADDR_BROADCAST)
 					memset(addr, 0, sizeof(struct sockaddr_storage));
-				memcpy(SA2IP(&spi_nats->peer_addr), SA2IP(&spi_nats->peer_ipv4_addr), SAIPLEN(&spi_nats->peer_addr));
+				memcpy(SA2IP(&spi_nats->peer_addr),
+					SA2IP(&spi_nats->peer_ipv4_addr),
+					SAIPLEN(&spi_nats->peer_addr));
 			} else {
 				addr = SA(&spi_nats->peer_ipv6_addr);
 				addr->sa_family = AF_INET6;
@@ -581,7 +595,9 @@ void mr_process_update(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 				if (IN6_IS_ADDR_MULTICAST((struct in6_addr*)p))
 					memset(addr, 0, sizeof(struct sockaddr_storage));
 				/* IPv6 doesn't have broadcast addresses */
-				memcpy(SA2IP(&spi_nats->peer_addr), SA2IP(&spi_nats->peer_ipv6_addr), SAIPLEN(&spi_nats->peer_addr));
+				memcpy(SA2IP(&spi_nats->peer_addr),
+					SA2IP(&spi_nats->peer_ipv6_addr),
+					SAIPLEN(&spi_nats->peer_addr));
 			}
 
 		}
@@ -790,36 +806,6 @@ void mr_send_updates()
 }
 
 /* 
- * \fn check_ext_address_change()
- * 
- * \brief Periodic check to see if we have a new external address. Looks at the
- *        out_addr and external_address globals.
- *
- */
-void check_ext_address_change(void)
-{
-	if (!new_external_address)
-		return;
-
-	if (!HCNF.outbound_iface) {
-		log_(WARN,"No outbound interface defined for mobile router!\n");
-		return;
-	}
-	pthread_mutex_lock(&hip_mr_client_mutex);
-	memcpy(&out_addr, &external_address, sizeof(out_addr));
-	new_external_address = FALSE;
-	if (!external_interface) {
-		external_interface = malloc(strlen(HCNF.outbound_iface) + 1);
-		if (!external_interface)
-			log_(WARN, "check_ext_address_change malloc error!\n");
-		else
-			strcpy(external_interface, HCNF.outbound_iface);
-	}
-	mr_send_updates();
-	pthread_mutex_unlock(&hip_mr_client_mutex);
-}
-
-/* 
  * \fn check_hip_packet()
  *
  * \param family
@@ -1012,6 +998,110 @@ unsigned char *new_header(int family, unsigned char *payload)
 	return data;
 }
 
+/*
+ * \fn do_inbound_esp_packet()
+ *
+ * \param family
+ * \param payload
+ * \param addr
+ * \param spi_nat
+ *
+ * \brief process inbound ESP packets, rewriting SPIs.
+ */
+unsigned char *do_inbound_esp_packet(int family, unsigned char *payload,
+		struct sockaddr *addr, hip_spi_nat *spi_nat)
+{
+	unsigned char *new_payload = NULL;
+	struct ip_esp_hdr *esph;
+
+	esph = (struct ip_esp_hdr *) (payload + ((family == AF_INET) ?
+			sizeof(struct ip) : sizeof(struct ip6_hdr)));
+
+#ifdef VERBOSE_MR_DEBUG
+	log_(NORM, "Found the public SPI 0x%x\n", ntohl(esph->spi));
+	log_(NORM, "Changing to 0x%x\n", spi_nat->private_spi);
+#endif /* VERBOSE_MR_DEBUG */
+
+	esph->spi = htonl(spi_nat->private_spi);
+	if (family == addr->sa_family) {
+		new_payload = payload;
+	} else {
+		new_payload = new_header(family, payload);
+	}
+	if (new_payload) {
+		rewrite_addrs(new_payload, SA(&spi_nat->peer_addr), addr);
+	}
+	return(new_payload);
+}
+
+/*
+ * \fn do_outbound_esp_packet()
+ *
+ * \param family
+ * \param payload
+ * \param spi_nat
+ *
+ * \brief process outbound ESP packets.
+ */
+unsigned char *do_outbound_esp_packet(int family, unsigned char *payload,
+		hip_mr_client *client, hip_spi_nat *spi_nat)
+{
+	unsigned char *new_payload = NULL;
+	struct sockaddr *client_addr, *dst, *out = SA(&out_addr);
+
+	/* Determine destination and rewrite addresses */
+
+	if (family == out->sa_family) {
+		dst = NULL;
+		if (family == AF_INET) {
+			if (AF_INET == spi_nat->peer_ipv4_addr.ss_family)
+				dst = SA(&spi_nat->peer_ipv4_addr);
+		} else if (family == AF_INET6) {
+			if (AF_INET6 == spi_nat->peer_ipv6_addr.ss_family)
+				dst = SA(&spi_nat->peer_ipv6_addr);
+		}
+		if (dst) {
+			rewrite_addrs(payload, out, dst);
+		}
+		new_payload = payload;
+	} else {
+		dst = NULL;
+		if (family == AF_INET) {
+			if (AF_INET6 == spi_nat->peer_ipv6_addr.ss_family)
+				dst = SA(&spi_nat->peer_ipv6_addr);
+		} else if (family == AF_INET6) {
+			if (AF_INET == spi_nat->peer_ipv4_addr.ss_family)
+				dst = SA(&spi_nat->peer_ipv4_addr);
+		}
+		if (dst) {
+			/* Need to do IP family translation */
+			new_payload = new_header(family, payload);
+			if (new_payload)
+				rewrite_addrs(new_payload, out, dst);
+		}
+	}
+
+	/* Check to see if we need to send an UPDATE for this connection */
+
+	if ((out->sa_family != spi_nat->last_out_addr.ss_family) ||
+		(memcmp(SA2IP(&out_addr), SA2IP(&spi_nat->last_out_addr),
+			SAIPLEN(&out_addr)) != 0)) {
+		if (dst) {
+			client_addr = SA(&client->mn_addr);
+			log_(NORM, "Sending UPDATE from %s to ", logaddr(out));
+			log_(NORM, "%s for client ", logaddr(dst));
+			log_(NORM, "%s\n", logaddr(client_addr));
+			hip_send_proxy_update(out, dst, &client->mn_hit,
+					&spi_nat->peer_hit, &spi_nat->ticket,
+					spi_nat->public_spi);
+			memcpy(SA(&spi_nat->last_out_addr), SA(&out_addr),
+				SALEN(&spi_nat->last_out_addr));
+		}
+	}
+
+	return new_payload;
+}
+
 /* 
  * \fn check_esp_packet()
  *
@@ -1025,7 +1115,7 @@ unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload)
 {
 	int i;
 	unsigned char *new_payload = NULL;
-	struct sockaddr *dst, *addr, *out = SA(&out_addr);
+	struct sockaddr *dst, *addr;
 	struct ip_esp_hdr *esph;
 
 	esph = (struct ip_esp_hdr *) (payload + ((family == AF_INET) ?
@@ -1035,7 +1125,6 @@ unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload)
 	log_(NORM, "ESP packet with SPI 0x%x\n", ntohl(esph->spi));
 #endif /* VERBOSE_MR_DEBUG */
 
-	/* TODO: cleanup */
 	pthread_mutex_lock(&hip_mr_client_mutex);
 	for (i = 0; i < max_hip_mr_clients; i++) {
 		addr = SA(&hip_mr_client_table[i].mn_addr);
@@ -1045,72 +1134,26 @@ unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload)
 			if (inbound) {
 				if (spi_nats->public_spi != ntohl(esph->spi))
 					continue;
-#ifdef VERBOSE_MR_DEBUG
-				log_(NORM, "Found the public SPI 0x%x\n",
-					ntohl(esph->spi));
-				log_(NORM, "Changing to 0x%x\n",
-					spi_nats->private_spi);
-#endif /* VERBOSE_MR_DEBUG */
-				esph->spi = htonl(spi_nats->private_spi);
-				if (family == addr->sa_family) {
-					new_payload = payload;
-				} else {
-					new_payload = new_header(family, payload);
-				}
-				if (new_payload) {
-					rewrite_addrs(new_payload,
-						SA(&spi_nats->peer_addr),
-						SA(&hip_mr_client_table[i].mn_addr));
-				}
+				new_payload = do_inbound_esp_packet(family,
+					payload, addr, spi_nats);
 				pthread_mutex_unlock(&hip_mr_client_mutex);
 				return new_payload;
-			} else if (!inbound) {
+			} else {
 				if (spi_nats->peer_spi != ntohl(esph->spi))
 					continue;
 				dst = SA(&spi_nats->peer_addr);
 				if (!addr_match_payload(payload, family,
 							addr, dst))
 					continue;
-				if (family == out->sa_family) {
-					if (family == AF_INET) {
-						if (AF_INET ==
-							spi_nats->peer_ipv4_addr.ss_family)
-							dst = SA(&spi_nats->peer_ipv4_addr);
-					} else if (family == AF_INET6) {
-						if (AF_INET6 ==
-							spi_nats->peer_ipv6_addr.ss_family)
-							dst = SA(&spi_nats->peer_ipv6_addr);
-					}
-					rewrite_addrs(payload, out, dst);
-					pthread_mutex_unlock(&hip_mr_client_mutex);
-					return payload;
-				} else {
-					dst = NULL;
-					if (family == AF_INET) {
-						if (AF_INET6 ==
-							spi_nats->peer_ipv6_addr.ss_family)
-							dst = SA(&spi_nats->peer_ipv6_addr);
-					} else if (family == AF_INET6) {
-						if (AF_INET ==
-							spi_nats->peer_ipv4_addr.ss_family)
-							dst = SA(&spi_nats->peer_ipv4_addr);
-					}
-					if (dst) {
-						/* Need to do IP family translation */
-						new_payload = new_header(family, payload);
-						if (new_payload) {
-							rewrite_addrs(
-								new_payload,
-								out, dst);
-						}
-					} else {
-					}
-					pthread_mutex_unlock(&hip_mr_client_mutex);
-					return new_payload;
-				}
+				new_payload = do_outbound_esp_packet(family,
+					payload, &hip_mr_client_table[i],
+					spi_nats);
+				pthread_mutex_unlock(&hip_mr_client_mutex);
+				return new_payload;
 			}
 		}
 	}
+
 	pthread_mutex_unlock(&hip_mr_client_mutex);
 	/* Need to determine is this packet is for this host */
 	/* Right now just accept */
@@ -1127,6 +1170,7 @@ unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload)
  */
 void *hip_mobile_router(void *arg)
 {
+	int i;
 	int family = PF_INET6;
 	int err, type, inbound, protocol;
 	int write_raw, raw_ip4_socket, raw_ip6_socket;
@@ -1134,6 +1178,7 @@ void *hip_mobile_router(void *arg)
 	unsigned char buf[BUFSIZE];
 	unsigned char *output_buffer;
 	size_t output_length;
+	char *dev_name;
 	struct ipq_handle *h4, *h6;
 	struct ip *ip4h = NULL;
 	struct ip6_hdr *ip6h = NULL;
@@ -1193,7 +1238,6 @@ void *hip_mobile_router(void *arg)
 	 * Main mobile router loop 
 	 */
 	while(g_state == 0) {
-		check_ext_address_change();
 
 		/*
 		 * select() for socket activity
@@ -1260,29 +1304,34 @@ void *hip_mobile_router(void *arg)
 		}
 
 		/* Determine if packet is from external side or not */
+
 		if (m->hook == NF_INET_PRE_ROUTING) {
-			if (external_interface &&
-			    (strcmp(m->indev_name, external_interface) == 0))
-				inbound = TRUE;
-			else {
-				ipq_set_verdict((family == PF_INET) ? h4 : h6,
-					m->packet_id, NF_ACCEPT, 0, NULL);
-				continue;
-			}
+			dev_name = m->indev_name;
+			inbound = TRUE;
 		} else if (m->hook == NF_INET_POST_ROUTING) {
-			if (external_interface &&
-			    (strcmp(m->outdev_name, external_interface) == 0))
-				inbound = FALSE;
-			else {
-				ipq_set_verdict((family == PF_INET) ? h4 : h6,
-					m->packet_id, NF_ACCEPT, 0, NULL);
-				continue;
-			}
+			dev_name = m->outdev_name;
+			inbound = FALSE;
 		} else {
 			ipq_set_verdict((family == PF_INET) ? h4 : h6,
 				m->packet_id, NF_ACCEPT, 0, NULL);
 			continue;
 		}
+
+		/* Find the external interface */
+
+		for (i = 0; i < neifs; i++) {
+			if (strcmp(dev_name, external_interfaces[i].name) == 0)
+				break;
+		}
+		if (i >= neifs) {
+			ipq_set_verdict((family == PF_INET) ? h4 : h6,
+				m->packet_id, NF_ACCEPT, 0, NULL);
+			continue;
+		}
+
+		/* Need to make out_addr a parameter to function */
+		memcpy(&out_addr, &external_interfaces[i].address,
+			sizeof(out_addr));
 
 		/* 
 		 * Process HIP and ESP packets 
@@ -1293,7 +1342,7 @@ void *hip_mobile_router(void *arg)
 #ifdef VERBOSE_MR_DEBUG
 		printf("Received %d byte %s packet proto %d inbound %s ",
 			m->data_len, (family==AF_INET) ? "IPv4" : "IPv6",
-			protocol, inbound ? "yes" : "no");
+			protocol, inbound ? "yes\n" : "no\n");
 #endif /* VERBOSE_MR_DEBUG */
 		if (protocol == H_PROTO_HIP) {
 			output_buffer = check_hip_packet(family, m->payload,
@@ -1565,53 +1614,47 @@ int build_tlv_proxy_hmac(hip_proxy_ticket *ticket, __u8 *data, int location,
 }
 
 /* 
- * \fn hip_mr_set_external_if()
+ * \fn hip_mr_set_external_ifs()
  *
  * \brief If mobile router, set the outbound interface index. This is invoked 
- *        from select_preferred_address() after the preferred address has
- *        changed.
+ *        from main_loop after the call to select_preferred_address().
  */
-int hip_mr_set_external_if()
+int hip_mr_set_external_ifs()
 {
+	struct name *iface;
 	sockaddr_list *l, *l_new_external = NULL;
-	int preferred_iface_index = -1;
 
 	if (!OPT.mr)
 		return(0);
-	external_iface_index = -1;
-	if (HCNF.outbound_iface)
-		external_iface_index = devname_to_index(HCNF.outbound_iface,
-							NULL);
-	if (external_iface_index == -1) {
-		if (HCNF.preferred_iface)
-			preferred_iface_index = devname_to_index(
-							HCNF.preferred_iface,
-							NULL);
-		if (preferred_iface_index != -1) {
-			external_iface_index = preferred_iface_index;
-			log_(NORM, "Selected the preferred interface as the "
-				"outbound interface\n");
-		} else {
+
+	for (iface = HCNF.outbound_ifaces; iface;
+			iface = iface->next) {
+		external_interfaces[neifs].ifindex =
+			devname_to_index(iface->name, NULL);
+		if (external_interfaces[neifs].ifindex == -1) {
 			log_(ERR, "HIP started as mobile router but unable to "
-				"set outbound interface index\n");
+				"get the outbound interface index of %s\n",
+				iface->name);
+			continue;
 		}
-	} else {
-		log_(NORM, "Selected %s as outbound interface\n",
-			HCNF.outbound_iface);
-	}
-	if (external_iface_index != -1) {
+		external_interfaces[neifs].name =
+			malloc(strlen(iface->name) + 1);
+		if (!external_interfaces[neifs].name) {
+			log_(WARN, "hip_mr_set_external_ifs malloc error!\n");
+			continue;
+		}
+
+		strcpy(external_interfaces[neifs].name, iface->name);
+		log_(NORM, "Using %s (%d) as an outbound interface\n",
+			external_interfaces[neifs].name,
+			external_interfaces[neifs].ifindex);
+
 		/* Use the preferred address if it is on the external interface,
 		 * otherwise use first non-local address on this interface */
+		l_new_external = NULL;
 		for (l = my_addr_head; l; l=l->next) {
-			if (l->if_index != external_iface_index)
+			if (l->if_index != external_interfaces[neifs].ifindex)
 				continue;
-			/* external address is the same */
-			if ((external_address.ss_family == l->addr.ss_family) &&
-			    (memcmp(SA2IP(&l->addr), SA2IP(&external_address),
-			     SAIPLEN(&l->addr ))==0)) {
-				log_(NORM, "External address unchanged.\n");
-				return(0);
-			}
 			if (TRUE == l->preferred) {
 				l_new_external = l;
 				break;
@@ -1626,19 +1669,24 @@ int hip_mr_set_external_if()
 				l_new_external = l;
 		}
 		if (l_new_external) {
-			struct sockaddr *out = SA(&external_address);
+			struct sockaddr *out =
+				SA(&external_interfaces[neifs].address);
 			pthread_mutex_lock(&hip_mr_client_mutex);
 			out->sa_family = l_new_external->addr.ss_family;
 			memcpy(SA2IP(out), SA2IP(&l_new_external->addr),
 				SAIPLEN(out));
-			new_external_address = TRUE;
 			pthread_mutex_unlock(&hip_mr_client_mutex);
-			log_(NORM, "%s selected as the external address.\n",
-				logaddr(SA(&l_new_external->addr)));
+			external_interfaces[neifs].state = EIF_AVAILABLE;
+			log_(NORM,"%s selected as the external address for "
+				"%s.\n", logaddr(SA(&l_new_external->addr)),
+				external_interfaces[neifs].name);
 		} else {
+			external_interfaces[neifs].state = EIF_UNAVAILABLE;
 			log_(NORM, "Unable to find address on outbound "
-				"interface %d\n", external_iface_index);
+				"interface %s\n",
+				external_interfaces[neifs].name);
 		}
+		neifs++;
 	}
 	return(0);
 }
@@ -1655,35 +1703,38 @@ int hip_mr_set_external_if()
  *
  * \brief This is invoked from handle_local_address_change() when an address
  *        has been added or removed from the mobile router. The mobile router
- *        may then select a new external address, which will later trigger
- *        the UPDATE procedure.
+ *        may then select a new external address for that interface,
+ *        which will later trigger the UPDATE procedure.
  */
 void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi)
 {
+	int i;
 	struct sockaddr *out;
 	sockaddr_list *l, *l_new_external;
 
 	if (!OPT.mr)
 		return;
-	if (ifi != external_iface_index)
-		return;
-	if (max_hip_mr_clients <= 0)
+
+	for (i = 0; i < neifs; i++)
+		if (ifi == external_interfaces[i].ifindex)
+			break;
+	if (i >= neifs)
 		return;
 
-	out = SA(&external_address);
+	out = SA(&external_interfaces[i].address);
 	pthread_mutex_lock(&hip_mr_client_mutex);
 
 	/*
 	 * Address added to external interface
 	 */
-	if (add) {
-		/* There is no external address, set the new address to be the
-		 * external address */
-		if (!out->sa_family) {
-			out->sa_family = newaddr->sa_family;
-			memcpy(SA2IP(out), SA2IP(newaddr), SAIPLEN(out));
-			new_external_address = TRUE;
-		}
+	if (add && external_interfaces[i].state == EIF_UNAVAILABLE) {
+		/* There is no external address for this interface,
+		 * set the new address to be the external address */
+		out->sa_family = newaddr->sa_family;
+		memcpy(SA2IP(out), SA2IP(newaddr), SAIPLEN(out));
+		external_interfaces[i].state = EIF_AVAILABLE;
+		log_(NORM, "Using %s as new external address for %s\n",
+			logaddr(out), external_interfaces[i].name);
 		goto hip_mr_handle_address_change_exit;
 	}
 
@@ -1700,7 +1751,7 @@ void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi)
 	for (l = my_addr_head; l; l=l->next) {
 		/* Try to use the same address family, otherwise use the first
 		 * non-local address on this interface */
-		if (l->if_index != external_iface_index)
+		if (l->if_index != external_interfaces[i].ifindex)
 			continue;
 		/* skip local and multicast addresses */
 		if ((l->addr.ss_family == AF_INET6) &&
@@ -1718,12 +1769,13 @@ void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi)
 	if (l_new_external) {
 		out->sa_family = l_new_external->addr.ss_family;
 		memcpy(SA2IP(out), SA2IP(&l_new_external->addr), SAIPLEN(out));
-		new_external_address = TRUE;
-		log_(NORM, "Using %s as new external address\n",
-			logaddr(out));
+		log_(NORM, "Using %s as new external address for %s\n",
+			logaddr(out), external_interfaces[i].name);
 	} else {
-		log_(WARN, "No new external address found\n");
-		memset(out, 0, sizeof(external_address));
+		log_(WARN, "No new external address found for \n",
+			external_interfaces[i].name);
+		external_interfaces[i].state = EIF_UNAVAILABLE;
+		memset(out, 0, sizeof(external_interfaces[i].address));
 	}
 
 hip_mr_handle_address_change_exit:

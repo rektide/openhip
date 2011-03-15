@@ -807,6 +807,13 @@ struct hip_opt {
 #endif
 };
 
+#ifdef MOBILE_ROUTER
+struct name {
+	char *name;
+	struct name *next;
+};
+#endif
+
 /*
  * Global configuration data
  */
@@ -838,7 +845,7 @@ struct hip_conf {
         char *master_interface;
 	struct sockaddr_storage preferred; /* preferred address */
 	char *preferred_iface;		/* preferred interface name */
-	char *outbound_iface;		/* if mobile router */
+	struct name *outbound_ifaces;	/* if mobile router */
 	__u8 save_known_identities;	/* save known_host_id's on exit */
 	__u8 reg_types[MAX_REGISTRATION_TYPES]; /* registration types offered */
 	__u8 num_reg_types;		/* number of registration types */
