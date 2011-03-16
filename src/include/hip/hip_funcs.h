@@ -322,6 +322,7 @@ int hip_dht_select_server(struct sockaddr *addr); */
 /* hip_mr.c */
 int  hip_mr_set_external_ifs();
 void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi);
+int  hip_mr_retransmit(struct timeval *time1, hip_hit hit);
 int  init_hip_mr_client(hip_hit peer_hit, struct sockaddr *src);
 int  add_proxy_ticket(const __u8 *data);
 #endif

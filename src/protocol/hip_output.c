@@ -1564,7 +1564,7 @@ queue_retrans:
 int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len,
 		struct sockaddr *src, struct sockaddr *dst)
 {
-	int s, err;
+	int s, err, use_udp;
 #ifndef __WIN32__
 	struct msghdr msg;
 	struct iovec iov;
@@ -1579,10 +1579,12 @@ int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len,
 	iov.iov_base = data;
 #endif
 	if (!hip_a)
-		return(-1);
+		use_udp = FALSE;
+	else
+		use_udp = hip_a->udp;
 
 	s = socket(src->sa_family, SOCK_RAW,
-		   hip_a->udp ? H_PROTO_UDP : H_PROTO_HIP);
+		   use_udp ? H_PROTO_UDP : H_PROTO_HIP);
 	if (s < 0) {
 		log_(WARN, "hip_retransmit() socket() error: %s.\n",
 			strerror(errno));

@@ -128,9 +128,6 @@ void endbox_init();
 int hipcfg_init();
 extern __u32 get_preferred_lsi(struct sockaddr *);
 #endif
-#ifdef MOBILE_ROUTER
-extern struct sockaddr_storage out_addr;
-#endif
 
 /*
  * main():  HIP daemon main event loop
@@ -1061,6 +1058,12 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 
 	for (i=0; i < max_hip_assoc; i++) {
 		hip_a = &hip_assoc_table[i];
+#ifdef MOBILE_ROUTER
+		/* retransmit UPDATE-PROXY packets for mobile router clients
+		 * that have registered and are ESTABLISHED */
+		if (OPT.mr && (hip_a->state == ESTABLISHED))
+			hip_mr_retransmit(time1, hip_a->peer_hi->hit);
+#endif /* MOBILE_ROUTER */
 		if ((hip_a->rexmt_cache.len < 1) ||
 		    (TDIFF(*time1, hip_a->rexmt_cache.xmit_time) <=
 		     (int)HCNF.packet_timeout))
@@ -1081,18 +1084,6 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 			if (hip_a->udp)
 				offset += sizeof(udphdr) + sizeof(__u32);
 			hiph = (hiphdr*) &hip_a->rexmt_cache.packet[offset];
-#ifdef MOBILE_ROUTER
-			/* MR UPDATE retransmission has different source...
-			 * TODO: clean this up */
-			if (OPT.mr && (hiph->packet_type == UPDATE) &&
-			    (!hits_equal(hip_a->peer_hi->hit, 
-					hiph->hit_rcvr)) ) {
-				src = SA(&out_addr);
-				log_(NORM, "Mobile router retransmitted UPDATE "
-					"from %s to ", logaddr(src));
-				log_(NORM, "%s\n", logaddr(dst));
-			}
-#endif /* MOBILE_ROUTER */
 			/* TODO: the address may have changed, could
 			 * perform a DHT lookup here and retransmit using the
 			 * different address. */

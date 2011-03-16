@@ -34,6 +34,7 @@
 #include <string.h>             /* strerror() */
 #include <errno.h>              /* errno */
 #include <openssl/rand.h>	/* RAND_bytes() */
+#include <sys/time.h>		/* gettimeofday() */
 #include <libipq.h>		/* ipq_create_handle() */
 #include <hip/hip_service.h>
 #include <hip/hip_types.h>
@@ -64,7 +65,6 @@ struct if_data {
 static hip_mr_client hip_mr_client_table[MAX_MR_CLIENTS];
 static hip_mutex_t hip_mr_client_mutex;
 static int max_hip_mr_clients;
-struct sockaddr_storage out_addr;
 
 static int neifs = 0;
 static struct if_data external_interfaces[MAX_EIFACES];
@@ -76,29 +76,36 @@ int  addr_match_payload(__u8 *payload, int family, struct sockaddr *src,
 		struct sockaddr *dst);
 __u32 get_next_spinat(void);
 hip_mr_client *mr_client_lookup(hip_hit hit);
-void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
+void mr_process_I1(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph,
 		unsigned char *payload);
-void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
+void mr_process_R1(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph,
 		unsigned char *payload);
-__u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
+__u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph,
 		unsigned char *payload);
-__u32 mr_process_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
+__u32 mr_process_R2(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph,
 		unsigned char *payload);
-__u32 mr_process_I1_or_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
+__u32 mr_process_I1_or_R2(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph,
 		unsigned char *payload);
-void mr_process_CLOSE(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
+void mr_process_CLOSE(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph,
 		unsigned char *payload, int packet_type);
 unsigned char *add_tlv_spi_nat(int family, unsigned char *payload,
 		size_t data_len, size_t *new_len, __u32 new_spi);
-void mr_send_updates();
-unsigned char *check_hip_packet(int family, unsigned char *payload,
+unsigned char *check_hip_packet(int family, int inbound,
+		struct if_data *ext_if, unsigned char *payload,
 		size_t data_len, size_t *new_len);
 unsigned char *new_header(int family, unsigned char *payload);
-unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload);
+unsigned char *check_esp_packet(int family, int inbound, struct if_data *ext_if,
+		unsigned char *payload);
+void mr_clear_retransmissions(hip_spi_nat *spi_nats);
 void *hip_mobile_router(void *arg);
 int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
-		hip_hit *mn_hit, hip_hit *peer_hit,
-		hip_proxy_ticket *ticket, __u32 spi);
+		hip_spi_nat *spi_nat, hip_hit *mn_hit);
 int build_tlv_proxy_hmac(hip_proxy_ticket *ticket, __u8 *data, int location,
 		int type);
 /* global functions defined in include/hip/hip_funcs.h
@@ -242,15 +249,16 @@ hip_mr_client *mr_client_lookup(hip_hit hit)
  *
  * \param hip_mr_c	pointer to the mobile node client structure
  * \param family	address family of packet, either AF_INET or AF_INET6
+ * \param inbound	direction of packet (TRUE if inbound FALSE if outbound)
+ * \param ext_if	pointer to the external interface info
  * \param hiph		pointer to the HIP header in the packet
  * \param payload 	pointer to a copy of the actual packet
  *
  * \brief Process the I1 from/to the mobile node, create SPINAT state.
  */
-void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
-		unsigned char *payload)
+void mr_process_I1(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph, unsigned char *payload)
 {
-	int inbound;
 	hip_hit *peer_hit;
 	struct ip *ip4h = NULL;
 	struct ip6_hdr *ip6h = NULL;
@@ -258,13 +266,10 @@ void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
-	if (hits_equal(hiph->hit_sndr, hip_mr_c->mn_hit)) {
-		inbound = 0;
-		peer_hit = &(hiph->hit_rcvr);
-	} else {
-		inbound = 1;
+	if (inbound)
 		peer_hit = &(hiph->hit_sndr);
-	}
+	else
+		peer_hit = &(hiph->hit_rcvr);
 
 	log_(NORM, "mr_process_I1 %s\n", family==AF_INET ? "IPv4" : "IPv6");
 
@@ -311,12 +316,13 @@ void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 	dst = (struct sockaddr*)&spi_nats->peer_addr;
 	log_(NORM, "Current peer address is %s\n", logaddr(dst));
 #endif /* VERBOSE_MR_DEBUG */
-	/* XXX need to fix out_addr family != peer family here */
+	/* XXX need to fix ext_if->address family != peer family here */
 	if (inbound)
 		rewrite_addrs(payload, SA(&spi_nats->peer_addr),
 			SA(&hip_mr_c->mn_addr));
 	else
-		rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
+		rewrite_addrs(payload, SA(&ext_if->address),
+			SA(&spi_nats->peer_addr));
 	return;
 }
 
@@ -324,8 +330,10 @@ void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \fn mr_process_R1()
  *
- * \param hip_mr_ci	pointer to the mobile node client structure
+ * \param hip_mr_c	pointer to the mobile node client structure
  * \param family	address family of packet, either AF_INET or AF_INET6
+ * \param inbound	direction of packet (TRUE if inbound FALSE if outbound)
+ * \param ext_if	pointer to the external interface info
  * \param hiph		pointer to the HIP header in the packet
  * \param payload	pointer to a copy of the actual packet
  *
@@ -333,21 +341,17 @@ void mr_process_I1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \brief  Process the R1 from/to the peer node.
  */
-void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
-		unsigned char *payload)
+void mr_process_R1(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph, unsigned char *payload)
 {
-	int inbound;
 	hip_hit *peer_hit;
 
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
-	if (hits_equal(hiph->hit_sndr, hip_mr_c->mn_hit)) {
-		inbound = 0;
-		peer_hit = &(hiph->hit_rcvr);
-	} else {
-		inbound = 1;
+	if (inbound)
 		peer_hit = &(hiph->hit_sndr);
-	}
+	else
+		peer_hit = &(hiph->hit_rcvr);
 
 	while (spi_nats) {
 		if (hits_equal(*peer_hit, spi_nats->peer_hit)) {
@@ -363,7 +367,8 @@ void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		rewrite_addrs(payload, SA(&spi_nats->peer_addr),
 			SA(&hip_mr_c->mn_addr));
 	else
-		rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
+		rewrite_addrs(payload, SA(&ext_if->address),
+			SA(&spi_nats->peer_addr));
 }
 
 /*
@@ -372,6 +377,8 @@ void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \param hip_mr_c 	pointer to the mobile node client structure
  * \param family	address family of packet, either AF_INET or AF_INET6
+ * \param inbound	direction of packet (TRUE if inbound FALSE if outbound)
+ * \param ext_if	pointer to the external interface info
  * \param hiph		pointer to the HIP header in the packet
  * \param payload	pointer to a copy of the actual packet
  *
@@ -380,10 +387,9 @@ void mr_process_R1(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  */
 
 
-__u32 mr_process_I2_or_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
-		unsigned char *payload)
+__u32 mr_process_I2_or_R2(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph, unsigned char *payload)
 {
-	int inbound;
 	hip_hit *peer_hit;
 	__u32 new_spi = 0;
 	int location = 0;
@@ -395,13 +401,10 @@ __u32 mr_process_I2_or_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
-	if (hits_equal(hiph->hit_sndr, hip_mr_c->mn_hit)) {
-		inbound = 0;
-		peer_hit = &(hiph->hit_rcvr);
-	} else {
-		inbound = 1;
+	if (inbound)
 		peer_hit = &(hiph->hit_sndr);
-	}
+	else
+		peer_hit = &(hiph->hit_rcvr);
 
 	while (spi_nats) {
 		if (hits_equal(*peer_hit, spi_nats->peer_hit)) {
@@ -454,9 +457,10 @@ __u32 mr_process_I2_or_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		rewrite_addrs(payload, SA(&spi_nats->peer_addr),
 			SA(&hip_mr_c->mn_addr));
         } else {
-		rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
+		rewrite_addrs(payload, SA(&ext_if->address),
+			SA(&spi_nats->peer_addr));
 		spi_nats->last_out_addr.ss_family = family;
-		memcpy(SA(&spi_nats->last_out_addr), SA(&out_addr),
+		memcpy(SA(&spi_nats->last_out_addr), SA(&ext_if->address),
 			SALEN(&spi_nats->last_out_addr));
 	}
 
@@ -469,6 +473,8 @@ __u32 mr_process_I2_or_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \param hip_mr_c 	pointer to the mobile node client structure
  * \param family	address family of packet, either AF_INET or AF_INET6
+ * \param inbound	direction of packet (TRUE if inbound FALSE if outbound)
+ * \param ext_if	pointer to the external interface info
  * \param hiph		pointer to the HIP header in the packet
  * \param payload	pointer to a copy of the actual packet
  *
@@ -476,10 +482,11 @@ __u32 mr_process_I2_or_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  */
 
 
-__u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
-		unsigned char *payload)
+__u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph, unsigned char *payload)
 {
-	return mr_process_I2_or_R2(hip_mr_c, family, hiph, payload);
+	return mr_process_I2_or_R2(hip_mr_c, family, inbound, ext_if, hiph,
+			payload);
 }
 
 /*
@@ -488,6 +495,8 @@ __u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \param hip_mr_c	pointer to the mobile node client structure
  * \param family	address family of packet, either AF_INET or AF_INET6
+ * \param inbound	direction of packet (TRUE if inbound FALSE if outbound)
+ * \param ext_if	pointer to the external interface info
  * \param hiph		pointer to the HIP header in the packet
  * \param payload	pointer to a copy of the actual packet
  *
@@ -495,10 +504,11 @@ __u32 mr_process_I2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \brief  Process the R2 from the peer node, grab the SPI of the peer.
  */
-__u32 mr_process_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
-		unsigned char *payload)
+__u32 mr_process_R2(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph, unsigned char *payload)
 {
-	return mr_process_I2_or_R2(hip_mr_c, family, hiph, payload);
+	return mr_process_I2_or_R2(hip_mr_c, family, inbound, ext_if, hiph,
+			payload);
 }
 
 /*
@@ -507,6 +517,8 @@ __u32 mr_process_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \param hip_mr_c      pointer to the mobile node client structure
  * \param family        address family of packet, either AF_INET or AF_INET6
+ * \param inbound	direction of packet (TRUE if inbound FALSE if outbound)
+ * \param ext_if	pointer to the external interface info
  * \param hiph          pointer to the HIP header in the packet
  * \param payload       pointer to a copy of the actual packet
  *
@@ -515,10 +527,10 @@ __u32 mr_process_R2(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  * \brief  Process the update from the peer node, grab the LOCATOR info of the
  *         peer from peer node.
  */
-void mr_process_update(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
-                unsigned char *payload)
+void mr_process_update(hip_mr_client *hip_mr_c, int family,
+		int inbound, struct if_data *ext_if, hiphdr *hiph,
+		unsigned char *payload)
 {
-	int inbound;
 	hip_hit *peer_hit;
 	int location = 0;
 	__u8 *data = (__u8 *)hiph;
@@ -531,12 +543,10 @@ void mr_process_update(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
-	if (hits_equal(hiph->hit_sndr, hip_mr_c->mn_hit)) {
-		return;
-	} else {
-		inbound = 1;
+	if (inbound)
 		peer_hit = &(hiph->hit_sndr);
-	}
+	else
+		peer_hit = &(hiph->hit_rcvr);
 
 	while (spi_nats) {
 		if (hits_equal(*peer_hit, spi_nats->peer_hit)) {
@@ -548,6 +558,12 @@ void mr_process_update(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 	if (!spi_nats)
 		return;
 
+	if (!inbound) {
+		rewrite_addrs(payload, SA(&ext_if->address),
+			SA(&spi_nats->peer_addr));
+		return;
+	}
+
 	data_len = (hiph->hdr_len+1) * 8;
 	location += sizeof(hiphdr);
 
@@ -556,7 +572,9 @@ void mr_process_update(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 		type = ntohs(tlv->type);
 		length = ntohs(tlv->length);
 		p_addr = NULL;
-		if (type == PARAM_LOCATOR) {
+		if (type == PARAM_SEQ) {
+			mr_clear_retransmissions(spi_nats);
+		} else if (type == PARAM_LOCATOR) {
 			loc = (tlv_locator *)tlv;
 			loc1 = &loc->locator1[0];
 			if ((loc1->locator_type == LOCATOR_TYPE_IPV6) &&
@@ -615,6 +633,8 @@ void mr_process_update(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \param hip_mr_c	pointer to the mobile node client structure
  * \param family	address family of packet, either AF_INET or AF_INET6
+ * \param inbound	direction of packet (TRUE if inbound FALSE if outbound)
+ * \param ext_if	pointer to the external interface info
  * \param hiph		pointer to the HIP header in the packet
  * \param payload	pointer to a copy of the actual packet
  * \param packet_type	is either CLOSE or CLOSE_ACK.
@@ -623,21 +643,18 @@ void mr_process_update(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
  *
  * \brief Process the CLOSE or CLOSE_ACK.
  */
-void mr_process_CLOSE(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
-		unsigned char *payload, int packet_type)
+void mr_process_CLOSE(hip_mr_client *hip_mr_c, int family, int inbound,
+		struct if_data *ext_if, hiphdr *hiph, unsigned char *payload,
+		int packet_type)
 {
-	int inbound;
 	hip_hit *peer_hit;
 
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
-	if (hits_equal(hiph->hit_sndr, hip_mr_c->mn_hit)) {
-		inbound = 0;
-		peer_hit = &(hiph->hit_rcvr);
-	} else {
-		inbound = 1;
+	if (inbound)
 		peer_hit = &(hiph->hit_sndr);
-	}
+	else
+		peer_hit = &(hiph->hit_rcvr);
 
 	while (spi_nats) {
 		if (hits_equal(*peer_hit, spi_nats->peer_hit)) {
@@ -651,9 +668,10 @@ void mr_process_CLOSE(hip_mr_client *hip_mr_c, int family, hiphdr *hiph,
 
 	if (inbound) {
 		rewrite_addrs(payload, SA(&spi_nats->peer_addr), 
-				SA(&hip_mr_c->mn_addr));
+			SA(&hip_mr_c->mn_addr));
 	} else { 
-		rewrite_addrs(payload, SA(&out_addr), SA(&spi_nats->peer_addr));
+		rewrite_addrs(payload, SA(&ext_if->address),
+			SA(&spi_nats->peer_addr));
 	}
 
 	/* TODO: Remove state for SA if CLOSE_ACK never received */
@@ -746,76 +764,20 @@ unsigned char *add_tlv_spi_nat(int family, unsigned char *payload,
 	return buff;
 }
 
-/*
- * \fn mr_send_updates()
- *
- * \brief The external interface address has changed, so send UPDATE packets on
- *        behalf of each of the mobile router clients, for each of their
- *        SPINATed associations.
- *
- */
-void mr_send_updates()
-{
-	int i;
-	struct sockaddr *client, *dst = NULL, *out = SA(&out_addr);
-	hip_spi_nat *spi_nats;
-
-	if (!out->sa_family) {
-		log_(WARN, "No external address selected for UPDATEs.\n");
-		return;
-	}
-
-	/* 
-	 * generate updates for each active mobile router client
-	 */
-	for (i = 0; i < max_hip_mr_clients; i++) {
-		if (RESPONSE_SENT != hip_mr_client_table[i].state)
-			continue;
-		client = SA(&hip_mr_client_table[i].mn_addr);
-		log_(NORM, "Sending UPDATEs for Mobile Router client %s\n",
-			logaddr(client));
-		/*
-		 * generate updates for each SPINAT association
-		 */
-		for (spi_nats = hip_mr_client_table[i].spi_nats;
-		     spi_nats; spi_nats = spi_nats->next) {
-			dst = (struct sockaddr*)&spi_nats->peer_addr;
-			/* choose a peer address of the address family that
-			 * matches the new external address */
-			if (out->sa_family == AF_INET &&
-			    AF_INET == spi_nats->peer_ipv4_addr.ss_family)
-			if (out->sa_family == AF_INET6 &&
-			    AF_INET6 == spi_nats->peer_ipv6_addr.ss_family)
-				dst = SA(&spi_nats->peer_ipv6_addr);
-			if (dst->sa_family != out->sa_family) {
-				log_(WARN, "Unable to find %s external address "
-					"for destination %s\n",
-					(out->sa_family == AF_INET) ?
-					"IPv4" : "IPv6", logaddr(dst));
-				continue;
-			}
-			log_(NORM, "Sending UPDATE from %s to ", logaddr(out));
-			log_(NORM, "%s for client ", logaddr(dst));
-			log_(NORM, "%s\n", logaddr(client));
-			hip_send_proxy_update(out, dst,
-					&hip_mr_client_table[i].mn_hit,
-					&spi_nats->peer_hit, &spi_nats->ticket,
-					spi_nats->public_spi);
-		} /* end for spi_nat */
-	}
-}
-
 /* 
  * \fn check_hip_packet()
  *
- * \param family
- * \param payload
- * \param new_len
+ * \param family	address family of packet
+ * \param inbound	direction of packet (TRUE if inbound FALSE if outbound)
+ * \param ext_if	pointer to the external interface info
+ * \param payload	packet
+ * \param data_len	length of payload
+ * \param new_len	new length if anything added to packet
  *
  * \brief  Perform SPINAT and Mobile Router service for HIP packets.
  */
-unsigned char *check_hip_packet(int family, unsigned char *payload,
-		size_t data_len, size_t *new_len)
+unsigned char *check_hip_packet(int family, int inbound, struct if_data *ext_if,
+		unsigned char *payload, size_t data_len, size_t *new_len)
 {
 	struct sockaddr *src, *dst;
 	struct sockaddr_storage src_addr, dst_addr;
@@ -871,32 +833,36 @@ unsigned char *check_hip_packet(int family, unsigned char *payload,
 	 */
 	switch(hiph->packet_type) {
 		case HIP_I1:
-			mr_process_I1(client, family, hiph, payload);
+			mr_process_I1(client, family, inbound, ext_if, hiph,
+				payload);
 			break;
 		case HIP_R1:
-			mr_process_R1(client, family, hiph, payload);
+			mr_process_R1(client, family, inbound, ext_if, hiph,
+				payload);
 			break;
 		case HIP_I2:
-			new_spi = mr_process_I2(client, family, hiph, payload);
+			new_spi = mr_process_I2(client, family, inbound, ext_if,
+				hiph, payload);
 			if (new_spi) {
 				buff = add_tlv_spi_nat(family, payload,
 						data_len, new_len, new_spi);
 			}
 			break;
 		case HIP_R2:
-			new_spi = mr_process_R2(client, family, hiph, payload);
+			new_spi = mr_process_R2(client, family, inbound, ext_if,
+				hiph, payload);
 			if (new_spi) {
 				buff = add_tlv_spi_nat(family, payload,
 						data_len, new_len, new_spi);
 			}
 			break;
 		case UPDATE:
-			mr_process_update(client, family, hiph, payload);
+			mr_process_update(client, family, inbound, ext_if, hiph,				payload);
 			break;
 		case CLOSE:
 		case CLOSE_ACK:
-			mr_process_CLOSE(client, family, hiph, payload,
-					hiph->packet_type);
+			mr_process_CLOSE(client, family, inbound, ext_if, hiph,
+				payload, hiph->packet_type);
 			break;
 	}
 	pthread_mutex_unlock(&hip_mr_client_mutex);
@@ -1001,10 +967,10 @@ unsigned char *new_header(int family, unsigned char *payload)
 /*
  * \fn do_inbound_esp_packet()
  *
- * \param family
- * \param payload
- * \param addr
- * \param spi_nat
+ * \param family	address family of packet
+ * \param payload	packet
+ * \param addr		local address of HIP MR client
+ * \param spi_nat	pointer to spi_nat info for this association
  *
  * \brief process inbound ESP packets, rewriting SPIs.
  */
@@ -1037,17 +1003,20 @@ unsigned char *do_inbound_esp_packet(int family, unsigned char *payload,
 /*
  * \fn do_outbound_esp_packet()
  *
- * \param family
- * \param payload
- * \param spi_nat
+ * \param family	address family of packet
+ * \param ext_if	pointer to the external interface info
+ * \param payload	packet
+ * \param client	point to the HIP MR client info
+ * \param spi_nat	pointer to spi_nat info for this association
  *
  * \brief process outbound ESP packets.
  */
-unsigned char *do_outbound_esp_packet(int family, unsigned char *payload,
-		hip_mr_client *client, hip_spi_nat *spi_nat)
+unsigned char *do_outbound_esp_packet(int family, struct if_data *ext_if,
+		unsigned char *payload, hip_mr_client *client,
+		hip_spi_nat *spi_nat)
 {
 	unsigned char *new_payload = NULL;
-	struct sockaddr *client_addr, *dst, *out = SA(&out_addr);
+	struct sockaddr *client_addr, *dst, *out = SA(&ext_if->address);
 
 	/* Determine destination and rewrite addresses */
 
@@ -1084,17 +1053,16 @@ unsigned char *do_outbound_esp_packet(int family, unsigned char *payload,
 	/* Check to see if we need to send an UPDATE for this connection */
 
 	if ((out->sa_family != spi_nat->last_out_addr.ss_family) ||
-		(memcmp(SA2IP(&out_addr), SA2IP(&spi_nat->last_out_addr),
-			SAIPLEN(&out_addr)) != 0)) {
+		(memcmp(SA2IP(&ext_if->address), SA2IP(&spi_nat->last_out_addr),
+			SAIPLEN(&ext_if->address)) != 0)) {
 		if (dst) {
 			client_addr = SA(&client->mn_addr);
 			log_(NORM, "Sending UPDATE from %s to ", logaddr(out));
 			log_(NORM, "%s for client ", logaddr(dst));
 			log_(NORM, "%s\n", logaddr(client_addr));
-			hip_send_proxy_update(out, dst, &client->mn_hit,
-					&spi_nat->peer_hit, &spi_nat->ticket,
-					spi_nat->public_spi);
-			memcpy(SA(&spi_nat->last_out_addr), SA(&out_addr),
+			hip_send_proxy_update(out, dst, spi_nat,
+					&client->mn_hit);
+			memcpy(SA(&spi_nat->last_out_addr), out,
 				SALEN(&spi_nat->last_out_addr));
 		}
 	}
@@ -1105,13 +1073,15 @@ unsigned char *do_outbound_esp_packet(int family, unsigned char *payload,
 /* 
  * \fn check_esp_packet()
  *
- * \param family
- * \param inbound
- * \param payload
+ * \param family	address family of packet
+ * \param inbound	direction of packet (TRUE if inbound FALSE if outbound)
+ * \param ext_if	pointer to the external interface info
+ * \param payload	packet
  *
  * \brief  Perform SPINAT on ESP packets.
  */
-unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload)
+unsigned char *check_esp_packet(int family, int inbound, struct if_data *ext_if,
+		unsigned char *payload)
 {
 	int i;
 	unsigned char *new_payload = NULL;
@@ -1146,8 +1116,8 @@ unsigned char *check_esp_packet(int family, int inbound, unsigned char *payload)
 							addr, dst))
 					continue;
 				new_payload = do_outbound_esp_packet(family,
-					payload, &hip_mr_client_table[i],
-					spi_nats);
+					ext_if, payload,
+					&hip_mr_client_table[i], spi_nats);
 				pthread_mutex_unlock(&hip_mr_client_mutex);
 				return new_payload;
 			}
@@ -1188,6 +1158,7 @@ void *hip_mobile_router(void *arg)
 	fd_set read_fdset;
 	__u8 *cp;
 	struct sockaddr_storage dst;
+	struct if_data *ext_if;
 
 	printf("hip_mobile_router() thread started...\n");
 
@@ -1329,9 +1300,7 @@ void *hip_mobile_router(void *arg)
 			continue;
 		}
 
-		/* Need to make out_addr a parameter to function */
-		memcpy(&out_addr, &external_interfaces[i].address,
-			sizeof(out_addr));
+		ext_if = &external_interfaces[i];
 
 		/* 
 		 * Process HIP and ESP packets 
@@ -1345,12 +1314,13 @@ void *hip_mobile_router(void *arg)
 			protocol, inbound ? "yes\n" : "no\n");
 #endif /* VERBOSE_MR_DEBUG */
 		if (protocol == H_PROTO_HIP) {
-			output_buffer = check_hip_packet(family, m->payload,
-				m->data_len, &output_length);
+			output_buffer = check_hip_packet(family, inbound,
+				ext_if, m->payload, m->data_len,
+				&output_length);
 			verdict = NF_ACCEPT;
 		} else if (protocol == IPPROTO_ESP) {
 			output_buffer = check_esp_packet(family, inbound, 
-				m->payload);
+				ext_if, m->payload);
 			if (output_buffer == m->payload) {
 				verdict = NF_ACCEPT;
 			} else {
@@ -1422,15 +1392,126 @@ hip_mobile_router_exit:
 
 /*
  *
+ * \fn mr_clear_retransmissions()
+ * 
+ * \param spi_nat	Pointer to SPINAT structure for this SPINAT
+ * 		
+ * \brief Clear the retransmission for this SPINAT
+ *
+ */
+void mr_clear_retransmissions(hip_spi_nat *spi_nats)
+{
+	if (!spi_nats)
+		return;
+	if (spi_nats->rexmt_cache.packet != NULL)
+	free(spi_nats->rexmt_cache.packet);
+	spi_nats->rexmt_cache.packet = NULL;
+	spi_nats->rexmt_cache.len = 0;
+	memset(&spi_nats->rexmt_cache.xmit_time, 0, sizeof(struct timeval));
+	spi_nats->rexmt_cache.retransmits = 0;
+	memset(&spi_nats->rexmt_cache.dst, 0, sizeof(struct sockaddr_storage));
+}
+
+/*
+ *
+ * \fn hip_mr_retransmit()
+ * 
+ * \param time1	 	current time
+ * \param hit	 	HIT of possible mobile router client
+ * 		
+ * \return 		Returns 0 when successful, -1 on error.
+ *
+ * \brief Retransmit the UPDATE-PROXY packet on behalf of a mobile router client
+ *
+ */
+int hip_mr_retransmit(struct timeval *time1, hip_hit hit)
+{
+	struct sockaddr *src, *dst;
+	hip_spi_nat *spi_nats;
+	hip_mr_client *client = mr_client_lookup(hit);
+
+	if (!client)
+		return -1;
+
+	for (spi_nats = client->spi_nats; spi_nats;
+		spi_nats = spi_nats->next) {
+
+		if ((spi_nats->rexmt_cache.len < 1) ||
+			(TDIFF(*time1, spi_nats->rexmt_cache.xmit_time) <=
+			(int)HCNF.packet_timeout))
+			continue;
+
+		if ((OPT.no_retransmit == FALSE) &&
+			(spi_nats->rexmt_cache.retransmits <
+			(int)HCNF.max_retries)) {
+			src = SA(&spi_nats->last_out_addr);
+			dst = SA(&spi_nats->rexmt_cache.dst);
+			log_(NORMT, "Mobile router retransmitted UPDATE "
+				"from %s to ", logaddr(src));
+			log_(NORM, "%s (attempt %d of %d)...\n", logaddr(dst),
+				spi_nats->rexmt_cache.retransmits+1,
+				HCNF.max_retries);
+			hip_retransmit(NULL, spi_nats->rexmt_cache.packet,
+				spi_nats->rexmt_cache.len, src, dst);
+			gettimeofday(&spi_nats->rexmt_cache.xmit_time, NULL);
+			spi_nats->rexmt_cache.retransmits++;
+		} else {
+			mr_clear_retransmissions(spi_nats);
+		}
+	}
+	return(0);
+}
+
+/*
+ *
+ * \fn copy_for_retrans()
+ * 
+ * \param data	 	UPDATE-PROXY packet
+ * \param len	 	length of packet
+ * \param dst		address of peer host
+ * \param spi_nat	Pointer to SPINAT structure for this SPINAT
+ * 		
+ * \return 		Returns 0 when successful, -1 on error.
+ *
+ * \brief Copy the UPDATE-PROXY packet on behalf of a mobile router client
+ *        for possible retransmission.
+ *
+ */
+int copy_for_retrans(__u8 *data, int len, struct sockaddr* dst, hip_spi_nat *spi_nat)
+{
+	struct timeval time1;
+	__u8 *out;
+
+	if (!spi_nat)
+		return(-1);
+	mr_clear_retransmissions(spi_nat);
+
+	out = malloc(len);
+	if (!out) {
+		log_(WARN, "hip_send() malloc error\n");
+		return(-1);
+	}
+	memcpy(out, data, len);
+
+	spi_nat->rexmt_cache.packet = out;
+	spi_nat->rexmt_cache.len = len;
+	gettimeofday(&time1, NULL);
+	spi_nat->rexmt_cache.xmit_time.tv_sec = time1.tv_sec;
+	spi_nat->rexmt_cache.xmit_time.tv_usec = time1.tv_usec;
+	spi_nat->rexmt_cache.retransmits = 0;
+	memcpy(&spi_nat->rexmt_cache.dst, dst, SALEN(dst));
+	return(len);
+}
+
+/*
+ *
  * \fn hip_send_proxy_update()
  * 
  * \param newaddr 	new preferred address to include in LOCATOR, or NULL
  * \param dstaddr 	alternate destination address, if this is an address
  * 			check message, otherwise NULL
+ * \param spi_nat	SPINAT structure for this SPINAT
  * \param mn_hit	HIT of the mobile node
- * \param peer_hit	HIT of the peer node
- * \param ticket	the signed ticket using the keys from the mobile node
- * \param spi_in	the SPI from the SPINAT
  * 		
  * \return 		Returns bytes sent when successful, -1 on error.
  *
@@ -1440,22 +1521,23 @@ hip_mobile_router_exit:
  *
  */
 int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
-		hip_hit *mn_hit, hip_hit *peer_hit,
-		hip_proxy_ticket *ticket, __u32 spi_in)
+		hip_spi_nat *spi_nat, hip_hit *mn_hit)
 {
+	hip_hit *peer_hit = &spi_nat->peer_hit;
+	hip_proxy_ticket *ticket = &spi_nat->ticket;
+	 __u32 spi_in = spi_nat->public_spi;
 	struct sockaddr *src, *dst;
 	hiphdr *hiph;
 	__u8   buff[sizeof(hiphdr)             + 2*sizeof(tlv_locator) +
 		    sizeof(tlv_auth_ticket)    +
 		    sizeof(tlv_hmac)           + sizeof(tlv_hip_sig) +
 		    MAX_SIG_SIZE + 2 ];
-	int location=0, retransmit=FALSE;
+	int location=0;
 
 	tlv_locator *loc;
 	tlv_auth_ticket *auth_ticket;
 	locator *loc1;
 	__u32 loc_spi;
-	hip_assoc *hip_a;
 
 	memset(buff, 0, sizeof(buff));
 
@@ -1533,19 +1615,10 @@ int hip_send_proxy_update(struct sockaddr *newaddr, struct sockaddr *dstaddr,
 	hiph->checksum = checksum_packet(buff, src, dst);
 
 	/* send the packet */
-	log_(NORMT, "sending UPDATE packet (%d bytes)...\n", location);
-
-	/* use the mr<-->mr_client association for storing the UPDATE for
-	 * retransmission; note that this structure is limited to having only
-	 * one packet in the retransmission buffer, so only one of the SPINAT
-	 * associations will have transmissions; TODO: fix this
-	 */
-	hip_a = search_registrations(*mn_hit, REGTYPE_MR);
-	if (hip_a) retransmit = TRUE;
-
-	/* Retransmit UPDATEs unless it contains a LOCATOR or address check */
-	log_(NORM, "Sending UPDATE packet to dst : %s \n", logaddr(dst));
-	return(hip_send(buff, location, src, dst, hip_a, retransmit));
+	copy_for_retrans(buff, location, dst, spi_nat);
+	log_(NORMT, "Sending UPDATE packet (%d bytes) to dst : %s \n",
+		location, logaddr(dst));
+	return(hip_send(buff, location, src, dst, NULL, FALSE));
 }
 
 /*

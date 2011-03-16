@@ -1834,7 +1834,6 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 				log_(WARN, "Invalid HMAC over ticket.\n");
 			} else {
 				log_(NORM, "HMAC over ticket succeeded\n");
-				hip_a->peer_hi->skip_addrcheck = TRUE;
 				ticket_verified = TRUE;
 			}
 		} 

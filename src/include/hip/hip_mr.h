@@ -51,6 +51,7 @@ typedef struct _hip_spi_nat {
 	__u32 public_spi;
 	__u32 peer_spi;
 	hip_proxy_ticket ticket;
+	struct hip_packet_entry rexmt_cache;
 	struct _hip_spi_nat *next;
 } hip_spi_nat;
 
