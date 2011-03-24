@@ -105,6 +105,7 @@ int hip_send_I2(hip_assoc *hip_a);
 int hip_send_R2(hip_assoc *hip_a);
 int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 			struct sockaddr *dstaddr);
+int hip_send_update_relay(__u8 *data, hip_assoc *hip_a_client);
 int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a);
 int hip_send_close(hip_assoc *hip_a, int send_ack);
 int hip_send_notify(hip_assoc *hip_a, int code, __u8 *data, int data_len);

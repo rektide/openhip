@@ -345,6 +345,15 @@ void mr_process_R1(hip_mr_client *hip_mr_c, int family, int inbound,
 		struct if_data *ext_if, hiphdr *hiph, unsigned char *payload)
 {
 	hip_hit *peer_hit;
+	struct ip *ip4h = NULL;
+	struct ip6_hdr *ip6h = NULL;
+	__u8 *cp;
+	int location = 0;
+	__u8 *data = (__u8 *)hiph;
+	int data_len;
+	int type, length;
+	tlv_head *tlv;
+	tlv_via_rvs *via;
 
 	hip_spi_nat *spi_nats = hip_mr_c->spi_nats;
 
@@ -362,6 +371,60 @@ void mr_process_R1(hip_mr_client *hip_mr_c, int family, int inbound,
 
 	if (!spi_nats)
 		return;
+
+	/* Look for VIA_RVS parameter from mobile node's peer */
+	data_len = (hiph->hdr_len+1) * 8;
+	location += sizeof(hiphdr);
+
+	while (location < data_len) {
+		tlv = (tlv_head *) &data[location];
+		type = ntohs(tlv->type);
+		length = ntohs(tlv->length);
+		if (type == PARAM_VIA_RVS) {
+			via = (tlv_via_rvs *) &data[location];
+			if (inbound) {
+				if (IN6_IS_ADDR_V4MAPPED(
+				    (struct in6_addr*)via->address)) {
+					spi_nats->rvs_addr.ss_family = AF_INET;
+					memcpy(SA2IP(&spi_nats->rvs_addr),
+					       &via->address[12],
+					       SAIPLEN(&spi_nats->rvs_addr));
+				} else {
+					spi_nats->rvs_addr.ss_family = AF_INET;
+					memcpy(SA2IP(&spi_nats->rvs_addr),
+					       via->address,
+					       SAIPLEN(&spi_nats->rvs_addr));
+				}
+				log_(NORM, "I1 packet relayed by the Rendezvous"
+				     " Server address %s.\n",
+				     logaddr(SA(&spi_nats->rvs_addr)));
+			}
+			/* Save the peer's real address */
+			spi_nats->peer_addr.ss_family = family;
+			ip4h = (struct ip *) payload;
+			ip6h = (struct ip6_hdr *) payload;
+			if (family == AF_INET) {
+				cp = (inbound) ? (__u8*)&ip4h->ip_src :
+						 (__u8*)&ip4h->ip_dst;
+				spi_nats->peer_ipv4_addr.ss_family =
+					family;
+				memcpy(SA2IP(&spi_nats->peer_ipv4_addr),
+				    cp,
+				    SAIPLEN(&spi_nats->peer_ipv4_addr));
+			} else {
+				cp = (inbound) ? (__u8*)&ip6h->ip6_src :
+						 (__u8 *)&ip6h->ip6_dst;
+				spi_nats->peer_ipv6_addr.ss_family =
+					family;
+				memcpy(SA2IP(&spi_nats->peer_ipv6_addr),
+				    cp,
+				    SAIPLEN(&spi_nats->peer_ipv6_addr));
+			}
+			memcpy(SA2IP(&spi_nats->peer_addr), cp,
+			       SAIPLEN(&spi_nats->peer_addr));
+		}
+		location += tlv_length_to_parameter_length(length);
+	}
 
 	if (inbound)
 		rewrite_addrs(payload, SA(&spi_nats->peer_addr),
@@ -558,14 +621,29 @@ void mr_process_update(hip_mr_client *hip_mr_c, int family,
 	if (!spi_nats)
 		return;
 
-	if (!inbound) {
-		rewrite_addrs(payload, SA(&ext_if->address),
-			SA(&spi_nats->peer_addr));
-		return;
-	}
-
 	data_len = (hiph->hdr_len+1) * 8;
 	location += sizeof(hiphdr);
+
+	if (!inbound) {
+		while (location < data_len) {
+			tlv = (tlv_head *) &data[location];
+			type = ntohs(tlv->type);
+			length = ntohs(tlv->length);
+			if (type == PARAM_VIA_RVS) {
+				hip_send_proxy_update(SA(&ext_if->address),
+					SA(&spi_nats->peer_addr), spi_nats,
+					&hip_mr_c->mn_hit);
+			}
+			location += tlv_length_to_parameter_length(length);
+		}
+		if (spi_nats->use_rvs)
+			rewrite_addrs(payload, SA(&ext_if->address),
+				SA(&spi_nats->rvs_addr));
+		else
+			rewrite_addrs(payload, SA(&ext_if->address),
+				SA(&spi_nats->peer_addr));
+		return;
+	}
 
 	while (location < data_len) {
 		tlv = (tlv_head *) &data[location];
@@ -617,9 +695,7 @@ void mr_process_update(hip_mr_client *hip_mr_c, int family,
 					SA2IP(&spi_nats->peer_ipv6_addr),
 					SAIPLEN(&spi_nats->peer_addr));
 			}
-
 		}
-
 		location += tlv_length_to_parameter_length(length);
 	}
 
@@ -1187,6 +1263,9 @@ void *hip_mobile_router(void *arg)
 		return(NULL);
 	}
 
+	system("modprobe ip_queue");
+	system("modprobe ip6_queue");
+
 	err = ipq_set_mode(h4, IPQ_COPY_PACKET, BUFSIZE);
 	if (err < 0) {
 		printf("*** hip_mobile_router() - ipq_set_mode(IPV4) failed: "
@@ -1201,6 +1280,15 @@ void *hip_mobile_router(void *arg)
 			"(modprobe ip6_queue)?", ipq_errstr());
 		goto hip_mobile_router_exit;
 	}
+
+	system("iptables -t mangle -A PREROUTING -p 50 -j QUEUE");
+	system("iptables -t mangle -A PREROUTING -p 139 -j QUEUE");
+	system("iptables -t mangle -A POSTROUTING -p 50 -j QUEUE");
+	system("iptables -t mangle -A POSTROUTING -p 50 -j QUEUE");
+	system("ip6tables -t mangle -A PREROUTING -p 50 -j QUEUE");
+	system("ip6tables -t mangle -A PREROUTING -p 139 -j QUEUE");
+	system("ip6tables -t mangle -A POSTROUTING -p 50 -j QUEUE");
+	system("ip6tables -t mangle -A POSTROUTING -p 50 -j QUEUE");
 
 	printf("Mobile router initialized.\n");
 	fflush(stdout);
@@ -1380,6 +1468,14 @@ void *hip_mobile_router(void *arg)
 	}
 
 	printf("hip_mobile_router() thread shutdown.\n");
+	system("iptables -t mangle -D PREROUTING -p 50 -j QUEUE");
+	system("iptables -t mangle -D PREROUTING -p 139 -j QUEUE");
+	system("iptables -t mangle -D POSTROUTING -p 50 -j QUEUE");
+	system("iptables -t mangle -D POSTROUTING -p 50 -j QUEUE");
+	system("ip6tables -t mangle -D PREROUTING -p 50 -j QUEUE");
+	system("ip6tables -t mangle -D PREROUTING -p 139 -j QUEUE");
+	system("ip6tables -t mangle -D POSTROUTING -p 50 -j QUEUE");
+	system("ip6tables -t mangle -D POSTROUTING -p 50 -j QUEUE");
 	close(raw_ip4_socket);
 	close(raw_ip6_socket);
 	fflush(stdout);
@@ -1410,6 +1506,7 @@ void mr_clear_retransmissions(hip_spi_nat *spi_nats)
 	memset(&spi_nats->rexmt_cache.xmit_time, 0, sizeof(struct timeval));
 	spi_nats->rexmt_cache.retransmits = 0;
 	memset(&spi_nats->rexmt_cache.dst, 0, sizeof(struct sockaddr_storage));
+	spi_nats->use_rvs = FALSE;
 }
 
 /*
@@ -1428,6 +1525,7 @@ int hip_mr_retransmit(struct timeval *time1, hip_hit hit)
 {
 	struct sockaddr *src, *dst;
 	hip_spi_nat *spi_nats;
+	hiphdr *hiph;
 	hip_mr_client *client = mr_client_lookup(hit);
 
 	if (!client)
@@ -1455,6 +1553,28 @@ int hip_mr_retransmit(struct timeval *time1, hip_hit hit)
 				spi_nats->rexmt_cache.len, src, dst);
 			gettimeofday(&spi_nats->rexmt_cache.xmit_time, NULL);
 			spi_nats->rexmt_cache.retransmits++;
+			if ((spi_nats->rexmt_cache.retransmits >=
+			    (int)HCNF.max_retries) &&
+			    VALID_FAM(&spi_nats->rvs_addr)) {
+				if (0 !=
+				  memcmp(SA2IP(&spi_nats->rexmt_cache.dst),
+				         SA2IP(&spi_nats->rvs_addr),
+				         SAIPLEN(&spi_nats->rexmt_cache.dst))) {
+					memcpy(&spi_nats->rexmt_cache.dst,
+					       &spi_nats->rvs_addr,
+					       SALEN(&spi_nats->rvs_addr));
+					dst = SA(&spi_nats->rexmt_cache.dst);
+					hiph = (hiphdr *)
+					       &spi_nats->rexmt_cache.packet[0];
+					hiph->checksum = 0;
+					hiph->checksum = checksum_packet(
+					     (__u8 *)hiph, src, dst);
+					spi_nats->rexmt_cache.retransmits = 0;
+					spi_nats->use_rvs = TRUE;
+				} else {
+					spi_nats->use_rvs = FALSE;
+				}
+			}
 		} else {
 			mr_clear_retransmissions(spi_nats);
 		}
@@ -1765,6 +1885,43 @@ int hip_mr_set_external_ifs()
 }
 
 /*
+ * \fn send_updates()
+ *
+ * \param out		new external address for proxy UPDATE
+ *
+ * \brief This is invoked from hip_mr_handle_address_change() when an address
+ *        has been added or removed from the mobile router. If a new address
+ *        is the only available address on any external interface or if a
+ *        deleted address was the current external address and another address
+ *        is available, hip_mr_handle_address_change() will call this function.
+ */
+void send_updates(struct sockaddr *out)
+{
+	int i;
+	hip_mr_client *client;
+	hip_spi_nat *spi_nat;
+	struct sockaddr *client_addr, *dst;
+
+	/* Send a proxy UPDATE for each SPINAT connection */
+
+	for (i = 0; i < max_hip_mr_clients; i++) {
+		client = &hip_mr_client_table[i];
+		client_addr = SA(&client->mn_addr);
+		for (spi_nat = client->spi_nats; spi_nat;
+		     spi_nat = spi_nat->next) {
+			dst = SA(&spi_nat->peer_addr);
+			log_(NORM, "Sending UPDATE from %s to ", logaddr(out));
+			log_(NORM, "%s for client ", logaddr(dst));
+			log_(NORM, "%s\n", logaddr(client_addr));
+			hip_send_proxy_update(out, dst, spi_nat,
+					&client->mn_hit);
+			memcpy(SA(&spi_nat->last_out_addr), out,
+				SALEN(&spi_nat->last_out_addr));
+		}
+	}
+}
+
+/*
  * \fn hip_mr_handle_address_change()
  *
  * \param add		corresponds to add parameter of 
@@ -1777,12 +1934,12 @@ int hip_mr_set_external_ifs()
  * \brief This is invoked from handle_local_address_change() when an address
  *        has been added or removed from the mobile router. The mobile router
  *        may then select a new external address for that interface,
- *        which will later trigger the UPDATE procedure.
+ *        which may trigger the UPDATE procedure.
  */
 void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi)
 {
-	int i;
-	struct sockaddr *out;
+	int i, j;
+	struct sockaddr *out, *update_addr = NULL;
 	sockaddr_list *l, *l_new_external;
 
 	if (!OPT.mr)
@@ -1808,6 +1965,17 @@ void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi)
 		external_interfaces[i].state = EIF_AVAILABLE;
 		log_(NORM, "Using %s as new external address for %s\n",
 			logaddr(out), external_interfaces[i].name);
+		/*
+		 * If this is the only available interface, we need to send
+		 * a proxy UPDATE for each SPINAT connection for each client
+		 */
+		for (j = 0; j < neifs; j++)
+			if ((ifi != external_interfaces[j].ifindex) &&
+			    (external_interfaces[j].state == EIF_AVAILABLE))
+				break;
+		if (j >= neifs) {
+			update_addr = out;
+		}
 		goto hip_mr_handle_address_change_exit;
 	}
 
@@ -1845,13 +2013,27 @@ void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi)
 		log_(NORM, "Using %s as new external address for %s\n",
 			logaddr(out), external_interfaces[i].name);
 	} else {
-		log_(WARN, "No new external address found for \n",
+		log_(WARN, "No new external address found for %s\n",
 			external_interfaces[i].name);
 		external_interfaces[i].state = EIF_UNAVAILABLE;
+		/* Is there an available interface? */
+		for (j = 0; j < neifs; j++)
+			if (external_interfaces[j].state == EIF_AVAILABLE)
+				break;
+		if (j >= neifs) {
+			log_(WARN, "No external interfaces available\n");
+		} else {
+			log_(NORM, "Interface %s is available\n",
+			     external_interfaces[j].name);
+			update_addr = SA(&external_interfaces[j].address);
+		}
 		memset(out, 0, sizeof(external_interfaces[i].address));
 	}
 
 hip_mr_handle_address_change_exit:
+
+	if (update_addr)
+		send_updates(update_addr);
 	pthread_mutex_unlock(&hip_mr_client_mutex);
 }
 

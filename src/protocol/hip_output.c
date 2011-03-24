@@ -809,6 +809,82 @@ int hip_send_R2(hip_assoc *hip_a)
 
 /*
  *
+ * function hip_send_update_relay()
+ *
+ * in:		data = UPDATE packet to relay
+ *		hip_a_client = HIP association for RVS client
+ *
+ * out:		Returns bytes sent when successful, -1 on error
+ *
+ * Adds FROM parameter and RVS_HMAC and relays the UPDATE to the RVS client
+ *
+ */
+int hip_send_update_relay(__u8 *data, hip_assoc *hip_a_client)
+{
+	__u8 *buff;
+	hiphdr *hiph;
+	int location, data_len, new_len, do_retrans, ret;
+	struct sockaddr *src, *dst;
+
+	if (!hip_a_client->from_via) {
+		return(-1);
+	}
+
+	if (ntohs(hip_a_client->from_via->type) != PARAM_FROM) {
+		log_(WARN, "Relaying UPDATE RVS processing error.\n");
+		return(-1);
+	}
+	src = HIPA_SRC(hip_a_client);
+	dst = HIPA_DST(hip_a_client);
+
+	location = 0;
+	hiph = (hiphdr *) &data[location];
+	data_len = location + ((hiph->hdr_len+1) * 8);
+	new_len = data_len + sizeof(tlv_from) + 4 + sizeof(tlv_hmac);
+	buff = malloc(new_len);
+	if (!buff) {
+		free(hip_a_client->from_via);
+		hip_a_client->from_via = NULL;
+		log_(WARN, "MALLOC error.\n");
+		return(-1);
+	}
+
+	memset(buff, 0, new_len);
+	memcpy(buff, data, data_len);
+	hiph = (hiphdr *) &buff[location];
+	location += data_len;
+
+	/* add the FROM parameter */
+	memcpy(&buff[location], hip_a_client->from_via, sizeof(tlv_from));
+	location += eight_byte_align(sizeof(tlv_from));
+	free(hip_a_client->from_via);
+	hip_a_client->from_via = NULL;
+
+	/* RVS_HMAC: hip_a_client is the pre-existing association between the
+	 * RVS and the responder for the HMAC key */
+	hiph->checksum = 0;
+	hiph->hdr_len = (location/8) - 1; 
+	location += build_tlv_hmac(hip_a_client, buff, location,
+				   PARAM_RVS_HMAC);
+	hiph->hdr_len = (location/8) - 1;
+
+	/* send the packet */
+	log_(NORMT, "Relaying HIP UPDATE packet (%d bytes)...\n", location);
+	do_retrans = FALSE;
+
+	if (!hip_a_client->udp) {
+		hiph->checksum = 0;
+		hiph->checksum = checksum_packet(&buff[0], src, dst);
+	}
+
+ 	/* send the packet */
+	ret = hip_send(buff, location, src, dst, NULL, do_retrans);
+	free(buff);
+	return(ret);
+}
+
+/*
+ *
  * function hip_send_update()
  * 
  * in:		hip_a = HIP association containing valid source/destination
@@ -836,7 +912,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		    2*sizeof(tlv_echo)         + 3 + MAX_OPAQUE_SIZE +
 		    sizeof(tlv_hmac)           + sizeof(tlv_hip_sig) +
 		    sizeof(tlv_reg_request)    + sizeof (tlv_reg_response) +
-		    MAX_SIG_SIZE + 2 ];
+		    sizeof(tlv_via_rvs)        + MAX_SIG_SIZE + 2 ];
 	int location=0, retransmit=FALSE;
 
 	tlv_locator *loc;
@@ -847,6 +923,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 	tlv_echo *echo;
 	__u32 *nonce, loc_spi;
 	sockaddr_list *l, *l2;
+	hip_assoc *hip_mr;
 
 	memset(buff, 0, sizeof(buff));
 
@@ -908,6 +985,16 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		}
 		location += sizeof(tlv_esp_info);
 		location = eight_byte_align(location);
+	}
+
+	if ((hip_a->from_via) &&
+	    (ntohs(hip_a->from_via->type) == PARAM_VIA_RVS)) {
+		hip_mr = search_registrations2(REGTYPE_MR, REG_GRANTED);
+		if (!hip_mr ||
+		    hits_equal(hip_mr->peer_hi->hit, hip_a->peer_hi->hit)) {
+			if (!newaddr)
+				newaddr = src;
+		}
 	}
 
 	/*
@@ -1071,6 +1158,18 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		location = eight_byte_align(location);
 		free(hip_a->opaque);
 		hip_a->opaque = NULL;
+	}
+
+	if (hip_a->from_via) {
+		if (ntohs(hip_a->from_via->type) == PARAM_VIA_RVS) {
+			memcpy(&buff[location], hip_a->from_via,
+				sizeof(tlv_via_rvs));
+			location += sizeof(tlv_via_rvs);
+			location = eight_byte_align(location);
+			log_(NORM, "Adding VIA RVS parameter to UPDATE.\n");
+		}
+		free(hip_a->from_via);
+		hip_a->from_via = NULL;
 	}
 
 	hiph->hdr_len = (location/8) - 1;

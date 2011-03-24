@@ -114,6 +114,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family);
 void hip_handle_state_timeouts(struct timeval *time1);
 void hip_handle_locator_state_timeouts(hip_assoc *hip_a, struct timeval *time1);
 void hip_handle_registrations(struct timeval *time1);
+void hip_check_next_rvs(hip_assoc *hip_a);
 static void hip_retransmit_waiting_packets(struct timeval *time1);
 int hip_trigger(struct sockaddr *dst);
 int hip_trigger_rvs(struct sockaddr*rvs, hip_hit *responder);
@@ -988,9 +989,11 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
 	    ((hiph->packet_type == UPDATE) || (hiph->packet_type == HIP_R1)))
 		hip_a = find_hip_association2(hiph);
 
+	/* UPDATE packet might be for RVS client. */
 	if (!hip_a && 
 	    (hiph->packet_type != HIP_I1) &&
-	    (hiph->packet_type != HIP_I2)) {
+	    (hiph->packet_type != HIP_I2) &&
+	    (hiph->packet_type != UPDATE)) {
 		log_(NORMT, "Dropping packet type %s -- no state was ",typestr);
 		log_(NORM, "found, need to receive an I1 first.\n");
 		return;
@@ -1036,6 +1039,70 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
 	return;
 } 
 
+/* Check for the next RVS for retransmission
+ */
+void
+hip_check_next_rvs(hip_assoc *hip_a)
+{
+	struct sockaddr *src, *dst;
+	struct _sockaddr_list *item;
+	hiphdr *hiph;
+	int offset;
+
+	if(!(*(hip_a->peer_hi->rvs_addrs)))
+		return;
+
+	src = HIPA_SRC(hip_a);
+	dst = NULL;
+
+	offset = 0;
+	if (hip_a->udp)
+		offset += sizeof(udphdr) + sizeof(__u32);
+	hiph = (hiphdr*) &hip_a->rexmt_cache.packet[offset];
+
+	if ((hiph->packet_type == UPDATE) &&
+	    (0 == memcmp(SA2IP(&hip_a->rexmt_cache.dst), SA2IP(HIPA_DST(hip_a)),
+			SAIPLEN(&hip_a->rexmt_cache.dst)))) {
+		/* Use the first RVS */
+		item = *(hip_a->peer_hi->rvs_addrs);
+		dst = SA(&item->addr);
+	} else {
+		/* Find the next RVS */
+		for (item = *(hip_a->peer_hi->rvs_addrs); item;
+		     item = item->next) {
+			if (item->status != DEPRECATED) {
+				struct sockaddr *cur_rvs;
+				cur_rvs = SA(&item->addr);
+				log_(NORMT, "RVS server %s not reachable,"
+					" changing status to DEPRECATED.\n",
+					logaddr(cur_rvs));
+				item->status = DEPRECATED;
+				/* Send to next RVS server if available */
+				if (item->next)
+					dst = SA(&item->next->addr);
+				break;
+			}
+		}
+	}
+
+	if (dst) {
+		memcpy(&hip_a->rexmt_cache.dst, dst, SALEN(dst));
+		if (!hip_a->udp) {
+			/* recalcualte HIP checksum because of changed
+			   destination IP/HIT*/
+			hiph->checksum = 0;
+			hiph->checksum = checksum_packet((__u8 *)hiph,src,dst);
+		}
+		hip_a->rexmt_cache.retransmits = 0;
+	} else {
+		/* No more RVS, reset the status of all RVS servers */
+		for(item = *(hip_a->peer_hi->rvs_addrs); item;
+		    item = item->next) {
+			item->status = UNVERIFIED;
+		}
+	}
+}
+
 /*
  * Iterate among HIP connections and retransmit packets if needed,
  * or free them if they have reached HCNF.max_retries
@@ -1054,7 +1121,6 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 	hiphdr *hiph;
 	char typestr[12];
 	int offset;
-	struct _sockaddr_list *item;
 
 	for (i=0; i < max_hip_assoc; i++) {
 		hip_a = &hip_assoc_table[i];
@@ -1068,6 +1134,10 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 		    (TDIFF(*time1, hip_a->rexmt_cache.xmit_time) <=
 		     (int)HCNF.packet_timeout))
 			continue;
+
+		/* See if a RVS is available */
+		if ((hip_a->rexmt_cache.retransmits >= (int)HCNF.max_retries))
+			hip_check_next_rvs(hip_a);
 
 		if ((OPT.no_retransmit == FALSE) &&
 		    (hip_a->rexmt_cache.retransmits < (int)HCNF.max_retries) && 
@@ -1098,64 +1168,16 @@ hip_retransmit_waiting_packets(struct timeval* time1)
 			gettimeofday(&hip_a->rexmt_cache.xmit_time, NULL);
 			hip_a->rexmt_cache.retransmits++;
 		} else {
+		/* move to state E_FAILED for I1_SENT/I2_SENT */
 			switch (hip_a->state) {
 			case I1_SENT:
-				/* try next RVS address if there is one */
-				if(*(hip_a->peer_hi->rvs_addrs)){
-					for(item = *(hip_a->peer_hi->rvs_addrs); item; item = item->next) {
-						if(item->status != DEPRECATED){
-							struct sockaddr *cur_rvs;
-							cur_rvs = SA(&item->addr);
-							log_(NORMT, "RVS server %s not reachable, changing status to DEPRECATED.\n", logaddr(cur_rvs));
-							item->status = DEPRECATED; /* set currently used RVS address to DEPRECATED */
-							break;
-						}
-					}
-
-					if(item->next){
-						/* Send the I1 to next RVS server */
-						src = SA(&hip_a->hi->addrs.addr);
-						dst = SA(&item->next->addr);
-						offset = 0;
-						if (hip_a->udp)
-							offset += sizeof(udphdr) + sizeof(__u32);
-						hiph = (hiphdr*) &hip_a->rexmt_cache.packet[offset];
-						hip_packet_type(hiph->packet_type, typestr);
-						if (!hip_a->udp){
-							/* recalcualte HIP checksum because of changed destination IP/HIT*/
-							hiph->checksum = 0;
-							hiph->checksum = checksum_packet( hip_a->rexmt_cache.packet, src, dst);
-						}
-						memcpy(&hip_a->rexmt_cache.dst, &item->next->addr, sizeof(struct sockaddr_storage));
-						log_(NORMT, "Retransmitting %s packet from %s to ",
-							typestr, logaddr(src));
-						log_(NORM,  "next RVS server in list: %s\n", logaddr(dst));
-						hip_retransmit(hip_a, hip_a->rexmt_cache.packet, 
-							hip_a->rexmt_cache.len, src, dst);
-						gettimeofday(&hip_a->rexmt_cache.xmit_time, NULL);
-						hip_a->rexmt_cache.retransmits = 0; /* reset retransmit counter */
-					} else {
-						/* reset the status of all RVS servers */
-						for(item = *(hip_a->peer_hi->rvs_addrs); item; item = item->next) {
-							item->status = UNVERIFIED;
-						}
-						set_state(hip_a, E_FAILED);
-						clear_retransmissions(hip_a);
-					}
-				} else {
-					set_state(hip_a, E_FAILED);
-					clear_retransmissions(hip_a);
-				}
-				break;
-			/* move to state E_FAILED for I2_SENT */
 			case I2_SENT:
 				set_state(hip_a, E_FAILED);
-				clear_retransmissions(hip_a);
 				break;
 			default:
-				clear_retransmissions(hip_a);
 				break;
 			}
+			clear_retransmissions(hip_a);
 		}
 	}
 }

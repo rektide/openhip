@@ -693,7 +693,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 				memcpy(SA2IP(&rvs_addr), via->address,
 						SAIPLEN(&rvs_addr));
 			}
-			log_(NORM, "R1 packet came from the Rendezvous Server "
+			log_(NORM, "R1 packet relayed by the Rendezvous Server "
 				"address %s.\n", logaddr(SA(&rvs_addr)));
 			/* we could check if the VIA RVS address is the same one
 			 * that we used for the relay */
@@ -1725,6 +1725,11 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 	__u8 g_id=0, *hmac, *p;
 	locator *locators[MAX_LOCATORS];
 	tlv_esp_info *esp_info = NULL;
+	tlv_from *from;
+	tlv_via_rvs *via;
+	struct sockaddr_storage rvs_addr;
+	unsigned char *rvs_hmac;	
+	hip_assoc *hip_a_rvs;
 
 	memset(locators, 0, sizeof(locators));
 	loc_count = 0;
@@ -1974,6 +1979,62 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 				log_(WARN, "Problem with registration "
 					"failure.\n");
 			}
+                } else if (type == PARAM_FROM) {
+			from = (tlv_from*) &data[location];
+			if (length > (sizeof(tlv_from) - 4)) {
+				log_(NORM, "Ignoring extra address data.\n");
+			}
+			add_from_via(hip_a, PARAM_FROM, NULL, from->address);
+                } else if (type == PARAM_VIA_RVS) {
+			via = (tlv_via_rvs *) &data[location];
+			if (IN6_IS_ADDR_V4MAPPED(
+					(struct in6_addr*)via->address)) {
+				rvs_addr.ss_family = AF_INET;
+				memcpy(SA2IP(&rvs_addr), &via->address[12],
+						SAIPLEN(&rvs_addr));
+			} else {
+				rvs_addr.ss_family = AF_INET;
+				memcpy(SA2IP(&rvs_addr), via->address,
+						SAIPLEN(&rvs_addr));
+			}
+			log_(NORM, "UPDATE packet relayed by the Rendezvous "
+				"Server address %s.\n", logaddr(SA(&rvs_addr)));
+		} else if (type == PARAM_RVS_HMAC){
+			hip_a_rvs = search_registrations2(REGTYPE_RVS,
+				REG_GRANTED);
+			if (!hip_a_rvs) {
+				log_(WARN, "Received UPDATE with RVS_HMAC, "
+				     "but could not find an association "
+				     "with a Rendezvous Server.\n");
+				if (hip_a->from_via) {
+					free(hip_a->from_via);
+					hip_a->from_via = NULL;
+				}
+               	                if (!OPT.permissive)
+                       	                return(-1);
+			} else {
+				rvs_hmac = ((tlv_hmac*)tlv)->hmac;
+				/* reset the length and checksum for the HMAC */
+       		                len = eight_byte_align(location);
+       	        	        hiph->checksum = 0;
+       	                	hiph->hdr_len = (len/8) - 1;
+				log_(NORM, "RVS_HMAC verify over %d bytes. ",
+				     len);
+       		                log_(NORM, "hdr length=%d \n", hiph->hdr_len);
+       	        	        if (validate_hmac(data, len, rvs_hmac, length,
+				    get_key(hip_a_rvs, HIP_INTEGRITY, TRUE),
+				    hip_a_rvs->hip_transform)) {
+       		                        log_(WARN, "Invalid RVS_HMAC.\n");
+					if (hip_a->from_via) {
+						free(hip_a->from_via);
+						hip_a->from_via = NULL;
+					}
+       	        	                if (!OPT.permissive)
+       	                	                return(-1);
+				} else {
+       		                        log_(NORM, "RVS_HMAC verified OK.\n");
+       	        	        }
+			}
 		} else if ((type == PARAM_HMAC) || 
 			   (type == PARAM_HIP_SIGNATURE) ||
 			   (type == PARAM_AUTH_TICKET)) {
@@ -2004,6 +2065,31 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 	int need_to_send_update=FALSE;
 	__u32 nonce;
 	struct reg_info *reg;
+	hip_assoc *hip_a_rvs;
+	struct sockaddr_storage addr;
+	__u8 *addrp;
+	hip_assoc *hip_a_client;
+	hip_hit *hitr;
+
+	/* If RVS, check for RVS client */
+	if (!hip_a) {
+		if (OPT.rvs) {
+			hitr = &(((hiphdr *)(data))->hit_rcvr);
+			hip_a_client = search_registrations(*hitr, REGTYPE_RVS);
+			if (!hip_a_client) {
+				return(-1);
+			}
+			if (add_from_via(hip_a_client, PARAM_FROM, src, NULL)
+				< 0)
+				return(-1);
+			if (hip_send_update_relay(data, hip_a_client) < 0)
+				return(-1);
+			else
+				return(0);
+		} else {
+			return(-1);
+		}
+	}
 
 	/*
   	 * UPDATE only accepted in ESTABLISHED and R2_SENT states
@@ -2089,6 +2175,41 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 		return(-1);
 	} else if (err == 1) {
 		need_to_send_update = TRUE;
+	}
+
+	/*
+	 * Relayed UPDATE from RVS, send to address in FROM parameter and fill
+	 * in address for VIA_RVS parameter.
+	 */
+	if (need_to_send_update && hip_a->from_via &&
+	    (ntohs(hip_a->from_via->type) == PARAM_FROM)) { 
+		/* get RVS */
+		hip_a_rvs = search_registrations2(REGTYPE_RVS, REG_GRANTED);
+		if (hip_a_rvs) {
+			/* get address from FROM parameter */
+			memset(&addr, 0, sizeof(addr));
+			if (IN6_IS_ADDR_V4MAPPED( (struct in6_addr*) 
+						  hip_a->from_via->address)) {
+				addr.ss_family = AF_INET;
+				addrp = &hip_a->from_via->address[12];
+			} else {
+				addr.ss_family = AF_INET6;
+				addrp = &hip_a->from_via->address[0];
+			}
+			memcpy(SA2IP(&addr), addrp, SAIPLEN(&addr));
+			src = SA(&addr);
+			if (HIPA_DST(hip_a)->sa_family == AF_INET)
+				((struct sockaddr_in *)src)->sin_port =
+				  ((struct sockaddr_in *)
+					HIPA_DST(hip_a))->sin_port;
+			log_(NORM, "Relayed UPDATE from RVS %s, ",
+				logaddr(HIPA_DST(hip_a_rvs))); 
+			log_(NORM, "using %s as new destination address.\n",
+				logaddr(src));
+			/* store RVS address for VIA_RVS parameter */
+			add_from_via(hip_a, PARAM_VIA_RVS, 
+					HIPA_DST(hip_a_rvs), NULL);
+		}
 	}
 
 	if (need_to_send_update) {
@@ -2293,15 +2414,12 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck)
 			RAND_bytes((__u8*)&nonce, sizeof(__u32));
 			l->nonce = nonce;
 			/* add SEQ parameter to UPDATE if it doesn't have one */
-			if (!hip_a->rekey) {
+			if (!hip_a->rekey)
 				hip_a->rekey =malloc(sizeof(struct rekey_info));
-				memset(hip_a->rekey, 0, 
-				    sizeof(struct rekey_info));
-				hip_a->rekey->update_id = 
-					++hip_a->hi->update_id;
-				hip_a->rekey->acked = FALSE;
-				gettimeofday(&hip_a->rekey->rk_time, NULL);
-			}
+			memset(hip_a->rekey, 0, sizeof(struct rekey_info));
+			hip_a->rekey->update_id = ++hip_a->hi->update_id;
+			hip_a->rekey->acked = FALSE;
+			gettimeofday(&hip_a->rekey->rk_time, NULL);
 			need_to_send_update = TRUE;
 		}
 		l = l_next;
@@ -2336,7 +2454,8 @@ void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src)
 			free(hip_a->rekey);
 			hip_a->rekey = NULL;
 		}
-		if ((hip_a->peer_rekey) && (!hip_a->peer_rekey->new_spi)) {
+		if ((hip_a->peer_rekey) && (hip_a->peer_rekey->acked) &&
+		    (!hip_a->peer_rekey->new_spi)) {
 			free(hip_a->peer_rekey);
 			hip_a->peer_rekey = NULL;
 		}
@@ -3479,8 +3598,9 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
 		/* check the new preferred address against the source address
 		 * of the packet */
 		if (src && preferred) {
-			if ((addr->sa_family != src->sa_family) ||
-			    (memcmp(SA2IP(addr), SA2IP(src), SAIPLEN(src)))) {
+			if ((!hip_a->from_via) &&
+			    ((addr->sa_family != src->sa_family) ||
+			    (memcmp(SA2IP(addr), SA2IP(src), SAIPLEN(src))))) {
 				log_(WARN, "Warning: source address is %s and ",
 					logaddr(src));
 				log_(NORM, "new preferred LOCATOR is %s.\n",
