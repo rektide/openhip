@@ -1026,8 +1026,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		location = eight_byte_align(location);
 	}
 
-	if (hip_a->rekey && !hip_a->rekey->acked &&
-	    (hip_a->rekey->update_id > 0)) {	
+	if (hip_a->rekey && !hip_a->rekey->acked) {	
 		/* SEQ */
 		seq = (tlv_seq*) &buff[location];
 		seq->type = htons(PARAM_SEQ);
@@ -1046,9 +1045,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 	 * Add an ACK parameter when there is an unacknowledged
 	 * update_id in hip_a->peer_rekey
 	 */
-	if (hip_a->peer_rekey &&
-	    (!hip_a->peer_rekey->acked) &&
-	    (hip_a->peer_rekey->update_id > 0)) {
+	if (hip_a->peer_rekey && !hip_a->peer_rekey->acked) {
 		ack = (tlv_ack*)  &buff[location];
 		ack->type = htons(PARAM_ACK);
 		ack->length = htons(sizeof(tlv_ack) - 4);
@@ -1075,7 +1072,8 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		location += build_tlv_reg_failed(&buff[location], hip_a->regs);
 	}
 
-#ifdef UNUSED
+/* #define USE_UPDATE_ECHO_REQUEST_SIG // */
+#ifdef USE_UPDATE_ECHO_REQUEST_SIG
 	/* XXX this adds a non-critical echo request inside the signature
 	 *     for IETF61 testing with HIPL, this was moved outside
 	 */
@@ -1100,8 +1098,9 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		}
 		*nonce = l->nonce;
 		location += 8;
+		location = eight_byte_align(location);
 	}
-#endif
+#endif /* USE_UPDATE_ECHO_REQUEST_SIG */
 	
 	/* add any echo response (included under signature) */
 	if (hip_a->opaque && !hip_a->opaque->opaque_nosig) {
@@ -1128,6 +1127,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 	 * doing address verification (after signature)
 	 *  (for IETF61 testing with HIPL, this was moved outside of sig)
 	 */
+#ifndef USE_UPDATE_ECHO_REQUEST_SIG
 	if (dstaddr) {
 		echo = (tlv_echo*) &buff[location];
 		echo->type = htons(PARAM_ECHO_REQUEST_NOSIG);
@@ -1148,6 +1148,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		location += 8;
 		location = eight_byte_align(location);
 	}
+#endif /* ! USE_UPDATE_ECHO_REQUEST_SIG */
 	
 	/* add any echo response (after signature) */
 	if (hip_a->opaque && hip_a->opaque->opaque_nosig) {
@@ -2357,7 +2358,7 @@ int build_rekey(hip_assoc *hip_a)
 	gettimeofday(&hip_a->rekey->rk_time, NULL);
 	hip_a->rekey->new_spi = get_next_spi(hip_a);
 	hip_a->rekey->acked = FALSE;
-	hip_a->rekey->update_id = ++hip_a->hi->update_id;
+	hip_a->rekey->update_id = hip_a->hi->update_id++;
 
 	return(0);
 }

@@ -1430,7 +1430,7 @@ void hip_handle_locator_state_timeouts(hip_assoc *hip_a, struct timeval *time1)
 		/* perform address check */
 		hip_a->rekey = malloc(sizeof(struct rekey_info));
 		memset(hip_a->rekey, 0, sizeof(struct rekey_info));
-		hip_a->rekey->update_id = ++hip_a->hi->update_id;
+		hip_a->rekey->update_id = hip_a->hi->update_id++;
 		hip_a->rekey->acked = FALSE;
 		hip_a->rekey->rk_time.tv_sec = time1->tv_sec;
 		RAND_bytes((__u8*)&nonce, sizeof(__u32));

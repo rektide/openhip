@@ -2121,7 +2121,7 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 		hip_a->peer_rekey = malloc(sizeof(struct rekey_info));
 		memset(hip_a->peer_rekey, 0, sizeof(struct rekey_info));
 	}
-	if (rk.update_id > 0) {
+	if (rk.new_spi > 0) {
 		if (hip_a->peer_rekey && hip_a->peer_rekey->dh)
 			DH_free(hip_a->peer_rekey->dh);
 		memcpy(hip_a->peer_rekey, &rk, sizeof(struct rekey_info));
@@ -2147,8 +2147,7 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 	/* 
 	 * Generate a new UPDATE because of ACK?
 	 */
-	if ((hip_a->peer_rekey && hip_a->peer_rekey->update_id > 0) &&
-	    !hip_a->peer_rekey->acked)
+	if (hip_a->peer_rekey && !hip_a->peer_rekey->acked)
 		need_to_send_update = TRUE;
 
 	/* 
@@ -2275,7 +2274,6 @@ int handle_update_rekey(hip_assoc *hip_a)
 
 	if ((hip_a->state == ESTABLISHED) &&
 	    (hip_a->peer_rekey) &&
-	    (hip_a->peer_rekey->update_id > 0) &&
 	    (hip_a->peer_rekey->new_spi > 0)) {	/* 8.11.1 */
 		/* use hip_a->rekey for the new update
 		 * keymat_index = index to use in ESP_INFO
@@ -2417,7 +2415,7 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck)
 			if (!hip_a->rekey)
 				hip_a->rekey =malloc(sizeof(struct rekey_info));
 			memset(hip_a->rekey, 0, sizeof(struct rekey_info));
-			hip_a->rekey->update_id = ++hip_a->hi->update_id;
+			hip_a->rekey->update_id = hip_a->hi->update_id++;
 			hip_a->rekey->acked = FALSE;
 			gettimeofday(&hip_a->rekey->rk_time, NULL);
 			need_to_send_update = TRUE;
@@ -3484,7 +3482,10 @@ int handle_esp_info(tlv_esp_info *ei, __u32 spi_out, struct rekey_info *rk)
 		return(0);
 	/* Gratuitous */
 	} else if (old_spi == new_spi) {
-		log_(NORM, "Gratuitous ESP_INFO: SPI 0x%x.\n", new_spi);
+		log_(NORM, "Gratuitous ESP_INFO: keeping old SPI of 0x%x.\n",
+			new_spi);
+		rk->keymat_index = ntohs(ei->keymat_index);
+		rk->new_spi = new_spi;
 		return(0);
 	/* Rekey with unknown SPI */
 	} else if (old_spi != spi_out) {
