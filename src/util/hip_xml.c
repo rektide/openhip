@@ -564,6 +564,7 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
 	struct sockaddr_storage ss_hit;
 	struct sockaddr *hit = SA(&ss_hit);
 	char addr[INET6_ADDRSTRLEN], hit_hex[INET6_ADDRSTRLEN];
+	sockaddr_list *l;
 
 	/* skip anonymous peer HITs
 	 */
@@ -650,7 +651,6 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
 		addr_to_str(SA(&h->lsi), (__u8*)addr, INET6_ADDRSTRLEN);
 		xmlNewChild(hi, NULL, BAD_CAST "LSI", BAD_CAST addr);
 	}
-	sockaddr_list *l;
 	for(l = *(h->rvs_addrs); l != NULL; l = l->next) {
 		addr_to_str(SA(&l->addr), (__u8*)addr, INET6_ADDRSTRLEN);
 		xmlNewChild(hi, NULL, BAD_CAST "RVS", BAD_CAST addr);

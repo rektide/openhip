@@ -358,8 +358,14 @@ static __inline int gettimeofday(struct timeval *tv, void *tz)
 #define pthread_mutex_unlock(mp) ReleaseMutex(*mp)
 #define pthread_mutex_init(mp, mattr) *mp = CreateMutex(NULL, FALSE, NULL)
 #define pthread_mutex_destroy(mp) CloseHandle(*mp)
+/* pthread conditionals not implmented for WIN32 */
+#define pthread_cond_init(c, attr) { }
+#define pthread_cond_wait(c, m) { }
+#define pthread_cond_broadcast(c) { }
+#define pthread_cond_destroy(c) { }
 
 #define snprintf _snprintf
+#define strnlen(s, l) strlen(s)
 
 #else
 #define closesocket close

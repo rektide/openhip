@@ -202,8 +202,10 @@ typedef __u8 hip_hit [HIT_SIZE];     /* 16-byte (128 bit) Host Identity Tag */
 
 #ifdef __WIN32__
 typedef HANDLE hip_mutex_t;
+typedef HANDLE hip_cond_t; /* not implemented for WIN32 */
 #else
 typedef pthread_mutex_t hip_mutex_t;
+typedef pthread_cond_t hip_cond_t;
 #endif
 
 #define HIP_KEEPALIVE_TIMEOUT 20
@@ -404,7 +406,7 @@ typedef struct _hi_node {
 	 * Do not try to contact the node until the
 	 * RVS servers are resolved.
 	 */
-	pthread_cond_t	*rvs_cond;
+	hip_cond_t	*rvs_cond;
 	int		*rvs_count; /* Number of RVS DNS petitions still to resolve */
 	int		*copies; /* Number of copies of the mutex structures */
 	

@@ -338,9 +338,9 @@ hi_node *create_new_hi_node()
 	*(ret->rvs_addrs) = NULL;
 	ret->rvs_count = malloc(sizeof(int));
 	*(ret->rvs_count) = 0;
-	ret->rvs_mutex = malloc(sizeof(pthread_mutex_t));
+	ret->rvs_mutex = malloc(sizeof(hip_mutex_t));
 	pthread_mutex_init(ret->rvs_mutex, NULL);
-	ret->rvs_cond = malloc(sizeof(pthread_cond_t));
+	ret->rvs_cond = malloc(sizeof(hip_cond_t));
 	pthread_cond_init (ret->rvs_cond, NULL);
 
 	return(ret);
@@ -1260,7 +1260,11 @@ void *background_resolve(void *arg) {
 	
 	freeaddrinfo(res);
 	free(arg);
+#ifdef WIN32
+	return NULL;
+#else
 	pthread_exit(NULL);
+#endif /* WIN32 */
 }
 #endif /* HITGEN */
 
@@ -1282,6 +1286,15 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 	__u16 pk_len;
 	__u32 lsi;
 	hi_node *hi;
+	int pos, remainingBytes, rvsCount, dnsLen, j;
+	char dnsName[255];
+#ifndef HITGEN
+	int k;
+	struct rvs_dns_request *argument;
+#ifndef WIN32
+	pthread_t pt;
+#endif /* !WIN32 */
+#endif /* !HITGEN */
 
 	/* Tried these resolver calls, but delay is too long and special
 	 * handling in hip_dns would be required:
@@ -1363,17 +1376,16 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 				/* printf("%s: HIT validated OK.\n", fn); */
 			}
 
-			int pos = p - ((unsigned char*)&dnsans->ans_len + sizeof(dnsans->ans_len));
-			int remainingBytes = ntohs(dnsans->ans_len) - pos;
-			int rvsCount = 0;
+			pos = p - ((unsigned char*)&dnsans->ans_len + sizeof(dnsans->ans_len));
+			remainingBytes = ntohs(dnsans->ans_len) - pos;
+			rvsCount = 0;
 			while (remainingBytes > 0) {
-				char dnsName[255];
-				int dnsLen = strnlen((char*) p, remainingBytes) + 1;
+				dnsLen = strnlen((char*) p, remainingBytes) + 1;
 				memcpy(dnsName, p+1, dnsLen - 1); /* First char is metadata */
-				int i = 0;
-				for (;i < dnsLen - 2; i++) {
-					if (dnsName[i] < 22) {
-						dnsName[i] = '.';
+				j = 0;
+				for (;j < dnsLen - 2; j++) {
+					if (dnsName[j] < 22) {
+						dnsName[j] = '.';
 					}
 				}
 				fprintf(stderr, "RVS: %s\n", dnsName);
@@ -1390,22 +1402,25 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 			 * 	 unlike other implementations found online (QNX)
 			 */
 			
-			#ifndef HITGEN
-			int j;
-			pthread_t pt;
-			struct rvs_dns_request *argument;
+#ifndef HITGEN
 			if(rvsCount > 0) {
 				*(hi->rvs_count) += rvsCount;
-				for(j = 0; hi->rvs_hostnames[j] != NULL; j++) {
-					printf("  %d: %s\n", j, hi->rvs_hostnames[j]);
+				for(k = 0; hi->rvs_hostnames[k] != NULL; k++) {
+					printf("  %d: %s\n", k, hi->rvs_hostnames[k]);
 					argument = malloc(sizeof(struct rvs_dns_request));
-					argument->name = hi->rvs_hostnames[j];
+					argument->name = hi->rvs_hostnames[k];
 					argument->node = hi;
+#ifdef WIN32
+					/* For WIN32, resolve serially since
+					 * we don't have pthread conditionals */
+					background_resolve((void *)argument);
+#else
 					/* Created thread will free allocated memory */
 					pthread_create(&pt, NULL, background_resolve, (void *)argument);
+#endif /* WIN32 */
 				} /* for */
 			} /* if */
-			#endif
+#endif
 
 			append_hi_node(&peer_hi_head, hi);
 			lsi = ntohl(HIT2LSI(hi->hit));
