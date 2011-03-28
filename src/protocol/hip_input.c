@@ -2412,12 +2412,15 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck)
 			RAND_bytes((__u8*)&nonce, sizeof(__u32));
 			l->nonce = nonce;
 			/* add SEQ parameter to UPDATE if it doesn't have one */
-			if (!hip_a->rekey)
+			if (!hip_a->rekey) {
 				hip_a->rekey =malloc(sizeof(struct rekey_info));
-			memset(hip_a->rekey, 0, sizeof(struct rekey_info));
-			hip_a->rekey->update_id = hip_a->hi->update_id++;
-			hip_a->rekey->acked = FALSE;
-			gettimeofday(&hip_a->rekey->rk_time, NULL);
+				memset(hip_a->rekey, 0,
+					sizeof(struct rekey_info));
+				hip_a->rekey->update_id =
+				    	hip_a->hi->update_id++;
+				hip_a->rekey->acked = FALSE;
+				gettimeofday(&hip_a->rekey->rk_time, NULL);
+			}
 			need_to_send_update = TRUE;
 		}
 		l = l_next;
