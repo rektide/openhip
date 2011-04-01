@@ -465,8 +465,10 @@ int select_preferred_address()
 				(preferred_iface_index == l->if_index)) {
 			if (l->addr.ss_family != AF_INET)
 				continue;
+			if (IN_LOOP(i->addr))
+				continue;
 			ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
-			if ((ntohl(ip)==INADDR_LOOPBACK) || (IS_LSI32(ip)))
+			if (IS_LSI32(ip))
 				continue;
 			l->preferred = TRUE;
 			log_(NORM, "%s selected as the", logaddr(SA(&l->addr)));
@@ -484,13 +486,15 @@ int select_preferred_address()
 			/* apply few criteria and pick first address */
 			if (l->addr.ss_family != AF_INET)
 				continue;
+			if (IN_LOOP(i->addr))
+				continue;
 #ifdef SMA_CRAWLER
-                       if(l->if_index != ifindex) /* not on master interface */
-                               continue;
+			if(l->if_index != ifindex) /* not on master interface */
+				continue;
 #endif
 			ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
-			if ((ntohl(ip)==INADDR_LOOPBACK) || (IS_LSI32(ip)) ||
-			    ((ip & 0xFFFF) == 0xFEA9) ) /* autoconf addr */
+			/* LSI or autoconf addr */
+			if ((IS_LSI32(ip)) || ((ip & 0xFFFF) == 0xFEA9))
 				continue;
 			l->preferred = TRUE;
 			log_(NORM, "%s selected as the ",logaddr(SA(&l->addr)));
@@ -512,7 +516,7 @@ int set_preferred_address_in_list(struct sockaddr *addr)
 			continue;
 	        ip = ((struct sockaddr_in*) &l->addr)->sin_addr.s_addr;
 		if ((addr->sa_family == AF_INET) &&
-		    ( (htonl(ip)==INADDR_LOOPBACK) || (IS_LSI32(ip))))
+		    (IN_LOOP(&l->addr) || (IS_LSI32(ip))))
 			continue;
 		if (memcmp(SA2IP(&l->addr), SA2IP(addr), SAIPLEN(addr))==0) {
 			l->preferred = TRUE;
@@ -1043,7 +1047,7 @@ int hip_handle_netlink(char *data, int length)
 			len = msg->nlmsg_len - NLMSG_LENGTH(sizeof(*ifa));
 			if ((ifa->ifa_family != AF_INET) &&
 			    (ifa->ifa_family != AF_INET6))
-				continue;
+				break;
 
 			memset(tb, 0, sizeof(tb));
 			memset(addr, 0, sizeof(struct sockaddr_storage));
@@ -1063,10 +1067,17 @@ int hip_handle_netlink(char *data, int length)
 				tb[IFA_ADDRESS] = tb[IFA_LOCAL];
 
 			if (!tb[IFA_LOCAL])
-				continue;
+				break;
 			addr->sa_family = ifa->ifa_family;
 			memcpy(	SA2IP(addr), RTA_DATA(tb[IFA_LOCAL]),
 				RTA_PAYLOAD(tb[IFA_LOCAL]) );
+
+			if ((addr->sa_family == AF_INET6) &&
+			    (IN6_IS_ADDR_LINKLOCAL(SA2IP6(addr)) ||
+			     IN6_IS_ADDR_SITELOCAL(SA2IP6(addr)) ||
+			     IN6_IS_ADDR_MULTICAST(SA2IP6(addr))))
+				break;
+
 			log_(NORM, "Address %s: (%d)%s \n", (is_add) ? "added" :
 			    "deleted", ifa->ifa_index, logaddr(addr));
 
@@ -1331,7 +1342,7 @@ void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 	}
 	/* Switch to the next address in the list. */
 	if (l) {
-		readdress_association(hip_a, SA(&l->addr), if_index);
+		readdress_association(hip_a, SA(&l->addr), l->if_index);
 		delete_address_entry_from_list(&list, l);
 		return;
 	/* No address with same address family in hip_a list. 
@@ -1355,7 +1366,7 @@ void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 			        SAIPLEN(&l->addr))) {
 			/* new preferred selected */
 			readdress_association(hip_a, SA(&l->addr), 
-					      if_index);
+					      l->if_index);
 			delete_address_entry_from_list(&list, l);
 		} else if (new_af) {
 			log_(NORMT, "Found new address family %s.\n",
