@@ -465,7 +465,7 @@ int select_preferred_address()
 				(preferred_iface_index == l->if_index)) {
 			if (l->addr.ss_family != AF_INET)
 				continue;
-			if (IN_LOOP(i->addr))
+			if (IN_LOOP(&l->addr))
 				continue;
 			ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
 			if (IS_LSI32(ip))
@@ -486,7 +486,7 @@ int select_preferred_address()
 			/* apply few criteria and pick first address */
 			if (l->addr.ss_family != AF_INET)
 				continue;
-			if (IN_LOOP(i->addr))
+			if (IN_LOOP(&l->addr))
 				continue;
 #ifdef SMA_CRAWLER
 			if(l->if_index != ifindex) /* not on master interface */
