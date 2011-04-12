@@ -129,36 +129,18 @@ int hipCfgFiles::loadCfg(struct hip_conf *hc)
 
     _hcfg = hc;
 
-    if(_hcfg->use_smartcard){
-
-	if(init_ssl_context() != 0)
-	    return -1;
-
-	if(mkHIfromSc() !=0 )
-	    return -1;
-
-	char hit_s[128];
-	if(hit2hitstr(hit_s, _hostid->hit)!=0){
-	    cerr << fnName << "invalid hit in local host identify (_hostid)" << endl;
-	    return -1;
-	}
-
-	if(postLocalCert(hit_s)!=0)
-	    return -1;
-    } else {
-	//SSL context without smartcard engine.
-	SSL_library_init();
-	SSL_load_error_strings();
-	ctx = SSL_CTX_new(SSLv3_client_method());
-	if (ctx == NULL) {
-	    cerr << fnName << "Error creating SSL context" << endl;
-	    return -1;
-	}
-	_ssl = SSL_new(ctx);
-	if (_ssl == NULL) {
-	    cerr << fnName << "Error open SSL connect" << endl;
-	    return -1;
-	}
+    //SSL context without smartcard engine.
+    SSL_library_init();
+    SSL_load_error_strings();
+    ctx = SSL_CTX_new(SSLv3_client_method());
+    if (ctx == NULL) {
+	cerr << fnName << "Error creating SSL context" << endl;
+	return -1;
+    }
+    _ssl = SSL_new(ctx);
+    if (_ssl == NULL) {
+	cerr << fnName << "Error open SSL connect" << endl;
+	return -1;
     }
 
     /* Don't need x509 store since not handling certs

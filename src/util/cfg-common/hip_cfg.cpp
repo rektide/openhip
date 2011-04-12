@@ -16,6 +16,8 @@ certInfo::~certInfo()
 {
 }
 
+pthread_mutex_t hipcfgmap_mutex;
+
 int hipCfg::str_to_addr(const char *data, struct sockaddr *addr)
 {
         /* TODO: use platform-independent getaddrinfo() w/AI_NUMERICHOST */
@@ -24,7 +26,7 @@ int hipCfg::str_to_addr(const char *data, struct sockaddr *addr)
         return(WSAStringToAddress((LPSTR)data, addr->sa_family, NULL,
                         addr, &len)==0);
 #else
-        return(inet_pton(addr->sa_family, (char*)data, SA2IP(addr)));
+        return(inet_pton(addr->sa_family, data, SA2IP(addr)));
 #endif
 }
 
@@ -65,7 +67,7 @@ hipCfg::hipCfg()
     _hcfg = NULL;
 }
 
-int hipCfg::hitstr2hit(hip_hit hit, char *hit_str)
+int hipCfg::hitstr2hit(hip_hit hit, const char *hit_str)
 {
   struct sockaddr *addr;
   struct sockaddr_storage ss_addr;
@@ -89,13 +91,14 @@ void hitPair::print() const
   printf("hit1: %02x%02x, hit2: %02x%02x\n", _hit1[HIT_SIZE-2], _hit1[HIT_SIZE-1], _hit2[HIT_SIZE-2], _hit2[HIT_SIZE-1]);
 }
 
+//DM: This is called on the order of per-packet
 int hipCfg::hit_peer_allowed(const hip_hit hit1, const hip_hit hit2)
 {
 
-  //int i;
   set <hitPair>::iterator si;
   hitPair *hpp;
 /*
+  int i;
   cout<<endl<<"hit_peer_allowed called with hit1: ";
   for(i=0; i<sizeof(hip_hit); i++)
      printf("%02x", hit1[i]);
@@ -109,38 +112,50 @@ int hipCfg::hit_peer_allowed(const hip_hit hit1, const hip_hit hit2)
  } else if(memcmp(hit1, hit2, HIT_SIZE) >0) {
      hpp= new hitPair(hit2, hit1);
  } else
-    return 1;
+    // DM: 17May2010: Return 0 if hit1==hit2 does not allow EB to talk over HIP to itself
+    return 0;
+    //return 1;
 
+  int rc = 1;
+  pthread_mutex_lock(&hipcfgmap_mutex);
   si = _allowed_peers.find(*hpp);
   if(si == _allowed_peers.end()){
-    delete hpp;
-    return 0;
+    rc = 0;
   }
+  pthread_mutex_unlock(&hipcfgmap_mutex);
 
   delete hpp;
-  return 1;
+  return rc;
 }
 
 int hipCfg::peers_allowed(hip_hit *hits1, hip_hit *hits2, int max_cnt)
 {
    set <hitPair, hp_compare>::iterator i;
    int j;
+
+  pthread_mutex_lock(&hipcfgmap_mutex);
    for(j=0, i=_allowed_peers.begin(); i!=_allowed_peers.end(); i++, j++){
      hitPair hp = *i;
-     if(j>=max_cnt)
-	return -1;
+     if(j>=max_cnt) {
+	j = -1;
+	break;
+     }
      memcpy(hits1[j], hp._hit1, HIT_SIZE);
      memcpy(hits2[j], hp._hit2, HIT_SIZE);
    }
+  pthread_mutex_unlock(&hipcfgmap_mutex);
+
    return j;
 }
 
 /* return 0 if the maping found, 1 otherwise */
+//DM: This is called on the order of per-packet
 int hipCfg::legacyNodeToEndbox(const struct sockaddr *host, struct sockaddr *eb)
 {
   char host_s[128];
   string host_str;
   string ip_s;
+  int rc = 1;
 
   addr_to_str(host, host_s, 128);
 
@@ -148,6 +163,8 @@ int hipCfg::legacyNodeToEndbox(const struct sockaddr *host, struct sockaddr *eb)
   host_str = host_s;
 
   map <string, string>::iterator i;
+
+  pthread_mutex_lock(&hipcfgmap_mutex);
   i = _legacyNode2EndboxMap.find(host_str);
   if(i != _legacyNode2EndboxMap.end()){
     ip_s = (*i).second;
@@ -155,14 +172,16 @@ int hipCfg::legacyNodeToEndbox(const struct sockaddr *host, struct sockaddr *eb)
 	eb->sa_family = AF_INET6; //default to return HIT
     if(eb->sa_family==AF_INET){
 	char lsi_s[INET_ADDRSTRLEN];
-	hitstr2lsistr(lsi_s, (char *)ip_s.c_str());
+	hitstr2lsistr(lsi_s, ip_s.c_str());
 	str_to_addr(lsi_s, eb);
     } else
-      str_to_addr(ip_s.c_str(), eb);
+    str_to_addr(ip_s.c_str(), eb);
     //cout<<"legacyNodeToEndbox: get eb "<<ip_s.c_str()<<" for host = "<<host_s<<endl;
-    return 0;
+    rc = 0;
   }
-  return 1;
+  pthread_mutex_unlock(&hipcfgmap_mutex);
+
+  return rc;
 }
 
 int hipCfg::getLegacyNodesByEndbox(const struct sockaddr *eb, struct sockaddr_storage *hosts, int size)
@@ -172,17 +191,20 @@ int hipCfg::getLegacyNodesByEndbox(const struct sockaddr *eb, struct sockaddr_st
   addr_to_str(eb, eb_s, 128);
   int idx = 0;
   map <string, string>::iterator i;
+
+  pthread_mutex_lock(&hipcfgmap_mutex);
   for(i=_legacyNode2EndboxMap.begin(); i!=_legacyNode2EndboxMap.end(); i++){
      string host = (*i).first;
      string endbox = (*i).second;
      if(eb->sa_family==AF_INET){
-	hitstr2lsistr(eb_lsi, (char *)endbox.c_str());
+	hitstr2lsistr(eb_lsi, endbox.c_str());
 	endbox = eb_lsi;
      }
      if(endbox==eb_s && endbox != host) {
 	if(idx>=size) {
 	   cout<<"error calling getLegacyNodesByEndbox: hosts array too small"<<endl;
-	   return -1;
+	   idx = -1;
+	   break;
  	}
 	struct sockaddr_storage host_ss;
         struct sockaddr *host_p = (struct sockaddr *)(&host_ss);
@@ -191,6 +213,8 @@ int hipCfg::getLegacyNodesByEndbox(const struct sockaddr *eb, struct sockaddr_st
 	hosts[idx++] = host_ss;
      }
   }
+  pthread_mutex_unlock(&hipcfgmap_mutex);
+
   return idx;
 }
 
@@ -208,15 +232,21 @@ int  hipCfg::endbox2Llip(const struct sockaddr *eb, struct sockaddr *llip)
   //cout<<"endbox2Llip: look up bcwin for endbox = "<<eb_s<<endl;
 
   map <string, string>::iterator i;
+
+  rc = 1;
+
+  pthread_mutex_lock(&hipcfgmap_mutex);
   i = _endbox2LlipMap.find(eb_s);
   if(i != _endbox2LlipMap.end()){
     llip_s = (*i).second;
     llip->sa_family=AF_INET; //only handle IPv4 address only
     str_to_addr(llip_s.c_str(), llip);
     //cout<<"endbox2Llip: get llip (bcwin) "<<llip_s.c_str()<<" for endbox = "<<eb_s<<endl;
-    return 0;
+    rc = 0;
   }
-  return 1;
+  pthread_mutex_unlock(&hipcfgmap_mutex);
+
+  return rc;
 }
 
 /*
@@ -228,7 +258,7 @@ int  hipCfg::endbox2Llip(const struct sockaddr *eb, struct sockaddr *llip)
  * out:         returns bytes converted if successful,
  *              -1 if error
  */
-int hipCfg::hex_to_bin(char *src, char *dst, int dst_len)
+int hipCfg::hex_to_bin(const char *src, char *dst, int dst_len)
 {
         char hex[] = "0123456789abcdef";
         char hexcap[] = "0123456789ABCDEF";
@@ -293,7 +323,7 @@ int hipCfg::hex_to_bin(char *src, char *dst, int dst_len)
         return total;
 }
 
-int hipCfg::hitstr2lsistr(char *lsi_str, char *hit_str)
+int hipCfg::hitstr2lsistr(char *lsi_str, const char *hit_str)
 {
   hip_hit hit;
   hitstr2hit(hit, hit_str);
@@ -301,252 +331,6 @@ int hipCfg::hitstr2lsistr(char *lsi_str, char *hit_str)
   lsi.sin_family = AF_INET;
   lsi.sin_addr.s_addr = ntohl(HIT2LSI(hit));
   return addr_to_str(SA(&lsi), lsi_str, INET_ADDRSTRLEN);
-}
-
-ENGINE *hipCfg::engine_init(const char *pin)
-{
-    const char *fn_name = "engine_init";
-    int pre_num = 4;
-
-    if (!_hcfg->smartcard_openssl_engine) 
-    	return NULL;
-
-    if (_hcfg->smartcard_openssl_module) {
-        pre_num = 5;
-    }
-
-    ENGINE *e;
-    const char *engine_id = "dynamic";
-    const char *pre_cmds[] = { "SO_PATH", _hcfg->smartcard_openssl_engine,
-    			       "ID", "pkcs11",
-			       "LIST_ADD", "1",
-			       "LOAD", NULL };
-    if (_hcfg->smartcard_openssl_module) {
-        pre_cmds[8] = "MODULE_PATH";
-	pre_cmds[9] = _hcfg->smartcard_openssl_module;
-    }
-
-    const char *post_cmds[] = { "PIN", "123456"};  //Default PIN
-    int post_num = 1;
-
-    ENGINE_load_builtin_engines();
-
-    e = ENGINE_by_id(engine_id);
-    if (!e)
-    {
-    	printf("%s: Engine isn't available: %s\n", fn_name, engine_id);
-	return NULL;
-    }
-
-    if(pin)
-      post_cmds[1]=(char *)pin;
-
-    if (!load_engine_fn(e, engine_id, pre_cmds, pre_num, (const char **)post_cmds, post_num))
-    {
-    	printf("engine_init failed engine id %s\n", engine_id);
-	return NULL;
-    }
-
-    if (!ENGINE_set_default_RSA(e))
-    {
-    	printf("engine_init couldn't set RSA method - engine id : %s\n", engine_id);
-	return NULL;
-    }
-    ENGINE_set_default_DSA(e);
-    ENGINE_set_default_ciphers(e);
-
-    printf("engine_init initialization successful - engine id %s\n", engine_id);
-    return e;
-}
-
-void hipCfg::engine_teardown(ENGINE *e)
-{
-    const char *fn_name = "engine_teardown";
-
-    /* Release functional reference from ENGINE_init() */
-    ENGINE_finish(e);
-
-    /* Release structural reference from ENGINE_by_id() */
-    ENGINE_free(e);
-
-    /* Do Engine cleanup */
-    /* The ENGINE_cleanup call was causing segfaults under certain
-     * conditions.  The function is poorly documented, so I 
-     * don't call it.  We are on our way out of the program anyway,
-     * so system garbage collection takes over */
-    printf("%s: Skipping ENGINE_cleanup() call\n", fn_name);
-    ENGINE_cleanup();
-
-    printf("%s: Engine teardown successful\n", fn_name);
-}
-
-SSL_CTX *hipCfg::ssl_ctx_init(ENGINE *e, const char *pin)
-{
-    const char *fn_name = "ssl_ctx_init";
-
-    char serr[120];
-
-    SSL_CTX *ctx = NULL;
-    EVP_PKEY *scPrivKey = NULL;
-
-    /* Initialize SSL */
-    SSL_library_init();
-    SSL_load_error_strings();
-
-    /* Create SSL context */
-    ctx = SSL_CTX_new(SSLv3_client_method());
-    if (ctx == NULL)
-    {
-    	printf("%s: Error creating SSL context\n", fn_name);
-	return NULL;
-    }
-
-    scPrivKey =  ENGINE_load_private_key(e, "45", NULL, NULL);
-    if (!scPrivKey)
-    {
-    	printf("%s: Error loading smartcard private key\n", fn_name);
-	SSL_CTX_free(ctx);
-	return NULL;
-    }
-
-    /* Load private key into SSL context */
-    if (!SSL_CTX_use_PrivateKey(ctx,scPrivKey))
-    {
-    	printf("%s: Error loading smartcard private key into SSL context: %s\n",
-		  fn_name,ERR_error_string(ERR_get_error(),serr));
-	SSL_CTX_free(ctx);
-	return NULL;
-    }
-    return ctx;
-}
-
-int hipCfg::load_engine_fn(ENGINE *e, const char *engine_id,
-		   const char **pre_cmds, int pre_num,
-		   const char **post_cmds, int post_num)
-{
-    const char *fn_name = "load_engine_fn";
-
-    /* This code is written from examples given in the manpage
-       for openssl-0.9.7c engine (man 3 engine) */
-
-    /* Process pre-initialize commands */
-    while (pre_num--)
-    {
-    	if (!ENGINE_ctrl_cmd_string(e, pre_cmds[0], pre_cmds[1], 0))
-	{
-	    printf("%s: Failed pre command (%s - %s:%s)\n",
-	    	      fn_name, engine_id, pre_cmds[0],
-		      (pre_cmds[1] ? pre_cmds[1] : "(NULL)"));
-	    ENGINE_free(e);
-	    return 0;
-	}
-	printf("%s: Engine pre-init command (%s - %s:%s)\n",
-		   fn_name, engine_id, pre_cmds[0],
-		   (pre_cmds[1] ? pre_cmds[1] : "(NULL)"));
-	pre_cmds += 2;
-    }
-
-    if (!ENGINE_init(e))
-    {
-    	printf("%s: Failed engine initialization for %s\n",
-		  fn_name, engine_id);
-	ENGINE_free(e);
-	return 0;
-    }
-
-    /* ENGINE_init() returned a functional reference, so free the */
-    /* structural reference with ENGINE_free */
-    ENGINE_free(e);
-
-    /* Process post-initialize commands */
-    while (post_num--)
-    {
-    	if (!ENGINE_ctrl_cmd_string(e, post_cmds[0], post_cmds[1], 0))
-	{
-	   printf("%s: Failed post command (%s - %s:%s)\n",
-	    	      fn_name, engine_id, post_cmds[0],
-		      (post_cmds[1] ? post_cmds[1] : "(NULL)"));
-	    /* Release the functional reference with ENGINE_finish */
-	    ENGINE_finish(e);
-	    return 0;
-	}
-	/* Don't display PIN! */
-	printf("%s: Engine post-init command (%s - %s:XXXXXXXX)\n",
-		   fn_name, engine_id, post_cmds[0]);
-	post_cmds += 2;
-    }
-
-    ENGINE_set_default(e, ENGINE_METHOD_RSA);
-
-    printf("%s: Engine pre and post commands successfully applied to \"%s\"\n",
-    	       fn_name, engine_id);
-
-    return 1;
-}
-
-int hipCfg::init_ssl_context()
-{
-    ENGINE *e = NULL;
-    SSL_CTX *ctx = NULL;
-    EVP_PKEY *pkey = NULL;
-  
-    /* Initialize OpenSC engine for OpenSSL */
-    e = engine_init(_scPin.c_str());
-    if (e == NULL) {
-	fprintf(stderr,"Error in engine init\n");
-	return -1;
-    }
-    /* Get smartcard certificate */
-    struct {
-	const char * cert_id;
-	X509 * cert;
-    } parms;
-
-    parms.cert_id = "4:45";
-    parms.cert = NULL;
-    ENGINE_ctrl_cmd(e, "LOAD_CERT_CTRL", 0, &parms, NULL, 1);
-
-    if (parms.cert) {
-	/*
-	X509_NAME_print_ex_fp(stdout, X509_get_subject_name(parms.cert), 0,XN_FLAG_ONELINE);
-	printf("\n");
-	PEM_write_X509(stdout, parms.cert);
-	*/
-	BIO* bio = BIO_new(BIO_s_mem());
-	PEM_write_bio_X509(bio, parms.cert);
-	char *pem = NULL;
-	BIO_get_mem_data(bio,&pem);
-	//fprintf(stdout,"cert is length: %d\n%s\n", strlen(pem), pem);
-	_scCert = pem;
-	BIO_free(bio);
-
-    } else {
-        fprintf(stderr,"Unable to read cert from card");
-    }
-
-    /* Initialize OpenSSL context, sending PIN for smartcard */
-    ctx = ssl_ctx_init(e, _scPin.c_str());
-    if (ctx == NULL) {
-	fprintf(stderr,"Error in ssl init\n");
-	return -1;
-    }
-
-    /* Initialize the OpenSSL connection */
-    _ssl = SSL_new(ctx);
-    if (_ssl == NULL) {
-        fprintf(stderr,"Error open SSL connect\n");
-        return -1;
-    }
-
-    pkey=SSL_get_privatekey(_ssl);
-    if(pkey==NULL){
-        fprintf(stderr,"Error calling SSL_get_privatekey\n");
-        return -1;
-    }
-   _rsa=EVP_PKEY_get1_RSA(pkey);
-   _dsa=EVP_PKEY_get1_DSA(pkey);
-
-  return 0;
 }
 
 int hipCfg::hi_to_hit(hi_node *hi, hip_hit hit)
@@ -774,7 +558,7 @@ int hipCfg::mkHIfromSc()
   _hostid->anonymous = 0;
   _hostid->allow_incoming = 1;
   _hostid->r1_gen_count = 10;
-  _hostid->skip_addrcheck = TRUE;
+  _hostid->skip_addrcheck = 1;
   _hostid->r1_gen_count = 10;
   return rc;
 }
@@ -875,6 +659,53 @@ int hipCfg::getLocalCertUrl(char *url, unsigned int size)
   return rc;
 }
 
+/*
+ * function locate_config_file(): lifted from hip_xml.c
+ *
+ * Search for existence of a file in the local directory or in the 
+ * HIP configuration directory. Store the path name into the supplied buffer.
+ *
+ * filename	string to store resulting full path name; may contain user-
+ * 		specified file name
+ * filename_size  max length of filename buffer
+ * default_name filename to use (without path) when user does not specify the
+ * 		filename
+ *
+ * Returns 0 if file or symlink exists, -1 if there is no suitable file.
+ *
+ */
+int hipCfg::locate_config_file(char *filename, int filename_size, const char *default_name) 
+{
+	struct stat stbuf;
+
+	/* The user has specified the config file name. Only check if 
+	 * it exists, do not try other locations. */
+	if ('\0' != *filename) {
+		if (stat(filename, &stbuf) < 0)
+			return(-1);
+		if (S_ISREG(stbuf.st_mode) || S_ISLNK(stbuf.st_mode))
+			return(0); /* found OK */
+		else
+			return(-1);
+	}
+
+	/* Check for default name in current working dir.
+	 */
+	snprintf(filename, filename_size, "./%s", default_name);
+	if (stat(filename, &stbuf) == 0) {
+		if (S_ISREG(stbuf.st_mode) || S_ISLNK(stbuf.st_mode))
+			return(0); /* found OK */
+	}
+	/* Check for sysconfdir to locate the file.
+	 */
+	snprintf(filename, filename_size, "%s/%s", SYSCONFDIR, default_name);
+	if (stat(filename, &stbuf) == 0) {
+		if (S_ISREG(stbuf.st_mode) || S_ISLNK(stbuf.st_mode))
+			return(0); /* found OK */
+	}
+	return(-1);
+}
+
 int hipCfg::getEndboxMapsFromLocalFile()
 {
   string hit_s, underlayIp_s, hit1_s, hit2_s;
@@ -886,10 +717,21 @@ int hipCfg::getEndboxMapsFromLocalFile()
 
   addr = (struct sockaddr*) &ss_addr;
 
-  doc = xmlParseFile(_hcfg->known_hi_filename);
+  char known_hi_filename[255]={0};
+
+  if (locate_config_file(known_hi_filename,
+                         sizeof(known_hi_filename),
+			 HIP_KNOWNID_FILENAME) == 0) {
+      cout<<"Will attempt to parse file: "<<known_hi_filename<<endl;
+  } else {
+      cout << "Could not find known_hi_filename" << endl;
+      return -1;
+  }
+
+  doc = xmlParseFile(known_hi_filename);
   if(doc == NULL) {
-    cout<<"Error parsing xml file "<<_hcfg->known_hi_filename<<endl;
-    return(-1);
+    cout<<"Error parsing xml file "<<known_hi_filename<<endl;
+    return -1;
   }
 
   node = xmlDocGetRootElement(doc);
@@ -938,12 +780,12 @@ int hipCfg::getEndboxMapsFromLocalFile()
               sscanf(value, "%llu", &p->r1_gen_count);
             } else if(strcmp((char *)attr->name, "addrcheck")==0) {
               if(strcmp(value, "no")==0)
-                p->skip_addrcheck = TRUE;
+                p->skip_addrcheck = 1;
             }
             attr = attr->next;
         }
         
-       //cout<<"Loading Host Identity Tag ..."<<endl;
+       cout<<"Loading Host Identity Tag ..."<<endl;
        for (xmlNodePtr cnode = node->children; cnode; cnode = cnode->next) {
 	 if(strcmp((char *)cnode->name, "text")==0)
             continue;
@@ -980,22 +822,22 @@ int hipCfg::getEndboxMapsFromLocalFile()
        for(i = legacyNodes.begin(); i != legacyNodes.end(); i++){
          string lnode_s = *i;
          _legacyNode2EndboxMap[lnode_s] = hit_s;
-         //cout<<"add ("<<lnode_s<<", "<<hit_s<<") into _legacyNode2EndboxMap"<<endl;
+         cout<<"add ("<<lnode_s<<", "<<hit_s<<") into _legacyNode2EndboxMap"<<endl;
        }
-       if(!hitstr2lsistr(lsi_s, (char *)hit_s.c_str())){
+       if(!hitstr2lsistr(lsi_s, hit_s.c_str())){
 	  _legacyNode2EndboxMap[lsi_s] = hit_s;
-          //cout<<"add ("<<lsi_s<<", "<<hit_s<<") into _legacyNode2EndboxMap"<<endl;
+          cout<<"add ("<<lsi_s<<", "<<hit_s<<") into _legacyNode2EndboxMap"<<endl;
        } else {
             cout<<"error convert HIT to LSI"<<endl;
 	    return -1;
        }
-       hitstr2hit(p->hit, (char *)hit_s.c_str());
+       hitstr2hit(p->hit, hit_s.c_str());
 
-       strcpy(p->name, (char *)assetTag_s.c_str());
+       strcpy(p->name, assetTag_s.c_str());
        _hit_to_peers.insert(std::make_pair(hit_s, p));
-       //cout<<"add peer node "<<assetTag_s<<", "<<hit_s<<" into _hit_to_peers"<<endl;
+       cout<<"add peer node "<<assetTag_s<<", "<<hit_s<<" into _hit_to_peers"<<endl;
      } else if(strcmp((char *)node->name, "peer_allowed")==0){
-       //cout<<"Loading peer_allowed Tag ..."<<endl;
+       cout<<"Loading peer_allowed Tag ..."<<endl;
        xmlNodePtr cnode;
        string hit1_s, hit2_s;
        for (cnode = node->children; cnode; cnode = cnode->next) {
@@ -1010,10 +852,10 @@ int hipCfg::getEndboxMapsFromLocalFile()
 	 xmlFree(data);
        }
        hip_hit hit1, hit2;
-       if(hitstr2hit(hit1, (char *)hit1_s.c_str())<0){
+       if(hitstr2hit(hit1, hit1_s.c_str())<0){
          cout<<"Error convert hit "<<hit1_s<<endl;
 	 continue;
-       } else if(hitstr2hit(hit2, (char *)hit2_s.c_str())<0){
+       } else if(hitstr2hit(hit2, hit2_s.c_str())<0){
          cout<<"error convert hit "<<hit2_s<<endl;
 	 continue;
        }
@@ -1025,7 +867,7 @@ int hipCfg::getEndboxMapsFromLocalFile()
          hitPair hp(hit2, hit1);
          _allowed_peers.insert(hp);
        }
-       //cout<<"insert a hitPair hit1: "<<hit1_s<<" hit2: "<<hit2_s<<endl;
+       cout<<"insert a hitPair hit1: "<<hit1_s<<" hit2: "<<hit2_s<<endl;
      }
   }
   return 0;
@@ -1035,7 +877,7 @@ bool hitPair::operator<(const hitPair & hp) const
 {
   //this->print();
   return memcmp(hp._hit1, _hit1, HIT_SIZE) > 0 ||
-           memcmp(hp._hit1, _hit1, HIT_SIZE) == 0 && memcmp(hp._hit2, _hit2, HIT_SIZE) > 0;
+       (memcmp(hp._hit1, _hit1, HIT_SIZE) == 0 && memcmp(hp._hit2, _hit2, HIT_SIZE) > 0);
 }
 
 hitPair::hitPair(const hip_hit hit1, const hip_hit hit2)

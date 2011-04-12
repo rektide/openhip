@@ -10,6 +10,8 @@
 #include <openssl/engine.h>
 #include "hip_types.h"
 
+extern pthread_mutex_t hipcfgmap_mutex;
+
 using namespace std;
 
 class certInfo
@@ -65,21 +67,13 @@ public:
   virtual int loadCfg(struct hip_conf *hc) = 0;
   virtual int closeCfg() = 0;
   static int hit2hitstr(char *hit_str, const hip_hit hit);
-  static int hitstr2lsistr(char *lsi_str, char *hit_str);
+  static int hitstr2lsistr(char *lsi_str, const char *hit_str);
   static int addr_to_str(const struct sockaddr *addr, char *data, int len);
-  static int hitstr2hit(hip_hit hit, char *hit_str);
-  static int hex_to_bin(char *src, char *dst, int dst_len);
+  static int hitstr2hit(hip_hit hit, const char *hit_str);
+  static int hex_to_bin(const char *src, char *dst, int dst_len);
   static int str_to_addr(const char *data, struct sockaddr *addr);
 
 protected:
-  ENGINE *engine_init(const char *pin);
-  int load_engine_fn(ENGINE *e, const char *engine_id,
-                   const char **pre_cmds, int pre_num,
-                   const char **post_cmds, int post_num);
-
-  void engine_teardown(ENGINE *e);
-  SSL_CTX *ssl_ctx_init(ENGINE *e, const char *pin);
-  int init_ssl_context();
   int verify_certificate(X509 *cert);
   static int callb(int rc, X509_STORE_CTX *ctx);
   int hi_to_hit(hi_node *hi, hip_hit hit);
@@ -89,6 +83,7 @@ protected:
   int mkHIfromSc();
   int mkHIfromPkey(RSA *rsa, DSA *dsa,  hi_node *hostid);
   int getEndboxMapsFromLocalFile();
+  int locate_config_file(char *filename, int filename_size, const char *default_name);
 
 protected:
   map <string, string> _legacyNode2EndboxMap;
@@ -99,7 +94,6 @@ protected:
   struct hip_conf *_hcfg;
   map <string, struct peer_node *> _hit_to_peers; /* configured peers indexed by hit string */
   string _scPrivKeyID;
-  string _scPin;
   string _scCert;
   hi_node *_hostid;
   SSL *_ssl;
