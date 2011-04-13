@@ -1,0 +1,128 @@
+<?xml version="1.0" ?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:ifmap="http://www.trustedcomputinggroup.org/2006/IFMAP/1"
+  xmlns="http://www.trustedcomputinggroup.org/2006/IFMAP-SCADANET-METADATA/1"
+  targetNamespace="http://www.trustedcomputinggroup.org/2006/IFMAP-SCADANET-METADATA/1">
+
+  <!-- Schema for IF-MAP Standard Metadata -->
+
+  <!-- MetadataType is the base type for IF-MAP metadata.
+       MetadataType defines the publisher-id and timestamp
+       attributes that are maintained by the IF-MAP server -->
+  <xsd:complexType name="MetadataType" abstract="true">
+    <xsd:attribute name="publisher-id"/>
+    <xsd:attribute name="timestamp" type="xsd:dateTime"/>
+  </xsd:complexType>
+
+  <!-- SingleValueMetadataType is the base type for
+       metadata that can have at most one value
+       for a particular identifier or link -->
+  <xsd:complexType name="SingleValueMetadataType"
+    abstract="true">
+    <xsd:complexContent>
+      <xsd:extension base="MetadataType">
+        <xsd:attribute name="cardinality"
+          default="singleValue">
+          <xsd:simpleType>
+            <xsd:restriction base="xsd:string">
+              <xsd:enumeration value="singleValue"/>
+            </xsd:restriction>
+          </xsd:simpleType>
+        </xsd:attribute>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+
+  <!-- MultiValueMetadataType is the base type for
+       metadata that may have multiple values for
+       a particular identifier or link -->
+  <xsd:complexType name="MultiValueMetadataType"
+    abstract="true">
+    <xsd:complexContent>
+      <xsd:extension base="MetadataType">
+        <xsd:attribute name="cardinality"
+          default="multiValue">
+          <xsd:simpleType>
+            <xsd:restriction base="xsd:string">
+              <xsd:enumeration value="multiValue"/>
+            </xsd:restriction>
+          </xsd:simpleType>
+        </xsd:attribute>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+
+  <!-- scada-node is link metadata that identifies
+    a legacy node in an overlay network -->
+  <xsd:element name="scada-node">
+    <xsd:complexType>
+      <xsd:complexContent>
+        <xsd:extension base="SingleValueMetadataType"/>
+      </xsd:complexContent>
+    </xsd:complexType>
+  </xsd:element>
+  
+  <!-- underlay-ip is link metadata that identifies
+    an endbox ip address in the underlay network -->
+  <xsd:element name="underlay-ip">
+    <xsd:complexType>
+      <xsd:complexContent>
+        <xsd:extension base="SingleValueMetadataType"/>
+      </xsd:complexContent>
+    </xsd:complexType>
+  </xsd:element>
+  
+  <!-- dn-hit is link metadata that binds a distinguished name to its
+    corresponding HIT -->
+  <xsd:element name="dn-hit">
+    <xsd:complexType>
+      <xsd:complexContent>
+        <xsd:extension base="SingleValueMetadataType"/>
+      </xsd:complexContent>
+    </xsd:complexType>
+  </xsd:element>
+  
+  <!-- policy is link metadata specifies comms policy to a corresponding endbox
+  -->
+  <xsd:element name="policy">
+    <xsd:complexType>
+      <xsd:complexContent>
+        <xsd:extension base="SingleValueMetadataType"/>
+      </xsd:complexContent>
+    </xsd:complexType>
+  </xsd:element>
+  
+  <!-- role is identifier metadata to distinguish between scada-nodes and endboxes -->
+  <xsd:element name="role">
+    <xsd:complexType>
+      <xsd:complexContent>
+        <xsd:extension base="SingleValueMetadataType">
+          <xsd:sequence>
+            <xsd:element name="name" type="xsd:string"
+              minOccurs="1" maxOccurs="1"/>
+            <xsd:element name="administrative-domain"
+              type="xsd:string" minOccurs="0" maxOccurs="1"/>
+          </xsd:sequence>
+        </xsd:extension>
+      </xsd:complexContent>
+    </xsd:complexType>
+  </xsd:element>  
+
+
+  <!-- cert is identifier metadata for an endbox certificate -->
+  <xsd:element name="cert">
+    <xsd:complexType>
+      <xsd:complexContent>
+        <xsd:extension base="MultiValueMetadataType">
+          <xsd:sequence>
+            <xsd:element name="administrative-domain"
+              type="xsd:string" minOccurs="0" maxOccurs="1"/>
+            <xsd:element name="cert" type="xsd:string"
+              minOccurs="1" maxOccurs="1"/>
+          </xsd:sequence>
+        </xsd:extension>
+      </xsd:complexContent>
+    </xsd:complexType>
+  </xsd:element>
+ 
+</xsd:schema>

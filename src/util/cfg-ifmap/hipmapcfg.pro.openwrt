@@ -1,0 +1,33 @@
+# set SYSCONFDIR, STAGINGDIR, BUILDDIR with 'qmake -s' from openwrt Makefile
+QT += network \
+    xml
+QT -= gui
+CONFIG += debug \
+    dll
+TARGET = hipmapcfg
+TEMPLATE = lib
+VERSION = 0.1.0
+
+DEFINES += SMA_CRAWLER
+DEFINES += SYSCONFDIR="\"\\\""$$[SYSCONFDIR]\\\"\""
+DEFINES += DEBUG
+
+LIBS += -L$$[STAGINGDIR]/usr/local/lib -lifmap
+LIBS += -L$$[STAGINGDIR]/usr/lib -lxml2 -lssl -lcrypto
+
+INCLUDEPATH += $$[STAGINGDIR]/usr/local/include/libifmap
+INCLUDEPATH += $$[STAGINGDIR]/usr/include/
+INCLUDEPATH += $$[STAGINGDIR]/usr/include/libxml2
+INCLUDEPATH += $$[STAGINGDIR]/usr/include/openssl
+INCLUDEPATH += $$[BUILDDIR]/openhip-boeing-0.6.0/src/include
+INCLUDEPATH += $$[BUILDDIR]/openhip-boeing-0.6.0/src/include/hip
+INCLUDEPATH += ../include
+INCLUDEPATH += ../include/hip
+
+SOURCES += hip_cfg_map.cpp \
+    ifmap_client.cpp \
+    ifmap_thread.cpp \
+    ../cfg-common/hip_cfg.cpp
+HEADERS += ifmap_client.h \
+    ifmap_thread.h \
+    ../include/hip/hip_cfg_map.h
