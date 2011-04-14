@@ -34,6 +34,7 @@ linux-mips-g++|linux-arm-g++ {
     DEFINES += SYSCONFDIR="\"\\\""$(sysconfdir)\\\"\""
 
     INCLUDEPATH += /usr/local/include/libifmap
+    INCLUDEPATH += /usr/include/libxml2
 }
 
 INCLUDEPATH += ../../include

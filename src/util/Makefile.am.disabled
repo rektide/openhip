@@ -37,10 +37,31 @@ libhipcfgldap_la_LDFLAGS = -version_info $(VERSION) -release $(VERSION)
 libhipcfgldap_la_SOURCES = $(SRC_HIPCFGLDAP)
 endif
 
+# IFMAP client library uses Qt build system
 if WANT_SMA_CRAWLER_IFMAP_CFG
-# TODO
+all-local:
+	cd cfg-ifmap && qmake hipmapcfg.pro && make
+install-exec-local:
+	install cfg-ifmap/libhipmapcfg.so $(DESTDIR)$(libdir)
+	cd $(DESTDIR)$(libdir) && ln -sf libhipmapcfg.so libhipmapcfg.so.0 && \
+		ln -sf libhipmapcfg.so libhipmapcfg.so.0.1 && \
+		ln -sf libhipmapcfg.so libhipmapcfg.so.0.1.0
+uninstall-local:
+	rm -f $(DESTDIR)$(libdir)/libhipmapcfg.so
+	rm -f $(DESTDIR)$(libdir)/libhipmapcfg.so.0
+	rm -f $(DESTDIR)$(libdir)/libhipmapcfg.so.0.1
+	rm -f $(DESTDIR)$(libdir)/libhipmapcfg.so.0.1.0
+clean-local:
+	cd cfg-ifmap && make clean
+	rm -f cfg-ifmap/libhipmapcfg.so*
+	rm -f cfg-ifmap/Makefile
 endif
 
 INCLUDES = -I$(top_srcdir)/src/include @libxml2_CFLAGS@
 LDADD = @libxml2_LIBS@
+
+install-data-hook:
+	test -d "$(DESTDIR)$(sysconfdir)" || mkdir -p "$(DESTDIR)$(sysconfdir)"
+	cp scripts/bridge_*.sh $(DESTDIR)$(sysconfdir)
+	cp scripts/runhip.sh $(DESTDIR)$(sysconfdir)
 
