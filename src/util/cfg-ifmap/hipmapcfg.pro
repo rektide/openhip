@@ -5,7 +5,7 @@ CONFIG += debug \
     dll
 TARGET = hipmapcfg
 TEMPLATE = lib
-VERSION = 0.1.0
+VERSION = $$[LIBVERSION]
 DEFINES += SMA_CRAWLER
 DEFINES += DEBUG
 LIBS += -lifmap \

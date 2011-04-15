@@ -40,21 +40,18 @@ endif
 # IFMAP client library uses Qt build system
 if WANT_SMA_CRAWLER_IFMAP_CFG
 all-local:
-	cd cfg-ifmap && qmake hipmapcfg.pro && make
+	cd cfg-ifmap && qmake -set LIBVERSION $(VERSION) && qmake hipmapcfg.pro && make
 install-exec-local:
+	test -d "$(DESTDIR)$(libdir)" || mkdir -p "$(DESTDIR)$(libdir)"
 	install cfg-ifmap/libhipmapcfg.so $(DESTDIR)$(libdir)
-	cd $(DESTDIR)$(libdir) && ln -sf libhipmapcfg.so libhipmapcfg.so.0 && \
-		ln -sf libhipmapcfg.so libhipmapcfg.so.0.1 && \
-		ln -sf libhipmapcfg.so libhipmapcfg.so.0.1.0
+	cd $(DESTDIR)$(libdir) && ln -sf libhipmapcfg.so libhipmapcfg.so.$(VERSION)
 uninstall-local:
 	rm -f $(DESTDIR)$(libdir)/libhipmapcfg.so
-	rm -f $(DESTDIR)$(libdir)/libhipmapcfg.so.0
-	rm -f $(DESTDIR)$(libdir)/libhipmapcfg.so.0.1
-	rm -f $(DESTDIR)$(libdir)/libhipmapcfg.so.0.1.0
+	rm -f $(DESTDIR)$(libdir)/libhipmapcfg.so.$(VERSION)
+	rm -f $(DESTDIR)$(sysconfdir)/bridge_*.sh
+	rm -f $(DESTDIR)$(sysconfdir)/runhip.sh
 clean-local:
-	cd cfg-ifmap && make clean
-	rm -f cfg-ifmap/libhipmapcfg.so*
-	rm -f cfg-ifmap/Makefile
+	cd cfg-ifmap && (test -e "Makefile" || qmake hipmapcfg.pro) && make distclean
 endif
 
 INCLUDES = -I$(top_srcdir)/src/include @libxml2_CFLAGS@
