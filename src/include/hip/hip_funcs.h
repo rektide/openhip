@@ -55,7 +55,7 @@
  * Macros  
  */
 /* LSI functions */
-#define IS_LSI32(a) ((a & 0xFF) == 0x01)
+#define IS_LSI32(a) ((a & htonl(0xFF000000)) == htonl(0x01000000))
 #ifdef __WIN32__
 #define IN6_ARE_ADDR_EQUAL IN6_ADDR_EQUAL
 #define IS_HIT(x) (( (ntohs(((struct in6_addr*)x)->s6_words[0]) & 0xFFFF) \
@@ -71,16 +71,10 @@
 #endif
 #define SA2IP6(x) ( &((struct sockaddr_in6*)x)->sin6_addr )
 
-#if defined(__MACOSX__) && defined(__BIG_ENDIAN__)
-#define IS_LSI(a) ( ( ((struct sockaddr*)a)->sa_family == AF_INET) ? \
-	 (IS_LSI32( ((struct sockaddr_in*)a)->sin_addr.s_addr >> 24)) : \
-         (IS_HIT(  &((struct sockaddr_in6*)a)->sin6_addr) ) )
-#else /* __MACOSX__ */
 #define IS_LSI(a) ( (((struct sockaddr*)a)->sa_family == AF_INET) ? \
                    (IS_LSI32(((struct sockaddr_in*)a)->sin_addr.s_addr)) : \
                    (IS_HIT( &((struct sockaddr_in6*)a)->sin6_addr) )     )
 
-#endif /* __MACOSX__ */
 #define VALID_FAM(a) ( (((struct sockaddr*)a)->sa_family == AF_INET) || \
 		       (((struct sockaddr*)a)->sa_family == AF_INET6) )
 

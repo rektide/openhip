@@ -456,7 +456,7 @@ int endbox_ipv4_packet_check(struct ip *iph, struct sockaddr *lsi,
 		  eb_p->sa_family = AF_INET;
 		  if(!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)){
 			lsi->sa_family = AF_INET;
-			LSI4(lsi) = LSI4(eb_p);
+			LSI4(lsi) = ntohl(LSI4(eb_p));
 		  }
 		  (*packet_count)++;
 	} /* end if not multicast */
