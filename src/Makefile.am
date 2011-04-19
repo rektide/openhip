@@ -63,7 +63,7 @@ SRC_USERMODE += mac/hip_mac.c
 endif
 
 INCLUDES = -I./include @libxml2_CFLAGS@
-LDADD = @libxml2_LIBS@ 
+LDADD = @libxml2_LIBS@ -lz -ldl
 
 # SMA craweler support
 if WANT_SMA_CRAWLER

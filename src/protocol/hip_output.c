@@ -81,7 +81,7 @@
  */
 int hip_check_bind(struct sockaddr *src, int num_attempts);
 int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug);
-int build_tlv_transform(__u8 *data, int type, __u16 transforms[], __u16 single);
+int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
 int build_tlv_cert(__u8 *buff);
 int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type);
@@ -1817,7 +1817,7 @@ int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug)
  * Transforms is a pointer to an array of transforms to include.
  * Single is for specifying a single transform to use (i.e., in I2).
  */
-int build_tlv_transform(__u8 *data, int type, __u16 transforms[], __u16 single)
+int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
 {
 	int i, len = 0;
 	tlv_head *tlv;
@@ -1842,7 +1842,7 @@ int build_tlv_transform(__u8 *data, int type, __u16 transforms[], __u16 single)
 		*transform_id = htons(single);
 		len += 2; 
 	} else {
-		for (i=0; (transforms[i] > 0) && (i < SUITE_ID_MAX); i++) {
+		for (i=0; (i < SUITE_ID_MAX) && (transforms[i] > 0); i++) {
 			len += 2;
 			*transform_id = htons(transforms[i]);
 			transform_id++;

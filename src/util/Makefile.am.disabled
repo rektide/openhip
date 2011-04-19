@@ -39,8 +39,9 @@ endif
 
 # IFMAP client library uses Qt build system
 if WANT_SMA_CRAWLER_IFMAP_CFG
+QMAKE_PROG ?= qmake
 all-local:
-	cd cfg-ifmap && qmake -set LIBVERSION $(VERSION) && qmake hipmapcfg.pro && make
+	cd cfg-ifmap && $(QMAKE_PROG) -set LIBVERSION $(VERSION) && $(QMAKE_PROG) hipmapcfg.pro && make
 install-exec-local:
 	test -d "$(DESTDIR)$(libdir)" || mkdir -p "$(DESTDIR)$(libdir)"
 	install cfg-ifmap/libhipmapcfg.so $(DESTDIR)$(libdir)
@@ -51,7 +52,7 @@ uninstall-local:
 	rm -f $(DESTDIR)$(sysconfdir)/bridge_*.sh
 	rm -f $(DESTDIR)$(sysconfdir)/runhip.sh
 clean-local:
-	cd cfg-ifmap && (test -e "Makefile" || qmake hipmapcfg.pro) && make distclean
+	cd cfg-ifmap && (test -e "Makefile" || $(QMAKE_PROG) hipmapcfg.pro) && make distclean
 endif
 
 INCLUDES = -I$(top_srcdir)/src/include @libxml2_CFLAGS@
