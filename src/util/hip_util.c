@@ -1954,8 +1954,12 @@ int validate_hit(hip_hit hit, hi_node *hi)
  *
  * Swap the byte order of an unsigned 64-byte integer; from Ericsson.
  */
+#if defined(__arm__) || defined(__BIG_ENDIAN__)
+#define ntoh64__(k) (k)
+#else
 #define ntoh64__(k) ( (((uint64_t) ntohl( (k) >> 32) ) & 0x00000000ffffffffll) |\
 		    (((uint64_t) ntohl( (k) ) << 32) & 0x00000000ffffffffll) ) 
+#endif
 /*
  * compare_bits()
  *
@@ -1988,10 +1992,8 @@ int compare_bits(const char *s1, int s1_len, const char *s2, int s2_len, int num
 	mask = mask >> (64 - numbits);
 	memcpy(&a, &s1[s1_len-8], 8); /* get the last 8 bytes (64 bits) */
 	memcpy(&b, &s2[s2_len-8], 8);
-	a = ntoh64(a); /* s1, s2 are coming from network */
-	b = ntoh64(b);
-	a &= mask; /* chop off all but numbits bits */
-	b &= mask;
+	a = ntoh64(a) & mask; /* s1, s2 are coming from network */
+	b = ntoh64(b) & mask;
 	return(a != b);
 }
 

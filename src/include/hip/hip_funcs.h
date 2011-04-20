@@ -326,10 +326,9 @@ int  add_proxy_ticket(const __u8 *data);
 /*
  * Miscellaneous
  */
-
 static __inline __u64 __hton64( __u64 i )
 {
-#if defined(__MACOSX__) && defined(__BIG_ENDIAN__)
+#if defined(__BIG_ENDIAN__) || defined(__arm__)
 	return i;
 #endif
 	return ((__u64)(htonl((__u32)(i) & 0xffffffff)) << 32)

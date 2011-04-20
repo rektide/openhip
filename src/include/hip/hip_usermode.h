@@ -137,7 +137,7 @@ struct eth_hdr {
 	__u8 dst[6];
 	__u8 src[6];
 	__u16 type;
-};
+}__attribute__((packed));
 
 /* ARP header - RFC 826, STD 37 */
 struct arp_hdr {
@@ -146,7 +146,7 @@ struct arp_hdr {
 	__u8 ar_hln;
 	__u8 ar_pln;
 	__u16 ar_op;
-};
+}__attribute__((packed));
 
 
 #define ARPOP_REQUEST 1

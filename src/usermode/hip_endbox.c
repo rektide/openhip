@@ -45,7 +45,7 @@
 #include <hip/hip_usermode.h>
 #include <hip/hip_sadb.h>
 
-#if defined(__BIG_ENDIAN__) || defined( __MACOSX__)
+#if defined(__BIG_ENDIAN__) && defined( __MACOSX__)
 #include <mac/checksum_mac.h>
 #else
 #include <win32/checksum.h>

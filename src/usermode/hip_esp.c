@@ -57,7 +57,7 @@
 #include <hip/hip_usermode.h>
 #include <hip/hip_sadb.h>
 
-#if defined(__BIG_ENDIAN__) || defined( __MACOSX__)
+#if defined(__BIG_ENDIAN__) && defined( __MACOSX__)
 #include <mac/checksum_mac.h>
 #else
 #include <win32/checksum.h>
@@ -280,7 +280,7 @@ void *hip_esp_output(void *arg)
 #else /* SMA_CRAWLER */
 
 			if (((iph->ip_v) == IPVERSION) &&
-#if defined(__MACOSX__) && defined(__BIG_ENDIAN__)
+#if defined(__BIG_ENDIAN__) || defined(__arm__)
 			    (iph->ip_dst.s_addr >> 24 & 0xFF)!=0x01)
 #else /* BIG_ENDIAN */
 			    (iph->ip_dst.s_addr & 0xFF)!=0x01)
