@@ -357,12 +357,17 @@ int read_peer_identities_from_hipcfg()
 		for (l = &hi->addrs; l; l = l->next)
 			log_(NORM, "%s ",
 			   logaddr((struct sockaddr*)&l->addr));
-		log_(NORM, "]\n");
+		log_(NORM, "] ");
 
 		hi->rvs = np->rvs;
 
-		/* link this HI into a global list */
-		append_hi_node(&peer_hi_head, hi);
+		if (!find_host_identity(peer_hi_head, hi->hit)) {
+			/* link this HI into a global list */
+			append_hi_node(&peer_hi_head, hi);
+			log_(NORM, "appended\n");
+		} else {
+			log_(NORM, "already in global table\n");
+		}
 	}
 
 	add_addresses_from_dns(NULL, NULL);

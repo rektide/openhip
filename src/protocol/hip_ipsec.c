@@ -1571,6 +1571,14 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 		 * those cached from HIP DNS lookups)
 		 */
 		peer_hi = lsi_lookup(lsi);
+#ifdef SMA_CRAWLER
+		if (!peer_hi) {
+			log_(NORM, "peer HI not found, "
+			    "reloading from hipcfg\n");
+			read_peer_identities_from_hipcfg();		        
+			peer_hi = lsi_lookup(lsi);
+		}
+#endif /* SMA_CRAWLER */
 		if (!peer_hi || hits_equal(peer_hi->hit, zero_hit)) {
 			/* Peer doesn't exist locally or has an empty HIT.
 			 * TODO: perform DHT lookup to retrieve HIT and adopt
@@ -1613,8 +1621,10 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 			
 	}
 
-	if (!peer_hi) /* should not be reached */
+	if (!peer_hi) { /* should not be reached */
+		log_(WARN, "peer_hi is still null!!!!!!!!!!!!!!!!!\n");
 		return(-1);
+	}
 
 	/* 
 	 * Look for peer's destination address from:

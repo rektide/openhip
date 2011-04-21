@@ -375,6 +375,14 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 		
 		/* Find peer HIT */
 		peer_host_id = find_host_identity(peer_hi_head, hiti);
+#ifdef SMA_CRAWLER
+		if (!peer_host_id && hipcfg_allowed_peers(hiti, hitr)) {
+			log_(NORMT,"Accepted an allowed peer "
+			    "Endbox HIT in I1\n");
+			/* Read in initiator's HIT to table */
+			add_peer_hit(hiti, src);
+		} else 
+#endif
 		if (!peer_host_id) {
 			/* could be opportunistic */
 			if (!OPT.allow_any) {
