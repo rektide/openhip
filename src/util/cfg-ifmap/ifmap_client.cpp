@@ -72,12 +72,28 @@ void IfmapClient::connectToMap(QMap<QString, QString> *mapConfig)
     if (_mapConfig.contains("map_server_ca_file")) {
         _ifmap->addCACertificate(_mapConfig.value("map_server_ca_file"));
     }
-    if (_mapConfig.contains("map_certificate_file")) {
-        // Better contain "map_private_key_file" also
+
+    if (_mapConfig.contains("map_certificate_file") && _mapConfig.contains("map_private_key_file")) {
+	QFile certFile(_mapConfig.value("map_certificate_file"));
+	certFile.open(QIODevice::ReadOnly);
+        QSslCertificate clientCert(&certFile, QSsl::Pem);
+
+	QByteArray pass;
+	if (_mapConfig.contains("map_private_key_passwd")) {
+	    pass = _mapConfig.value("map_private_key_passwd").toLatin1();
+	}
+
+	QFile keyFile(_mapConfig.value("map_private_key_file"));
+        keyFile.open(QIODevice::ReadOnly);
+        QSslKey clientKey(&keyFile, QSsl::Rsa, QSsl::Pem, QSsl::PrivateKey, pass);
+
+	_ifmap->setClientCertAndKey(clientCert, clientKey);
     }
+
     if (_mapConfig.contains("map_http_username") && _mapConfig.contains("map_http_password")) {
         _ifmap->setUser(_mapConfig.value("map_http_username"), _mapConfig.value("map_http_password"));
     }
+
     if (_mapConfig.contains("map_proxy_server")) {
         if (_mapConfig.contains("map_proxy_port")) {
             _ifmap->setProxy(_mapConfig.value("map_proxy_server"), _mapConfig.value("map_proxy_port").toUInt());
