@@ -461,7 +461,7 @@ struct peer_node
   char allow_incoming;
   char skip_addrcheck;
   char name[MAX_HI_NAMESIZE];
-  struct sockaddr_storage rvs;
+  struct _sockaddr_list **rvs_addrs;
 };
 #endif /* SMA_CRAWLER */
 

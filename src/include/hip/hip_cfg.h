@@ -84,6 +84,7 @@ protected:
   int mkHIfromPkey(RSA *rsa, DSA *dsa,  hi_node *hostid);
   int getEndboxMapsFromLocalFile();
   int locate_config_file(char *filename, int filename_size, const char *default_name);
+  sockaddr_list *add_address_to_list(sockaddr_list **list, struct sockaddr *addr, int ifi);
 
 protected:
   map <string, string> _legacyNode2EndboxMap;

@@ -706,6 +706,40 @@ int hipCfg::locate_config_file(char *filename, int filename_size, const char *de
 	return(-1);
 }
 
+sockaddr_list * hipCfg::add_address_to_list(sockaddr_list **list, struct sockaddr *addr, int ifi)
+{
+  sockaddr_list *item, *new_item, *last_item;
+ 
+  /* make a new sockaddr_list element */
+  new_item = (sockaddr_list*) malloc(sizeof(sockaddr_list));
+  if (!new_item) 
+    return NULL;
+  memset(new_item, 0, sizeof(sockaddr_list));
+  memcpy(&new_item->addr, addr, SALEN(addr));
+  new_item->if_index = ifi;
+  new_item->status = UNVERIFIED;
+  new_item->next = NULL;
+
+  /* append element to list */
+  if (*list) {
+    for(item = *list; item; item = item->next) {
+      /* check if new_item already exists */
+      if ((item->if_index == new_item->if_index) &&
+          (item->addr.ss_family == new_item->addr.ss_family)
+          && (!memcmp(SA2IP(&item->addr),
+         SA2IP(&new_item->addr), SAIPLEN(addr)))) {
+        free(new_item);
+        return(item);
+      }
+      last_item = item; 
+    } 
+    last_item->next = new_item;
+  } else {
+    *list = new_item;
+  }
+  return(new_item);
+}
+
 int hipCfg::getEndboxMapsFromLocalFile()
 {
   string hit_s, underlayIp_s, hit1_s, hit2_s;
@@ -809,7 +843,7 @@ int hipCfg::getEndboxMapsFromLocalFile()
 	   memset(addr, 0, sizeof(struct sockaddr_storage));
 	   addr->sa_family = ((strchr(data, ':')==NULL)?AF_INET:AF_INET6);
 	   if (str_to_addr(data, addr) > 0)
-	      memcpy(&p->rvs, addr, SALEN(addr));
+	      add_address_to_list(p->rvs_addrs, addr, 0);
 	   else
 	      cout<<"Waring parsing known host id - not a valid address "<<data<<endl;
 	   

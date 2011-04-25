@@ -359,7 +359,9 @@ int read_peer_identities_from_hipcfg()
 			   logaddr((struct sockaddr*)&l->addr));
 		log_(NORM, "] ");
 
-		hi->rvs = np->rvs;
+		for(l = *(np->rvs_addrs); l != NULL; l = l->next) {
+			add_address_to_list(hi->rvs_addrs, SA(&l->addr), 0);
+		}
 
 		if (!find_host_identity(peer_hi_head, hi->hit)) {
 			/* link this HI into a global list */
@@ -527,7 +529,7 @@ void print_hi_to_buff(uint8_t **bufp, int *buf_len, hi_node *hi, int mine)
 		pthread_mutex_lock(&hi->addrs_mutex);
 		for (l = &hi->addrs; l; l = l->next) {
 			if (!VALID_FAM(SA(&l->addr)))
-				continue;
+			    continue;
 			addr_to_str(SA(&l->addr), addr_str, INET6_ADDRSTRLEN);
 			i += snprintf(&tmp[i], sizeof(tmp)-i, "%s ", addr_str);
 		}

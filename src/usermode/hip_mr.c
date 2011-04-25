@@ -44,6 +44,16 @@
 #include <win32/checksum.h> 	/* ip_fast_csum() */
 #include <linux/netfilter.h>    /* NF_DROP */
 
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 25)
+#include <linux/netfilter_ipv4.h>    /* NF_IP_PRE_ROUTING, etc. */
+#define NF_INET_PRE_ROUTING  NF_IP_PRE_ROUTING
+#define NF_INET_LOCAL_IN     NF_IP_LOCAL_IN
+#define NF_INET_FORWARD      NF_IP_FORWARD
+#define NF_INET_LOCAL_OUT    NF_IP_LOCAL_OUT
+#define NF_INET_POST_ROUTING NF_IP_POST_ROUTING
+#endif
+
 #define BUFSIZE 2048
 #define MR_TIMEOUT_US 500000 /* microsecond timeout for mobile_router select()*/
 #define MAX_MR_CLIENTS MAX_CONNECTIONS
@@ -676,7 +686,7 @@ void mr_process_update(hip_mr_client *hip_mr_c, int family,
 				addr = SA(&spi_nats->peer_ipv4_addr);
 				addr->sa_family = AF_INET;
 				memcpy(SA2IP(addr), p_addr + 12, SAIPLEN(addr));
-				if (IN_MULTICAST(SA2IP(addr)))
+				if (IN_MULTICAST(*(SA2IP(addr))))
 					memset(addr, 0, sizeof(struct sockaddr_storage));
 				if (((struct sockaddr_in*)addr)->sin_addr.s_addr == INADDR_BROADCAST)
 					memset(addr, 0, sizeof(struct sockaddr_storage));
