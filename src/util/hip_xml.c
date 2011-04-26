@@ -359,8 +359,11 @@ int read_peer_identities_from_hipcfg()
 			   logaddr((struct sockaddr*)&l->addr));
 		log_(NORM, "] ");
 
-		for(l = *(np->rvs_addrs); l != NULL; l = l->next) {
-			add_address_to_list(hi->rvs_addrs, SA(&l->addr), 0);
+		if (np->rvs_addrs) {
+			for(l = *(np->rvs_addrs); l != NULL; l = l->next) {
+				add_address_to_list(hi->rvs_addrs, SA(&l->addr),
+					0);
+			}
 		}
 
 		if (!find_host_identity(peer_hi_head, hi->hit)) {
