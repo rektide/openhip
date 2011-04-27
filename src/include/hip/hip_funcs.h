@@ -363,6 +363,9 @@ static __inline int gettimeofday(struct timeval *tv, void *tz)
 #else
 #define closesocket close
 #endif /* __WIN32__ */
+#ifdef __MACOSX__
+#define strnlen(s, l) strlen(s)
+#endif /* __MACOSX__ */
 
 #endif 
 
