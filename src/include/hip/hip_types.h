@@ -845,6 +845,7 @@ struct hip_conf {
 	__u8  disable_udp;		/* T/F disable sending HIP over UDP */
 	__u8  enable_bcast;		/* T/F unicast packets from bcast LSI */
         char *master_interface;
+        char *master_interface2;
 	struct sockaddr_storage preferred; /* preferred address */
 	char *preferred_iface;		/* preferred interface name */
 	struct name *outbound_ifaces;	/* if mobile router */

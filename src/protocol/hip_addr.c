@@ -332,7 +332,7 @@ int select_preferred_address()
 	sockaddr_list *l;
 	__u32 ip;
 #ifdef SMA_CRAWLER
-       int ifindex;
+	int ifindex1, ifindex2;
 #endif
 #ifndef USE_LINUX_NETLINK
 	/* This is the Windows version that reads from the Windows registry */
@@ -438,8 +438,15 @@ int select_preferred_address()
 	/* Linux version */
 	/* XXX TODO: dump routing table and choose addr w/default route. */
 #ifdef SMA_CRAWLER
-       log_(NORM,"crawler master interface = %s\n",HCNF.master_interface);
-       ifindex = if_nametoindex(HCNF.master_interface);
+	log_(NORM,"crawler primary master interface = %s\n",
+		HCNF.master_interface);
+	log_(NORM,"crawler secondary master interface = %s\n",
+		HCNF.master_interface2);
+	ifindex1 = ifindex2 = -1;
+	if (HCNF.master_interface)
+		ifindex1 = if_nametoindex(HCNF.master_interface);
+	if (HCNF.master_interface2)
+		ifindex2 = if_nametoindex(HCNF.master_interface2);
 #endif
 	preferred_selected = FALSE;
 #endif /* USE_LINUX_NELINK */
@@ -489,7 +496,8 @@ int select_preferred_address()
 			if (IN_LOOP(&l->addr))
 				continue;
 #ifdef SMA_CRAWLER
-			if(l->if_index != ifindex) /* not on master interface */
+			/* Not on primary master interface */
+			if (l->if_index != ifindex1)
 				continue;
 #endif
 			ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
@@ -502,6 +510,32 @@ int select_preferred_address()
 			break;
 		}
 	}
+
+#ifdef SMA_CRAWLER
+	/* Did not find an address on the primary master interface */
+	if (!preferred_selected && !l) {
+		for (l = my_addr_head; l; l=l->next) {
+			/* apply few criteria */
+			if (l->addr.ss_family != AF_INET)
+				continue;
+			if (IN_LOOP(&l->addr))
+				continue;
+
+			/* Not on secondary master interface */
+			if (l->if_index != ifindex2)
+				continue;
+
+			ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
+			/* LSI or autoconf addr */
+			if ((IS_LSI32(ip)) || ((ip & 0xFFFF) == 0xFEA9))
+				continue;
+			l->preferred = TRUE;
+			log_(NORM, "%s selected as the ",logaddr(SA(&l->addr)));
+			log_(NORM, "preferred address (first in list).\n");
+			break;
+		}
+	}
+#endif
 
 	return(0);
 }
@@ -1001,7 +1035,7 @@ void print_addr_list(sockaddr_list *list)
 {
 	sockaddr_list *l;
 	log_(NORM, "Address list: [");
-	for (l = my_addr_head; l; l=l->next) {
+	for (l = list; l; l=l->next) {
 		log_(NORM, "(%d)%s, ", l->if_index,
 		    logaddr((struct sockaddr*)&l->addr));
 	}
@@ -1257,6 +1291,9 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 {
 	sockaddr_list *list, *l;
 	struct sockaddr *oldaddr;
+#ifdef SMA_CRAWLER
+	int ifindex1, ifindex2;
+#endif
 
 	/* 
 	 * If preferred address is deleted, do readdress and replace it
@@ -1287,11 +1324,25 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 							htons(HIP_UDP_PORT);
 			/* TODO: IPv6 UDP support here */
 		}
-		/* this function checks if the address already exists */
 		list = &hip_a->hi->addrs;
-		l = add_address_to_list(&list, newaddr, if_index);
-		make_address_active(l);
-
+#ifdef SMA_CRAWLER
+		/* If the new address is on master_interface and it is not
+		 * the current interface, switch to the new address */
+		ifindex1 = ifindex2 = -1;
+		if (HCNF.master_interface)
+			ifindex1 = if_nametoindex(HCNF.master_interface);
+		if (HCNF.master_interface2)
+			ifindex2 = if_nametoindex(HCNF.master_interface2);
+		if (if_index == ifindex1 && list->if_index == ifindex2) {
+			readdress_association(hip_a, newaddr, if_index);
+		} else {
+#endif
+		/* this function checks if the address already exists */
+			l = add_address_to_list(&list, newaddr, if_index);
+			make_address_active(l);
+#ifdef SMA_CRAWLER
+		}
+#endif
 	}
 }
 
@@ -1470,3 +1521,4 @@ int add_other_addresses_to_hi(hi_node *hi, int mine)
 	}
 	return(0);
 }
+

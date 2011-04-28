@@ -814,6 +814,8 @@ int read_conf_file(char *filename)
 #ifdef SMA_CRAWLER
                } else if (strcmp((char *)node->name, "master_interface")==0) {
                        HCNF.master_interface = strdup(data);
+               } else if (strcmp((char *)node->name, "master_interface2")==0) {
+                       HCNF.master_interface2 = strdup(data);
 #endif
 		} else if (strcmp((char *)node->name, "dh_lifetime")==0) {
 			sscanf(data, "%d", &HCNF.dh_lifetime);

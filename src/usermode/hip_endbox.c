@@ -242,7 +242,7 @@ int ack_request(__u32 src, __u32 dst)
 	rc = hipcfg_getEndboxByLegacyNode(host_p, eb_p);
 	if(rc){
 		addr_to_str(host_p, (__u8 *)ip, INET6_ADDRSTRLEN);
-		log_(WARN, "invalid source addr in arp %s", ip);
+		log_(NORM, "invalid source addr in arp %s\n", ip);
 		return 0;
 	}
 
@@ -254,7 +254,7 @@ int ack_request(__u32 src, __u32 dst)
 	rc = hipcfg_getEndboxByLegacyNode(host_p, eb_p);
 	if(rc){
 		addr_to_str(host_p, (__u8 *)ip, INET6_ADDRSTRLEN);
-		log_(WARN, "invalid dest addr in arp %s", ip);
+		log_(NORM, "invalid dest addr in arp %s\n", ip);
 		return 0;
 	}
 	memcpy(hit2, SA2IP(eb_p), HIT_SIZE);
