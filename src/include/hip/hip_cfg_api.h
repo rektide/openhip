@@ -41,6 +41,21 @@ extern int (*hipcfg_peers_allowed_p)(hip_hit *hits1, hip_hit *hits2, int max_cnt
 extern int hipcfg_peers_allowed(hip_hit *hits1, hip_hit *hits2, int max_cnt);
 
 
+/* Set the Endbox Underlay IP Address
+ * Input: ip - the current Underlay IP address of the endbox
+ *             the sockaddr should point to a sockaddr_storage structure so that
+ *             either an IPv4 or IPv6 address can be passed in. The sa_family must
+ *             be set to AF_INET for an IPv4 address, or AF_INET6 for an IPv6 address.
+ *
+ * Output: none
+ *
+ * Return: 0 on success, -1 on error
+ */
+#define hipcfg_setUnderlayIpAddress_fn "hipcfg_setUnderlayIpAddress"
+extern int (*hipcfg_setUnderlayIpAddress_p)(const char *ip);
+extern int hipcfg_setUnderlayIpAddress(const char *ip);
+
+
 /* Input: host - the legacy host IPv4/IPv6 address
  *               the sockaddr should point to a sockaddr_storage structure so that
  *               either an IPv4 or IPv6 address can be passed in. The sa_family must

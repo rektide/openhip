@@ -38,6 +38,8 @@ public:
   int closeCfg();
   int postLocalCert(const char *hit);
   int verifyCert(const char *url, const hip_hit hit);
+  int setUnderlayIpAddress(const char *ip);
+
   static hipCfgMap *getInstance();
 
   // Used by ifmap_client to get results back to this thread
@@ -68,6 +70,7 @@ private:
 signals:
   void connectToMap(QMap<QString,QString> *mapConfig);
   void publishCert(QString cert);
+  void setUnderlayIp(QString ip);
 
 private:
   static hipCfgMap *_instance;

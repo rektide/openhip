@@ -76,6 +76,12 @@ int hipcfg_peers_allowed(hip_hit *hits1, hip_hit *hits2, int max_cnt)
   return hs->peers_allowed(hits1, hits2, max_cnt);
 }
 
+int hipcfg_setUnderlayIpAddress(const char *ip)
+{
+  hipCfg *hs=hipCfgMap::getInstance();
+  return hs->setUnderlayIpAddress(ip);
+}
+
 int hipcfg_getEndboxByLegacyNode(const struct sockaddr *host, struct sockaddr *eb)
 {
   int rc=0;
@@ -415,14 +421,6 @@ int hipCfgMap::loadCfg(struct hip_conf *hc)
 	}
     }
 
-    // Get my <master_interface> setting
-    if (_hcfg->master_interface) {
-        _mapConfig.insert("underlay_interface", QString(_hcfg->master_interface));
-        qDebug() << fnName << "Got underlay_interface:" << _mapConfig.value("underlay_interface");
-    } else {
-	cerr << fnName << "No <master_interface> specified!!!" << endl;
-    }
-
     // Setup signal-slot connections:
     bool connected = false;
     while ( !connected ) {
@@ -431,6 +429,14 @@ int hipCfgMap::loadCfg(struct hip_conf *hc)
 
         connected = connect(this, SIGNAL(connectToMap(QMap<QString,QString> *)),
                 (QObject *)_ifmapThread->_client, SLOT(connectToMap(QMap<QString,QString> *)));
+    }
+
+    // Now that thread is up, other connections should be made instantly
+    connected = connect(this, SIGNAL(setUnderlayIp(QString)),
+    		(QObject *)_ifmapThread->_client, SLOT(setUnderlayIp(QString)));
+    if (!connected) {
+        qDebug() << fnName << "Error: Could not connect setUnderlayIp signal/slot";
+	return -1;
     }
 
     // connectToMap asynchronously
@@ -597,6 +603,17 @@ int hipCfgMap::getCertDN()
    */
 
    return 0;
+}
+
+// Publish Current Underlay IP Address
+int hipCfgMap::setUnderlayIpAddress(const char *ip)
+{
+  const char *fnName = "hipCfgMap::setUnderlayIpAddress: ";
+
+  cout << fnName << "Will publish current ip" << endl;
+  emit setUnderlayIp(ip);
+
+  return 0;
 }
 
 void hipCfgMap::updateMaps(string myDN,

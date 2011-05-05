@@ -80,6 +80,7 @@
 #include <hip/hip_funcs.h>
 
 #ifdef SMA_CRAWLER
+#include <hip/hip_cfg_api.h>
 /* From /usr/include/net/if.h - added just this line because of conflicts
  * with /usr/include/linux/if.h
  */
@@ -507,6 +508,10 @@ int select_preferred_address()
 			l->preferred = TRUE;
 			log_(NORM, "%s selected as the ",logaddr(SA(&l->addr)));
 			log_(NORM, "preferred address (first in list).\n");
+
+		        // Test publish IP of master interface
+		        hipcfg_setUnderlayIpAddress(logaddr(SA(&l->addr)));
+
 			break;
 		}
 	}

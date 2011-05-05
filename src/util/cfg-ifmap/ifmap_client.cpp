@@ -104,10 +104,10 @@ void IfmapClient::connectToMap(QMap<QString, QString> *mapConfig)
 
     if (_mapConfig.contains("map_server_vendor") &&
         _mapConfig.value("map_server_vendor").compare("infoblox") == 0) {
-        // Note that at least in Stu's server max-depth of 1 means 2 links away
+        // Note that at least in Stu's test server max-depth of 1 means 2 links away
         _maxDepth = 1;
     } else {
-        // But in omapd and juniper max-depth of 2 means 2 links away
+        // But in omapd and juniper and Infoblox IBOS max-depth of 2 means 2 links away
         _maxDepth = 2;
     }
 
@@ -186,9 +186,8 @@ bool IfmapClient::publishCurrentState()
     PublishRequest pub(&dnhitLink, &dnhitMeta);
 
     // IP Addr
-    QString myIp = this->interfaceAddr();
-    if (! myIp.isEmpty()) {
-        IpAddressId ipId(Identifier::IPv4, myIp);
+    if (! _currentIp.isEmpty()) {
+        IpAddressId ipId(Identifier::IPv4, _currentIp);
         Link dnipLink(&ipId, &dnId);
         Metadata dnipMeta("underlay-ip", _scadaNS);
         pub.addToRequest(&dnipLink, &dnipMeta);
@@ -208,6 +207,44 @@ bool IfmapClient::publishCurrentState()
     }
 
     return rc;
+}
+
+void IfmapClient::setUnderlayIp(QString ip)
+{
+    // Save passed in ip locally
+    _currentIp = ip;
+
+    if (_haveValidSession) {
+	// Start a zero-length timer to get this call into this thread's event queue
+	QTimer::singleShot(0, this, SLOT(publishUnderlayIp()));
+    }
+}
+
+void IfmapClient::publishUnderlayIp()
+{
+    const char *fnName = "IfmapClient::publishUnderlayIp:";
+
+    if (_currentIp.isEmpty()) {
+        qDebug() << fnName << "Underlay IP string is empty!";
+	return;
+    }
+	
+    IdentityId dnId(Identifier::IdentityDistinguishedName, _mapConfig.value("DistinguishedName"));
+    IpAddressId ipId(Identifier::IPv4, _currentIp);
+    Link ipDnLink(&ipId, &dnId);
+    Metadata ipDnMeta("underlay-ip", _scadaNS);
+
+    PublishRequest pub(&ipDnLink, &ipDnMeta);
+    MapResponse *mapResponse = _ifmap->submitRequest(&pub);
+
+    if (mapResponse->type() == MapResponse::PublishResponse) {
+        qDebug() << fnName << "Successfully published underlay-ip link:" << _currentIp;
+	_currentIp = QString();
+    } else {
+        qDebug() << fnName << "Got unexpected response:" << mapResponse->typeString();
+	// Restart MAP Client session and re-publish everything
+	QTimer::singleShot(_retryDelay, this, SLOT(newSession()));
+    }
 }
 
 bool IfmapClient::setupEndboxMapSubscriptions()
@@ -377,6 +414,7 @@ void IfmapClient::updateEndboxMapping(SearchResult *searchResult)
 		qDebug() << fnName << "Got underlay ip<-->dn link:" 
 			 << ip->value() << "<-->" << dn->name();
 
+                // Note that only a single underlay ip will be possible with this pairing.
                 newPeerDN_ULIPs.insert(std::make_pair(sdn,sip));
 	    }
 

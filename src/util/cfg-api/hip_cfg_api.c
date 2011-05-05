@@ -17,6 +17,8 @@ int (*hipcfg_getLlipByEndbox_p)(const struct sockaddr *eb, struct sockaddr *llip
 
 int (*hipcfg_getLegacyNodesByEndbox_p)(const struct sockaddr *eb, struct sockaddr_storage *hosts, int size) = NULL;
 
+int (*hipcfg_setUnderlayIpAddress_p)(const char *ip);
+
 int (*hipcfg_verifyCert_p)(const char *url, const hip_hit hit) = NULL;
 int (*hipcfg_getLocalCertUrl_p)(char *url, unsigned int size) = NULL;
 int (*hipcfg_postLocalCert_p)(const char *hit) = NULL;
@@ -48,6 +50,14 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
    return -1;
   }
   printf("loading %s succeed.\n", hipcfg_close_fn);
+
+  hipcfg_setUnderlayIpAddress_p=dlsym(module, hipcfg_setUnderlayIpAddress_fn);
+  if (hipcfg_setUnderlayIpAddress_p==NULL)
+  {
+   fprintf(stderr, "error loading function %s: %s\n", hipcfg_setUnderlayIpAddress_fn, dlerror());
+   return -1;
+  }
+  printf("loading %s succeed.\n", hipcfg_setUnderlayIpAddress_fn);
 
   hipcfg_allowed_peers_p = dlsym(module, hipcfg_allowed_peers_fn);
   if(hipcfg_allowed_peers_p==NULL)
@@ -137,6 +147,15 @@ int hipcfg_close()
     return 0;
   }
   return (*hipcfg_close_p)();
+}
+
+int hipcfg_setUnderlayIpAddress(const char *ip)
+{
+  if(hipcfg_setUnderlayIpAddress_p==NULL){
+    fprintf(stderr, "%s not initialized\n", hipcfg_setUnderlayIpAddress_fn);
+    return 0;
+  }
+  return (*hipcfg_setUnderlayIpAddress_p)(ip);
 }
 
 int hipcfg_allowed_peers(const hip_hit hit1, const hip_hit hit2)

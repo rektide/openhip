@@ -36,10 +36,12 @@ public:
 
 public slots:
     void connectToMap(QMap<QString,QString> *mapConfig);
+    void setUnderlayIp(QString ip);
 
 private slots:
     void newSession();
     void mapResponseOnARC(MapResponse *mapResponse);
+    void publishUnderlayIp();
 
 private:
     void updateEndboxMapping(SearchResult *searchResult);
@@ -54,6 +56,7 @@ private:
     bool _haveValidSession;
     QString _sessionId;
     QString _publisherId;
+    QString _currentIp;
 
     QString _scadaNS;
 

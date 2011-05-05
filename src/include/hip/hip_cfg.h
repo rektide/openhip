@@ -55,6 +55,10 @@ public:
   virtual ~hipCfg(){};
   int hit_peer_allowed(const hip_hit hit1, const hip_hit hit2);
   int peers_allowed(hip_hit *hits1, hip_hit *hits2, int max_cnt);
+
+  // called by hipcfg_setUnderlayIpAddress
+  virtual int setUnderlayIpAddress(const char *ip) = 0;
+
   int legacyNodeToEndbox(const struct sockaddr *host, struct sockaddr *eb);
   int endbox2Llip(const struct sockaddr *eb, struct sockaddr *llip);
   int getLegacyNodesByEndbox(const struct sockaddr *eb,
