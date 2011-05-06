@@ -111,14 +111,12 @@ void IfmapClient::connectToMap(QMap<QString, QString> *mapConfig)
         _maxDepth = 2;
     }
 
-    /*
+    this->newSession();
+
     // Return from "synchronous" call
     mapMutex.lock();
     mapWaitCond.wakeAll();
     mapMutex.unlock();
-    */
-
-    this->newSession();
 }
 
 void IfmapClient::newSession()

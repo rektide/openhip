@@ -439,19 +439,20 @@ int hipCfgMap::loadCfg(struct hip_conf *hc)
 	return -1;
     }
 
+    /*
     // connectToMap asynchronously
     qDebug() << fnName << "About to emit connectToMap";
     emit connectToMap(&_mapConfig);
     sleep(20);
-    qDebug() << fnName << "About to exit loadCfg";
-    /*
+    */
+
     // Make connectToMap act like a synchronous call
     mapMutex.lock();
     emit connectToMap(&_mapConfig);
     mapWaitCond.wait(&mapMutex);
     mapMutex.unlock();
-    */
 
+    qDebug() << fnName << "About to exit loadCfg";
     return 0;
 }
 
