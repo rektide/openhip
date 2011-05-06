@@ -509,9 +509,10 @@ int select_preferred_address()
 			log_(NORM, "%s selected as the ",logaddr(SA(&l->addr)));
 			log_(NORM, "preferred address (first in list).\n");
 
-		        // Test publish IP of master interface
+#ifdef SMA_CRAWLER
+		        /* Test publish IP of master interface */
 		        hipcfg_setUnderlayIpAddress(logaddr(SA(&l->addr)));
-
+#endif
 			break;
 		}
 	}

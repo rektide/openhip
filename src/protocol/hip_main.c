@@ -784,9 +784,9 @@ int main_loop(int argc, char **argv)
 				}
 #ifndef __MACOSX__
 #ifndef __WIN32__
-		    		/* retrieve ICMP message before looping */ 
-		    		flags = MSG_ERRQUEUE;
-		    		length = recvmsg(s6_hip, &msg, flags);
+				/* retrieve ICMP message before looping */ 
+				flags = MSG_ERRQUEUE;
+				length = recvmsg(s6_hip, &msg, flags);
 				/*
 				 * Presently, we do not do anything
 				 * with ICMP messages
@@ -1270,7 +1270,7 @@ void hip_handle_state_timeouts(struct timeval *time1)
 			 * If a pending rekey has been completely ACKed and
 			 * a NES has been received, we can finish the rekey.
 			 */
-			if ((hip_a->rekey) && (hip_a->rekey->acked) &&
+			if ((hip_a->rekey) && (!hip_a->rekey->need_ack) &&
 			    (hip_a->peer_rekey) &&
 			    (hip_a->peer_rekey->new_spi > 0))	{
 				hip_finish_rekey(hip_a, TRUE);
@@ -1431,7 +1431,7 @@ void hip_handle_locator_state_timeouts(hip_assoc *hip_a, struct timeval *time1)
 		hip_a->rekey = malloc(sizeof(struct rekey_info));
 		memset(hip_a->rekey, 0, sizeof(struct rekey_info));
 		hip_a->rekey->update_id = hip_a->hi->update_id++;
-		hip_a->rekey->acked = FALSE;
+		hip_a->rekey->need_ack = TRUE;
 		hip_a->rekey->rk_time.tv_sec = time1->tv_sec;
 		RAND_bytes((__u8*)&nonce, sizeof(__u32));
 		l->nonce = nonce;

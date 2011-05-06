@@ -968,7 +968,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 	 * hip_a->rekey; also, rekey->keymat_index should be set.
 	 */
 	if (newaddr ||
-	    (hip_a->rekey && hip_a->rekey->new_spi && !hip_a->rekey->acked)) {
+	    (hip_a->rekey && hip_a->rekey->new_spi && hip_a->rekey->need_ack)) {
 		/* ESP_INFO */
 		esp_info = (tlv_esp_info*) &buff[location];
 		esp_info->type = htons(PARAM_ESP_INFO);
@@ -1026,7 +1026,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		location = eight_byte_align(location);
 	}
 
-	if (hip_a->rekey && !hip_a->rekey->acked) {	
+	if (hip_a->rekey && hip_a->rekey->need_ack) {	
 		/* SEQ */
 		seq = (tlv_seq*) &buff[location];
 		seq->type = htons(PARAM_SEQ);
@@ -1045,12 +1045,12 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 	 * Add an ACK parameter when there is an unacknowledged
 	 * update_id in hip_a->peer_rekey
 	 */
-	if (hip_a->peer_rekey && !hip_a->peer_rekey->acked) {
+	if (hip_a->peer_rekey && hip_a->peer_rekey->need_ack) {
 		ack = (tlv_ack*)  &buff[location];
 		ack->type = htons(PARAM_ACK);
 		ack->length = htons(sizeof(tlv_ack) - 4);
 		ack->peer_update_id = htonl(hip_a->peer_rekey->update_id);
-		hip_a->peer_rekey->acked = TRUE;
+		hip_a->peer_rekey->need_ack = FALSE;
 		location += sizeof(tlv_ack);
 		location = eight_byte_align(location);
 	}
@@ -2357,7 +2357,7 @@ int build_rekey(hip_assoc *hip_a)
 
 	gettimeofday(&hip_a->rekey->rk_time, NULL);
 	hip_a->rekey->new_spi = get_next_spi(hip_a);
-	hip_a->rekey->acked = FALSE;
+	hip_a->rekey->need_ack = TRUE;
 	hip_a->rekey->update_id = hip_a->hi->update_id++;
 
 	return(0);

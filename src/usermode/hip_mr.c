@@ -1294,11 +1294,11 @@ void *hip_mobile_router(void *arg)
 	system("iptables -t mangle -A PREROUTING -p 50 -j QUEUE");
 	system("iptables -t mangle -A PREROUTING -p 139 -j QUEUE");
 	system("iptables -t mangle -A POSTROUTING -p 50 -j QUEUE");
-	system("iptables -t mangle -A POSTROUTING -p 50 -j QUEUE");
+	system("iptables -t mangle -A POSTROUTING -p 139 -j QUEUE");
 	system("ip6tables -t mangle -A PREROUTING -p 50 -j QUEUE");
 	system("ip6tables -t mangle -A PREROUTING -p 139 -j QUEUE");
 	system("ip6tables -t mangle -A POSTROUTING -p 50 -j QUEUE");
-	system("ip6tables -t mangle -A POSTROUTING -p 50 -j QUEUE");
+	system("ip6tables -t mangle -A POSTROUTING -p 139 -j QUEUE");
 
 	printf("Mobile router initialized.\n");
 	fflush(stdout);

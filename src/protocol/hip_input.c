@@ -1897,7 +1897,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 			}
 		} else if (type == PARAM_SEQ) {
 			rk->update_id = ntohl(((tlv_seq*)tlv)->update_id);
-			rk->acked = FALSE;
+			rk->need_ack = TRUE;
 			if (rk->update_id < hip_a->peer_hi->update_id) {
 				log_(WARN, "Received Update ID is smaller ");
 				log_(NORM, "than stored Update ID.\n");
@@ -1911,7 +1911,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 			hip_a->peer_hi->update_id = rk->update_id;
 		} else if (type == PARAM_ACK) {
 			if (handle_acks(hip_a, (tlv_ack*)tlv))
-				hip_a->rekey->acked = TRUE;
+				hip_a->rekey->need_ack = FALSE;
 		} else if (type == PARAM_DIFFIE_HELLMAN) {
 			if (rk->keymat_index != 0) {
 				log_(WARN, "Diffie-Hellman found in UPDATE, ");
@@ -2155,7 +2155,7 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 	/* 
 	 * Generate a new UPDATE because of ACK?
 	 */
-	if (hip_a->peer_rekey && !hip_a->peer_rekey->acked)
+	if (hip_a->peer_rekey && hip_a->peer_rekey->need_ack)
 		need_to_send_update = TRUE;
 
 	/* 
@@ -2231,12 +2231,12 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 	/*
 	 * cleanup unused structures 
 	 */
-	if ((hip_a->rekey) && hip_a->rekey->acked &&
+	if ((hip_a->rekey) && !hip_a->rekey->need_ack &&
 	    !hip_a->rekey->new_spi && !hip_a->rekey->dh) {
 		free(hip_a->rekey);
 		hip_a->rekey = NULL;
 	}
-	if ((hip_a->peer_rekey) && hip_a->peer_rekey->acked &&
+	if ((hip_a->peer_rekey) && !hip_a->peer_rekey->need_ack &&
 	    !hip_a->peer_rekey->new_spi && !hip_a->peer_rekey->dh) {
 		free(hip_a->peer_rekey);
 		hip_a->peer_rekey = NULL;
@@ -2343,7 +2343,7 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck)
 			/* draw new keys, adopt new SPIs if necessary */
 			new_spi = 0;
 			new_peer_spi = 0;
-			if ((hip_a->rekey) && (hip_a->rekey->acked) &&
+			if ((hip_a->rekey) && (!hip_a->rekey->need_ack) &&
 			    (hip_a->peer_rekey) && 
 			    (hip_a->peer_rekey->new_spi > 0)) {
 				log_(NORMT, "Performing rekey...\n");
@@ -2425,8 +2425,8 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck)
 				memset(hip_a->rekey, 0,
 					sizeof(struct rekey_info));
 				hip_a->rekey->update_id =
-				    	hip_a->hi->update_id++;
-				hip_a->rekey->acked = FALSE;
+					hip_a->hi->update_id++;
+				hip_a->rekey->need_ack = TRUE;
 				gettimeofday(&hip_a->rekey->rk_time, NULL);
 			}
 			need_to_send_update = TRUE;
@@ -2459,11 +2459,11 @@ void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src)
 		    logaddr(src));
 		make_address_active(l);
 		/* cleanup structures if they have no more use */
-		if ((hip_a->rekey->acked) && (!hip_a->rekey->new_spi)) {
+		if ((!hip_a->rekey->need_ack) && (!hip_a->rekey->new_spi)) {
 			free(hip_a->rekey);
 			hip_a->rekey = NULL;
 		}
-		if ((hip_a->peer_rekey) && (hip_a->peer_rekey->acked) &&
+		if ((hip_a->peer_rekey) && (!hip_a->peer_rekey->need_ack) &&
 		    (!hip_a->peer_rekey->new_spi)) {
 			free(hip_a->peer_rekey);
 			hip_a->peer_rekey = NULL;

@@ -261,7 +261,7 @@ struct rekey_info {
 	__u32 update_id;	/* to be ACKed 			*/
 	__u32 new_spi;		/* SPI that will be adopted	*/
 	__u16 keymat_index;	/* keymat index			*/
-	__u8 acked;/* set to TRUE when update_id has been ACKed */
+	__u8 need_ack;/* set to FALSE when update_id has been ACKed */
 	__u8 dh_group_id;	/* new DH group given by peer	*/
 	DH *dh;			/* new DH given by the peer	*/
 	struct timeval rk_time; /* creation time, so struct can be freed */
@@ -461,7 +461,7 @@ struct peer_node
   char allow_incoming;
   char skip_addrcheck;
   char name[MAX_HI_NAMESIZE];
-  struct _sockaddr_list **rvs_addrs;
+	struct _sockaddr_list **rvs_addrs;
 };
 #endif /* SMA_CRAWLER */
 
