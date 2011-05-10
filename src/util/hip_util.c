@@ -672,10 +672,13 @@ int get_addr_from_list(sockaddr_list *list, int family,
 	for (l = list; l; l=l->next) {
 		if (family && (family != l->addr.ss_family))
 			continue;
-		/* skip loopback addresses */
-		if (family && (family == AF_INET) && (IN_LOOP(&l->addr)))
+		/* Don't use LSI, loopback, or link-local addresses for HIP. */
+		if (IS_LSI(&l->addr))
 			continue;
-		else if (family && (family == AF_INET6) && (IN6_LOOP(&l->addr)))
+		if ((l->addr.ss_family == AF_INET) && (IN_LOOP(&l->addr)))
+			continue;
+		if ((l->addr.ss_family == AF_INET6) && \
+		    (IN6_LOOP(&l->addr) || IN6_LL(&l->addr)))
 			continue;
 
 		/* return the first preferred address that is found */

@@ -84,6 +84,8 @@
 	 ==  (INADDR_LOOPBACK >> IN_CLASSA_NSHIFT))
 #define IN6_LOOP(a) \
 	IN6_IS_ADDR_LOOPBACK( &((struct sockaddr_in6*)a)->sin6_addr )
+#define IN6_LL(a) \
+	IN6_IS_ADDR_LINKLOCAL( &((struct sockaddr_in6*)a)->sin6_addr )
 
 
 /*
