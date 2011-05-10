@@ -1630,11 +1630,16 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
 	log_(NORM, "Calculating Ltrunc(SHA1(I|Rand),K)...");
 	
 	k = cookie->k;
+	if (k == 0) {
+	    log_(NORM, "Cookie has zero difficulty, using zero solution.\n");
+	    *solution = 0;
+	    return(0);
+	}
 	lifetime_sec = 1 << (cookie->lifetime - 32);
 	gettimeofday(&time1, NULL);
 
 	/* Solve cookie puzzle */
-	while (!done) {
+	while (!done && g_state==0) {
 		if ((++i)%5000) { /* check progress every so often */
 			gettimeofday(&time2, NULL);
 			if (TDIFF(time2, time1) > (int)lifetime_sec) {
