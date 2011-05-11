@@ -239,7 +239,7 @@ int main_loop(int argc, char **argv)
 	HCNF.max_reg_lifetime = 255; /* max offered 2^((255-64)/8) = s */
 	HCNF.preferred_iface = NULL;
 	HCNF.outbound_ifaces = NULL;
-	HCNF.save_known_identities = TRUE;
+	HCNF.save_known_identities = FALSE;
 	HCNF.peer_certificate_required = FALSE;
 	memset(HCNF.conf_filename, 0, sizeof(HCNF.conf_filename));
 	memset(HCNF.my_hi_filename, 0, sizeof(HCNF.my_hi_filename));

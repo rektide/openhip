@@ -615,6 +615,8 @@ void generate_conf_file(char *filename)
 	xmlNewChild(node, NULL, BAD_CAST "id", BAD_CAST "6");
 	xmlNewChild(root_node, NULL, BAD_CAST "disable_dns_lookups", 
 			BAD_CAST "no");
+	xmlNewChild(root_node, NULL, BAD_CAST "save_known_identities", 
+			BAD_CAST "no");
 	xmlNewChild(root_node, NULL, BAD_CAST "disable_notify", BAD_CAST "no");
 #ifdef __UMH__
 	xmlNewChild(root_node, NULL, BAD_CAST "disable_dns_thread",

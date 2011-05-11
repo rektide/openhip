@@ -538,6 +538,7 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
 	if ((di_type == DIT_FQDN) || (di_type == DIT_NAI)) {
 		if (di_length > MAX_HI_NAMESIZE)
 			di_length = MAX_HI_NAMESIZE;
+		memset(hi->name, 0, sizeof(hi->name));
 		strncpy(hi->name, (char*)&data[offset], di_length);
 		hi->name_len = di_length;
 		offset += di_length;
