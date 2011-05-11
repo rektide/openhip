@@ -1481,11 +1481,11 @@ void *hip_mobile_router(void *arg)
 	system("iptables -t mangle -D PREROUTING -p 50 -j QUEUE");
 	system("iptables -t mangle -D PREROUTING -p 139 -j QUEUE");
 	system("iptables -t mangle -D POSTROUTING -p 50 -j QUEUE");
-	system("iptables -t mangle -D POSTROUTING -p 50 -j QUEUE");
+	system("iptables -t mangle -D POSTROUTING -p 139 -j QUEUE");
 	system("ip6tables -t mangle -D PREROUTING -p 50 -j QUEUE");
 	system("ip6tables -t mangle -D PREROUTING -p 139 -j QUEUE");
 	system("ip6tables -t mangle -D POSTROUTING -p 50 -j QUEUE");
-	system("ip6tables -t mangle -D POSTROUTING -p 50 -j QUEUE");
+	system("ip6tables -t mangle -D POSTROUTING -p 139 -j QUEUE");
 	close(raw_ip4_socket);
 	close(raw_ip6_socket);
 	fflush(stdout);

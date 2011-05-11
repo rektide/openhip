@@ -2127,13 +2127,16 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 	 */
 	if (!hip_a->peer_rekey) {
 		hip_a->peer_rekey = malloc(sizeof(struct rekey_info));
-		memset(hip_a->peer_rekey, 0, sizeof(struct rekey_info));
+		if (hip_a->peer_rekey) {
+			memset(hip_a->peer_rekey, 0, sizeof(struct rekey_info));
+		} else {
+			log_(WARN, "Malloc error\n");
+			return(-1);
+		}
 	}
-	if (rk.new_spi > 0) {
-		if (hip_a->peer_rekey && hip_a->peer_rekey->dh)
-			DH_free(hip_a->peer_rekey->dh);
-		memcpy(hip_a->peer_rekey, &rk, sizeof(struct rekey_info));
-	}
+	if (hip_a->peer_rekey->dh)
+		DH_free(hip_a->peer_rekey->dh);
+	memcpy(hip_a->peer_rekey, &rk, sizeof(struct rekey_info));
 	
 	/* 
 	 * Update address status if we received our 
