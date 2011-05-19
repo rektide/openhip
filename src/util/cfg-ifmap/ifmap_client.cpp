@@ -209,7 +209,9 @@ bool IfmapClient::publishCurrentState()
 
 void IfmapClient::setUnderlayIp(QString ip)
 {
-    // Save passed in ip locally
+    // our "old" ip address
+    _oldIp = _currentIp;
+    // Save passed in "new" ip locally
     _currentIp = ip;
 
     if (_haveValidSession) {
@@ -233,11 +235,19 @@ void IfmapClient::publishUnderlayIp()
     Metadata ipDnMeta("underlay-ip", _scadaNS);
 
     PublishRequest pub(&ipDnLink, &ipDnMeta);
+    if (!_oldIp.isEmpty() && _oldIp.compare(_currentIp) != 0) {
+	IpAddressId oldIpId(Identifier::IPv4, _oldIp);
+	Link oldIpDnLink(&oldIpId, &dnId);
+	pub.addToRequest(&oldIpDnLink, "scada:underlay-ip");
+    }
+
     MapResponse *mapResponse = _ifmap->submitRequest(&pub);
 
     if (mapResponse->type() == MapResponse::PublishResponse) {
+	if (!_oldIp.isEmpty() && _oldIp.compare(_currentIp) != 0) {
+	    qDebug() << fnName << "Successfully deleted old underlay-ip link:" << _oldIp;
+	}
         qDebug() << fnName << "Successfully published underlay-ip link:" << _currentIp;
-	_currentIp = QString();
     } else {
         qDebug() << fnName << "Got unexpected response:" << mapResponse->typeString();
 	// Restart MAP Client session and re-publish everything

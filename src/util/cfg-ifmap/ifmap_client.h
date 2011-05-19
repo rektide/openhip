@@ -57,6 +57,7 @@ private:
     QString _sessionId;
     QString _publisherId;
     QString _currentIp;
+    QString _oldIp;
 
     QString _scadaNS;
 
