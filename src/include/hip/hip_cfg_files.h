@@ -12,6 +12,8 @@ public:
   int postLocalCert(const char *hit);
   int verifyCert(const char *url, const hip_hit hit);
   static hipCfgFiles *getInstance();
+  int setUnderlayIpAddress(const char *ip)
+    { /*printf ("In setUnderlayIpAddress (%s)\n", ip);*/ return 0; };
 
 private:
   hipCfgFiles();

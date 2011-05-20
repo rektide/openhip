@@ -459,6 +459,11 @@ int select_preferred_address()
 	/* first check for preferred from conf file */
 	if ((HCNF.preferred.ss_family) || (preferred_iface_index != -1)) {
 		for (l = my_addr_head; l; l=l->next) {
+#ifdef SMA_CRAWLER
+			/* Not on primary master interface */
+			if (l->if_index != ifindex1)
+				continue;
+#endif
 		    /* preferred address takes priority */
 		    if ((l->addr.ss_family==HCNF.preferred.ss_family) &&
 			(memcmp(SA2IP(&l->addr), SA2IP(&HCNF.preferred), 
@@ -508,11 +513,6 @@ int select_preferred_address()
 			l->preferred = TRUE;
 			log_(NORM, "%s selected as the ",logaddr(SA(&l->addr)));
 			log_(NORM, "preferred address (first in list).\n");
-
-#ifdef SMA_CRAWLER
-		        /* Test publish IP of master interface */
-		        hipcfg_setUnderlayIpAddress(logaddr(SA(&l->addr)));
-#endif
 			break;
 		}
 	}
@@ -541,6 +541,9 @@ int select_preferred_address()
 			break;
 		}
 	}
+	/* Publish IP of master interface */
+	if (l)
+		hipcfg_setUnderlayIpAddress(logaddr(SA(&l->addr)));
 #endif
 
 	return(0);
@@ -1341,6 +1344,8 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 			ifindex2 = if_nametoindex(HCNF.master_interface2);
 		if (if_index == ifindex1 && list->if_index == ifindex2) {
 			readdress_association(hip_a, newaddr, if_index);
+			/* Publish IP of master interface */
+			hipcfg_setUnderlayIpAddress(logaddr(newaddr));
 		} else {
 #endif
 		/* this function checks if the address already exists */

@@ -19,6 +19,12 @@ int hipcfg_close()
   return hs->closeCfg();
 }
 
+int hipcfg_setUnderlayIpAddress(const char *ip)
+{
+  hipCfg *hs=hipCfgFiles::getInstance();
+  return hs->setUnderlayIpAddress(ip);
+}
+
 int hipcfg_allowed_peers(const hip_hit hit1, const hip_hit hit2)
 {
   //printf("cfg-local hit_peer_allowed\n");
