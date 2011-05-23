@@ -341,6 +341,7 @@ int read_peer_identities_from_hipcfg()
 		hit_ss.ss_family = AF_INET6;
 		memcpy(SA2IP(&hit_ss), hi->hit, SAIPLEN(&hit_ss));
 
+		memset(&llip_ss, 0, sizeof(struct sockaddr_storage));
 		if(!hipcfg_getLlipByEndbox(hit_p, llip_p)){
 		        /* hipcfg only privides preferred address. */
 			sockaddr_list *list = &hi->addrs;
