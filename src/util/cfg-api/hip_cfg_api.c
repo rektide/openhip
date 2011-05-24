@@ -142,109 +142,61 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 
 int hipcfg_close()
 {
-  if(hipcfg_close_p==NULL){
-    fprintf(stderr, "%s not initialized\n", hipcfg_close_fn);
-    return 0;
-  }
   return (*hipcfg_close_p)();
 }
 
 int hipcfg_setUnderlayIpAddress(const char *ip)
 {
-  if(hipcfg_setUnderlayIpAddress_p==NULL){
-    fprintf(stderr, "%s not initialized\n", hipcfg_setUnderlayIpAddress_fn);
-    return 0;
-  }
   return (*hipcfg_setUnderlayIpAddress_p)(ip);
 }
 
 int hipcfg_allowed_peers(const hip_hit hit1, const hip_hit hit2)
 {
-  if(hipcfg_allowed_peers_p==NULL){
-    fprintf(stderr, "%s not initialized\n", hipcfg_allowed_peers_fn);
-    return 0;
-  }
   return (*hipcfg_allowed_peers_p)(hit1, hit2);
 }
 
 int hipcfg_peers_allowed(hip_hit *hits1, hip_hit *hits2, int max_cnt)
 {
-  if(hipcfg_peers_allowed_p==NULL){
-    fprintf(stderr, "%s not initialized\n", hipcfg_peers_allowed_fn);
-    return 0;
-  }
   return (*hipcfg_peers_allowed_p)(hits1, hits2, max_cnt);
 }
 
 int hipcfg_getEndboxByLegacyNode(const struct sockaddr *host, struct sockaddr *eb)
 {
-  if(hipcfg_getEndboxByLegacyNode_p==NULL){
-    fprintf(stderr, "%s not initialized\n", hipcfg_getEndboxByLegacyNode_fn);
-    return 0;
-  }
   return (*hipcfg_getEndboxByLegacyNode_p)(host, eb);
 }
 
 int hipcfg_getLlipByEndbox(const struct sockaddr *eb, struct sockaddr *llip)
 {
-  if(hipcfg_getLlipByEndbox_p==NULL){
-    fprintf(stderr, "%s not initialized\n", hipcfg_getLlipByEndbox_fn);
-    return 0;
-  }
   return (*hipcfg_getLlipByEndbox_p)(eb, llip);
 }
 
 int hipcfg_getLegacyNodesByEndbox(const struct sockaddr *eb, struct sockaddr_storage *hosts, int size)
 {
-  if(hipcfg_getLegacyNodesByEndbox_p == NULL) {
-    fprintf(stderr, "%s not initialized\n", hipcfg_getLegacyNodesByEndbox_fn);
-    return 0;
-  }
   return (*hipcfg_getLegacyNodesByEndbox_p)(eb, hosts, size);
 }
 
 int hipcfg_verifyCert(const char *url, const hip_hit hit)
 {
-  if(hipcfg_verifyCert_p == NULL) {
-    fprintf(stderr, "%s not initialized\n", hipcfg_verifyCert_fn);
-    return 0;
-  }
   return (*hipcfg_verifyCert_p)(url, hit);
 }
 
 int hipcfg_getLocalCertUrl(char *url, unsigned int size)
 {
-  if(hipcfg_getLocalCertUrl_p == NULL) {
-    fprintf(stderr, "%s not initialized\n", hipcfg_getLocalCertUrl_fn);
-    return 0;
-  }
   return (*hipcfg_getLocalCertUrl_p)(url, size);
 }
 
 int hipcfg_postLocalCert(const char *hit)
 {
-  if(hipcfg_postLocalCert_p == NULL) {
-    fprintf(stderr, "%s not initialized\n", hipcfg_postLocalCert_fn);
-    return 0;
-  }
   return (*hipcfg_postLocalCert_p)(hit);
 }
 
 hi_node *hipcfg_getMyHostId()
 {
-  if(hipcfg_getMyHostId_p == NULL) {
-    fprintf(stderr, "%s not initialized\n", hipcfg_getMyHostId_fn);
-    return 0;
-  }
   return (*hipcfg_getMyHostId_p)();
 }
 
 int hipcfg_getPeerNodes(struct peer_node *peerNodes, unsigned int max_count)
 {
-  if(hipcfg_getPeerNodes_p == NULL) {
-    fprintf(stderr, "%s not initialized\n", hipcfg_getPeerNodes_fn);
-    return 0;
-  }
   return (*hipcfg_getPeerNodes_p)(peerNodes, max_count);
 }
 
