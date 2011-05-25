@@ -451,13 +451,13 @@ void *hip_esp_output(void *arg)
 		 * ARP 
 		 */
 		} else if ((raw_buff[12] == 0x08) && (raw_buff[13] == 0x06)) {
+			/*
 			printf("Raw buffer before handle_arp:\n");
 			hex_print("\n\t", raw_buff, 60, 0);
 			log_(NORM, "LSI into handle_arp: %0X\n", lsi->sa_data);
+			*/
 			err = handle_arp(raw_buff, len, data, &len, lsi);
-			log_(NORM, "Return from handle_arp: %0d\n", err);
 			if (err) {
-				log_(NORM, "ARP error");
 				continue;
 			}
 #ifdef __WIN32__
@@ -991,8 +991,8 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 		ip_sender = arp_req->src_ip;
 		ip_dst = arp_req->dst_ip;
 #ifdef SMA_CRAWLER
-		log_(NORM, "##################### Raw src ip: %0X\n", ip_sender);
-		log_(NORM, "##################### Raw dst ip: %0X\n", ip_dst);
+		// log_(NORM, "##################### Raw src ip: %0X\n", ip_sender);
+		// log_(NORM, "##################### Raw dst ip: %0X\n", ip_dst);
 		/* do not proxy legacy node if both are behind the bridge */
 		if(!ack_request(ip_sender, ip_dst))
 			return -1;
@@ -1011,7 +1011,7 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 	struct sockaddr *eb_p = (struct sockaddr*)&eb_ss;
 	legacy_host_p->sa_family = AF_INET;
 	LSI4(legacy_host_p) = ip_dst;
-	log_(NORM, "SMA_CRAWLER dst ip: %0X\n", ip_dst);
+	// log_(NORM, "SMA_CRAWLER dst ip: %0X\n", ip_dst);
 	eb_p->sa_family = AF_INET;
 	if(!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)){
 		if (IS_LSI32(ip_dst)) {
@@ -1036,9 +1036,9 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 	/* repl with random MAC addr based on requested IP addr */
 	src = get_eth_addr(AF_INET, (__u8*)&ip_dst);
 #endif
-	log_(NORM, "Source MAC for reply: %08X\n", src);
+	// log_(NORM, "Source MAC for reply: %08X\n", src);
 	memcpy(&dst, eth->src, 6);
-	log_(NORM, "Dest MAC for reply: %08X\n", dst);
+	// log_(NORM, "Dest MAC for reply: %08X\n", dst);
 	add_eth_header(out, src, dst, 0x0806);
 
 	/* build ARP reply */
@@ -1054,8 +1054,10 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 	memcpy(arp_rply->dst_mac, arp_req->src_mac, 6);	/* target MAC */
 	arp_rply->dst_ip = arp_req->src_ip;   /* target IP */
 
+	/*
 	printf("Raw buffer arp_reply:\n");
 	hex_print("\n\t", out, 60, 0);
+	*/
 	/* return the address */
 	if (addr) {
 		addr->sa_family = AF_INET;
