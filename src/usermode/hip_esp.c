@@ -451,9 +451,15 @@ void *hip_esp_output(void *arg)
 		 * ARP 
 		 */
 		} else if ((raw_buff[12] == 0x08) && (raw_buff[13] == 0x06)) {
+			printf("Raw buffer before handle_arp:\n");
+			hex_print("\n\t", raw_buff, 60, 0);
+			log_(NORM, "LSI into handle_arp: %0X\n", lsi->sa_data);
 			err = handle_arp(raw_buff, len, data, &len, lsi);
-			if (err)
+			log_(NORM, "Return from handle_arp: %0d\n", err);
+			if (err) {
+				log_(NORM, "ARP error");
 				continue;
+			}
 #ifdef __WIN32__
 			if (!WriteFile(tapfd, data, len, &lenin, &overlapped)){
 				printf("hip_esp_output WriteFile() failed.\n");
@@ -963,51 +969,53 @@ int handle_nsol(__u8 *in, int len, __u8 *out, int *outlen,struct sockaddr *addr)
 int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 {
 	struct eth_hdr *eth = (struct eth_hdr*)in;
-	struct arp_hdr *arp_request, *arp_reply;
-	char *p_sender, *p_target, *p;
+	struct arp_hdr *arp_req_hdr, *arp_reply_hdr;
+	struct arp_req_data *arp_req, *arp_rply;
 	__u64 src=0, dst=0;
-	__u32 ip_req, ip_sender;
+	__u32 ip_dst, ip_sender;
 
 	/* only handle ARP requests (opcode 1) here */
-	arp_request = (struct arp_hdr*) &in[14];
-	switch(ntohs(arp_request->ar_op)) {
+	arp_req_hdr = (struct arp_hdr*) &in[14];
+	switch(ntohs(arp_req_hdr->ar_op)) {
 		case ARPOP_REQUEST:
 			break;
 		default:
 			return(1);
 	}
 
-	if ((ntohs(arp_request->ar_hrd) == 0x01) &&	/* Ethernet */
-	    (ntohs(arp_request->ar_pro) == 0x0800) &&	/* IPv4 */
-	    (arp_request->ar_hln == 6) && (arp_request->ar_pln == 4)) {
+	if ((ntohs(arp_req_hdr->ar_hrd) == 0x01) &&	/* Ethernet */
+	    (ntohs(arp_req_hdr->ar_pro) == 0x0800) &&	/* IPv4 */
+	    (arp_req_hdr->ar_hln == 6) && (arp_req_hdr->ar_pln == 4)) {
 		/* skip sender MAC, sender IP, target MAC */
-		arp_request++;
-		p_sender = (char *)arp_request;
-		ip_sender = *((__u32*)(p_sender + 6));
-		p_target = p_sender + 6 + 4;
-		ip_req = *((__u32*)(p_target + 6));
+		arp_req = (struct arp_req_data*)(arp_req_hdr + 1);
+		ip_sender = arp_req->src_ip;
+		ip_dst = arp_req->dst_ip;
 #ifdef SMA_CRAWLER
+		log_(NORM, "##################### Raw src ip: %0X\n", ip_sender);
+		log_(NORM, "##################### Raw dst ip: %0X\n", ip_dst);
 		/* do not proxy legacy node if both are behind the bridge */
-		if(!ack_request(ip_sender, ip_req))
+		if(!ack_request(ip_sender, ip_dst))
 			return -1;
 #endif
 	} else {
 		return(-1);
 	}
 
-	if (ip_req == g_tap_lsi) /* don't answer requests for self */
+	if (ip_dst == g_tap_lsi) /* don't answer requests for self */
 		return(1);
+
 
 #ifdef SMA_CRAWLER
 	struct sockaddr_storage legacy_host_ss, eb_ss;
 	struct sockaddr *legacy_host_p = (struct sockaddr*)&legacy_host_ss;
 	struct sockaddr *eb_p = (struct sockaddr*)&eb_ss;
 	legacy_host_p->sa_family = AF_INET;
-	LSI4(legacy_host_p) = ip_req;
+	LSI4(legacy_host_p) = ip_dst;
+	log_(NORM, "SMA_CRAWLER dst ip: %0X\n", ip_dst);
 	eb_p->sa_family = AF_INET;
-        if(!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)){
-		if (IS_LSI32(ip_req)) {
-			__u32 ip_src = *((__u32*)(p_sender + 6));
+	if(!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)){
+		if (IS_LSI32(ip_dst)) {
+			__u32 ip_src = ip_sender;
 			if (ip_src == g_tap_lsi)
 				src = g_tap_mac;
 			else
@@ -1023,30 +1031,35 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 	 *            seems incorrect
 	 */
 	/* convert 32-bit lsi (1.a.b.c) to 48-bit MAC address (00-00-1-a-b-c) */
-        src = (__u64)g_tap_lsi << 16;
+	src = (__u64)g_tap_lsi << 16;
 #else
 	/* repl with random MAC addr based on requested IP addr */
-	src = get_eth_addr(AF_INET, (__u8*)&ip_req);
+	src = get_eth_addr(AF_INET, (__u8*)&ip_dst);
 #endif
+	log_(NORM, "Source MAC for reply: %08X\n", src);
 	memcpy(&dst, eth->src, 6);
+	log_(NORM, "Dest MAC for reply: %08X\n", dst);
 	add_eth_header(out, src, dst, 0x0806);
 
 	/* build ARP reply */
-	arp_reply = (struct arp_hdr*) &out[14];
-	arp_reply->ar_hrd = htons(0x01);
-	arp_reply->ar_pro = htons(0x0800);
-	arp_reply->ar_hln = 6;
-	arp_reply->ar_pln = 4;
-	arp_reply->ar_op = htons(ARPOP_REPLY);
-	p = (char*)(arp_reply +1);
-	memcpy(p, &src, 6);		/* sender MAC */
-	memcpy(p+6, &ip_req, 4);	/* sender address */
-	memcpy(p+10, p_sender, 10);	/* target MAC + address */
+	arp_reply_hdr = (struct arp_hdr*) &out[14];
+	arp_reply_hdr->ar_hrd = htons(0x01);
+	arp_reply_hdr->ar_pro = htons(0x0800);
+	arp_reply_hdr->ar_hln = 6;
+	arp_reply_hdr->ar_pln = 4;
+	arp_reply_hdr->ar_op = htons(ARPOP_REPLY);
+	arp_rply = (struct arp_req_data*)(arp_reply_hdr + 1);
+	memcpy(arp_rply->src_mac, &src, 6);		/* sender MAC */
+	arp_rply->src_ip = arp_req->dst_ip;	/* sender address */
+	memcpy(arp_rply->dst_mac, arp_req->src_mac, 6);	/* target MAC */
+	arp_rply->dst_ip = arp_req->src_ip;   /* target IP */
 
+	printf("Raw buffer arp_reply:\n");
+	hex_print("\n\t", out, 60, 0);
 	/* return the address */
 	if (addr) {
 		addr->sa_family = AF_INET;
-		((struct sockaddr_in*)addr)->sin_addr.s_addr = ntohl(ip_req);
+		((struct sockaddr_in*)addr)->sin_addr.s_addr = ntohl(ip_dst);
 	}
 	
 	*outlen = sizeof(struct eth_hdr) + sizeof(struct arp_hdr) + 20;

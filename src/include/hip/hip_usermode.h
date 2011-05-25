@@ -140,6 +140,10 @@ struct eth_hdr {
 }__attribute__((packed));
 
 /* ARP header - RFC 826, STD 37 */
+/*
+ * Make our own ARP header struct, so we can add the
+ * 'packed' attribute
+ */
 struct arp_hdr {
 	__u16 ar_hrd;
 	__u16 ar_pro;
@@ -148,6 +152,17 @@ struct arp_hdr {
 	__u16 ar_op;
 }__attribute__((packed));
 
+/*
+ * Make our own ARP data struct, so we can add the
+ * 'packed' attribute
+ */
+
+struct arp_req_data {
+	__u8 src_mac[6];
+	__u32 src_ip;
+	__u8 dst_mac[6];
+	__u32 dst_ip;
+}__attribute__((packed));
 
 #define ARPOP_REQUEST 1
 #define ARPOP_REPLY 2
