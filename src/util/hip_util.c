@@ -3126,3 +3126,38 @@ int regtype_to_string(__u8 type, char *str, int str_len)
 	return(ret);
 }
 
+/*
+ * hex_print()
+ * (From tcpdump)
+ * Print a buffer in tcpdump -x format
+ *
+ * Example:
+ *
+ * hex_print("\n\t", raw_buff, 100, 0);
+ *
+*/
+
+void hex_print(register const char *indent, register const u_char *cp, register u_int length,
+			  register u_int oset)
+{
+	register u_int i, s;
+	register int nshorts;
+
+	nshorts = (u_int) length / sizeof(u_short);
+	i = 0;
+	while (--nshorts >= 0) {
+		if ((i++ % 8) == 0) {
+			 (void)printf("%s0x%04x: ", indent, oset);
+			 oset += 16;
+		}
+		s = *cp++;
+		(void)printf(" %02x%02x", s, *cp++);
+	}
+	if (length & 1) {
+		if ((i % 8) == 0)
+			 (void)printf("%s0x%04x: ", indent, oset);
+		(void)printf(" %02x", *cp);
+	}
+	(void)printf("\n");
+}
+

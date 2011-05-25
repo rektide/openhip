@@ -262,6 +262,7 @@ void hip_sleep(int seconds);
 void hip_writelock();
 void hip_exit(int signal);
 int regtype_to_string(__u8 type, char *str, int str_len);
+void hex_print(register const char *indent, register const u_char *cp, register u_int length, register u_int oset);
 
 /* hip_xml.c */
 int locate_config_file(char *filename, int filename_size, char *default_name);
