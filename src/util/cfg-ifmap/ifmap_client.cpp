@@ -78,12 +78,9 @@ void IfmapClient::connectToMap(QMap<QString, QString> *mapConfig)
     }
 
     if (_mapConfig.contains("map_ignore_ssl_errors")) {
-        qDebug() << fnName << "here1 ###########################";
         if (_mapConfig.value("map_ignore_ssl_errors").compare("yes", Qt::CaseInsensitive) == 0) {
 	    _ifmap->setIgnoreSslErrors(true);
 	}
-    } else {
-        qDebug() << fnName << "here2 ###########################";
     }
 
     if (_mapConfig.contains("map_certificate_file") && _mapConfig.contains("map_private_key_file")) {
