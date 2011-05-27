@@ -77,6 +77,15 @@ void IfmapClient::connectToMap(QMap<QString, QString> *mapConfig)
         _ifmap->addCACertificate(_mapConfig.value("map_server_ca_file"));
     }
 
+    if (_mapConfig.contains("map_ignore_ssl_errors")) {
+        qDebug() << fnName << "here1 ###########################";
+        if (_mapConfig.value("map_ignore_ssl_errors").compare("yes", Qt::CaseInsensitive) == 0) {
+	    _ifmap->setIgnoreSslErrors(true);
+	}
+    } else {
+        qDebug() << fnName << "here2 ###########################";
+    }
+
     if (_mapConfig.contains("map_certificate_file") && _mapConfig.contains("map_private_key_file")) {
 	QFile certFile(_mapConfig.value("map_certificate_file"));
 	certFile.open(QIODevice::ReadOnly);

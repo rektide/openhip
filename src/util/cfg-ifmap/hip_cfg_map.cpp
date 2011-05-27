@@ -318,6 +318,14 @@ bool hipCfgMap::readIPMConfigXML(QIODevice *device)
                             addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
                         } else if (xmlReader.name() == "map_server_vendor") {
                             addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
+                        } else if (xmlReader.name() == "map_ignore_ssl_errors") {
+			    QString value = xmlReader.readElementText();
+			    if (value.compare("yes", Qt::CaseInsensitive) == 0 ||
+				value.compare("no", Qt::CaseInsensitive) == 0) {
+				addConfigItem(xmlReader.name().toString(), value);
+			    } else {
+				xmlReader.raiseError(QObject::tr("Incorrect value for <map_ignore_ssl_errors>"));
+			    }
                         } else if (xmlReader.name() == "map_server_ca_file") {
                             addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
                         } else if (xmlReader.name() == "map_certificate_file") {
