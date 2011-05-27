@@ -1344,11 +1344,9 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 			ifindex2 = if_nametoindex(HCNF.master_interface2);
 		if (if_index == ifindex1 && list->if_index == ifindex2) {
 			readdress_association(hip_a, newaddr, if_index);
-			/* Publish IP of master interface */
-			hipcfg_setUnderlayIpAddress(logaddr(newaddr));
 		} else {
 #endif
-		/* this function checks if the address already exists */
+			/* this function checks if the address already exists */
 			l = add_address_to_list(&list, newaddr, if_index);
 			make_address_active(l);
 #ifdef SMA_CRAWLER

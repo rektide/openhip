@@ -69,6 +69,9 @@
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
+#ifdef SMA_CRAWLER
+#include <hip/hip_cfg_api.h>
+#endif /* SMA_CRAWLER */
 
 #define IPSEC_PFKEYv2_ALIGN (sizeof(uint64_t) / sizeof(uint8_t))
 #define PFKEY_ALIGN8(a) (1 + (((a) - 1) | (8 - 1)))
@@ -1557,6 +1560,10 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 	hi_node *peer_hi = NULL;
 	int want_family = 0, dns_ok = TRUE;
 	struct sockaddr addr;
+#ifdef SMA_CRAWLER
+	sockaddr_list *list;
+	struct sockaddr *old_addr;
+#endif
 #if 0
 	struct sockaddr_storage lsi_save;
 #endif
@@ -1577,6 +1584,20 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 			    "reloading from hipcfg\n");
 			read_peer_identities_from_hipcfg();		        
 			peer_hi = lsi_lookup(lsi);
+		} else {
+			list = &peer_hi->addrs;
+			old_addr = SA(&list->addr);
+			memset(&addr, 0, sizeof(struct sockaddr));
+			if (hipcfg_getLlipByEndbox(lsi, &addr)) {
+				log_(WARN, "Unable to update peer IP "
+				    "from hipcfg; using stored value\n");
+			} else if (!memcmp(SA2IP(old_addr), SA2IP(&addr),
+					   SAIPLEN(&addr))) {
+				log_(NORM, "Updating peer IP from hipcfg\n");
+				memcpy(&list->addr, &addr, SALEN(&addr));
+			} else {
+				log_(NORM, "Peer IP is unchanged\n");
+			}
 		}
 #endif /* SMA_CRAWLER */
 		if (!peer_hi || hits_equal(peer_hi->hit, zero_hit)) {
@@ -1675,9 +1696,9 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 			 */
 		}
 	} else if ((*(peer_hi->rvs_addrs) != NULL) &&
-		    (VALID_FAM(&(*(peer_hi->rvs_addrs))->addr))) {
+	           (VALID_FAM(&(*(peer_hi->rvs_addrs))->addr))) {
 		memcpy(SA(dst), SA(&(*(peer_hi->rvs_addrs))->addr),
-			SALEN(&(*(peer_hi->rvs_addrs))->addr));
+		SALEN(&(*(peer_hi->rvs_addrs))->addr));
 	}
 
 	/* my preferred address becomes src (instead of LSI) */
