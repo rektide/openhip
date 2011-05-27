@@ -212,8 +212,27 @@ bool IfmapClient::publishCurrentState()
 
 void IfmapClient::setUnderlayIp(QString ip)
 {
+    const char *fnName = "IfmapClient::setUnderlayIp:";
+
+    if (_currentIp.compare(ip) == 0) {
+        // No need to publish the same IP again.
+        qDebug() << fnName << "Attempting to publish the same IP...bailing";
+	return;
+    }
+
     // our "old" ip address
-    _oldIp = _currentIp;
+    if (_oldIp.isEmpty()) {
+        _oldIp = ip;
+    } else {
+	_oldIp = _currentIp;
+	// We need to reset the MAP TCP Sockets since our IP is changing
+	qDebug() << fnName << "Resetting IF-MAP SSRC";
+	_ifmap->resetSSRC();
+
+	// Cancel pending poll
+	qDebug() << fnName << "Resetting IF-MAP ARC";
+	_ifmap->resetARC();
+    }
     // Save passed in "new" ip locally
     _currentIp = ip;
 
@@ -231,7 +250,7 @@ void IfmapClient::publishUnderlayIp()
         qDebug() << fnName << "Underlay IP string is empty!";
 	return;
     }
-	
+
     IdentityId dnId(Identifier::IdentityDistinguishedName, _mapConfig.value("DistinguishedName"));
     IpAddressId ipId(Identifier::IPv4, _currentIp);
     Link ipDnLink(&ipId, &dnId);
@@ -251,6 +270,12 @@ void IfmapClient::publishUnderlayIp()
 	    qDebug() << fnName << "Successfully deleted old underlay-ip link:" << _oldIp;
 	}
         qDebug() << fnName << "Successfully published underlay-ip link:" << _currentIp;
+
+        qDebug() << fnName << "Submitting MAP poll request from new ip";
+        PollRequest poll;
+        _ifmap->submitRequest(&poll);
+    } else if (mapResponse->type() == MapResponse::EmptyResponse) {
+        qDebug() << fnName << "Request aborted for publishing underlay-ip link:" << _currentIp;
     } else {
         qDebug() << fnName << "Got unexpected response:" << mapResponse->typeString();
 	// Restart MAP Client session and re-publish everything
