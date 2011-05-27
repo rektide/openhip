@@ -58,6 +58,7 @@ private:
     QString _publisherId;
     QString _currentIp;
     QString _oldIp;
+    bool _haveInitialConfig;
 
     QString _scadaNS;
 

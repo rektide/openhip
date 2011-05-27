@@ -45,6 +45,10 @@ IfmapClient::IfmapClient(QObject *parent)
     // Delay in msec before re-trying MAP request
     _retryDelay = 10000;
 
+    // Boolean to track if we have received an initial subscription response
+    // to populate the plugin data structures.
+    _haveInitialConfig = false;
+
     _scadaNS = "http://www.trustedcomputinggroup.org/2006/IFMAP-SCADANET-METADATA/1";
     _ifmap->addNamespace("scada", _scadaNS);
 
@@ -113,10 +117,9 @@ void IfmapClient::connectToMap(QMap<QString, QString> *mapConfig)
 
     this->newSession();
 
-    // Return from "synchronous" call
-    mapMutex.lock();
-    mapWaitCond.wakeAll();
-    mapMutex.unlock();
+    // Return from "synchronous" call is in IfmapClient::updateEndboxMapping;
+    // in essence, we don't want to return from connectToMap until we have
+    // processed our first subscription results.
 }
 
 void IfmapClient::newSession()
@@ -453,6 +456,15 @@ void IfmapClient::updateEndboxMapping(SearchResult *searchResult)
     string sdn = myDN.toAscii().constData();
     string shit = _mapConfig.value("HIT").toAscii().constData();
     hcm->updateMaps(sdn, shit, newPeerDNs, newPeerDN_HITs, newPeerDN_ULIPs, newPeerDN_LNIPs);
+
+    // Return from "synchronous" call
+    if (! _haveInitialConfig) {
+	_haveInitialConfig = true;
+
+	mapMutex.lock();
+	mapWaitCond.wakeAll();
+	mapMutex.unlock();
+    }
 }
 
 QString IfmapClient::interfaceAddr()
