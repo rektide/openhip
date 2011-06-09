@@ -34,6 +34,7 @@ IfmapThread::IfmapThread(QObject *parent)
 
 IfmapThread::~IfmapThread()
 {
+    qDebug() << "In IfmapThread destructor";
 }
 
 void IfmapThread::run()
@@ -42,4 +43,10 @@ void IfmapThread::run()
 
     _client = new IfmapClient(0);
     exec();
+}
+
+void IfmapThread::deleteMapClient()
+{
+    qDebug() << "In IfmapThread::deleteMapClient";
+    delete _client;
 }

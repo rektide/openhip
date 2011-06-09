@@ -37,7 +37,7 @@ extern QWaitCondition mapWaitCond;
 IfmapClient::IfmapClient(QObject *parent)
 	: QObject(parent)
 {
-    _ifmap = new Ifmap();
+    _ifmap = new Ifmap(this);
 
     //_ifmap->setDebug(Ifmap::ShowClientOps | Ifmap::ShowHTTPState);
     //_ifmap->setDebug(Ifmap::ShowClientOps | Ifmap::ShowXML);
@@ -62,6 +62,10 @@ IfmapClient::IfmapClient(QObject *parent)
 
 IfmapClient::~IfmapClient()
 {
+    qDebug() << "In IfmapClient destructor";
+    _ifmap->resetSSRC();
+    _ifmap->resetARC();
+    delete _ifmap;
 }
 
 void IfmapClient::connectToMap(QMap<QString, QString> *mapConfig)

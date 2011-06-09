@@ -38,6 +38,8 @@ public:
 
     void run();
 
+    void deleteMapClient();
+
 public:
     IfmapClient *_client;
 

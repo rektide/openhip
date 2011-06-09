@@ -183,6 +183,9 @@ int hipCfgMap::closeCfg()
     const char *fnName = "hipCfgMap::closeCfg:";
     qDebug() << fnName;
 
+    cerr << fnName << "Deleting MAP Client" << endl;
+    _ifmapThread->deleteMapClient();
+
     _ifmapThread->exit(0);  // exit thread's event loop
     if (_ifmapThread->wait(1000)) {  // Wait 1000msec for thread to exit
         rc = 0;
