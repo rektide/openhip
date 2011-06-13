@@ -50,7 +50,7 @@
 #include <sys/time.h>		/* gettimeofday() */
 #include <arpa/nameser.h>	/* NS_PACKETSZ */
 #endif
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <utime.h>
 #endif
 #include <stdio.h>		/* printf() */
@@ -160,7 +160,7 @@ void *hip_dns(void *arg)
 #endif
 
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
         time_t last_time, now_time;
         last_time = time(NULL);
         printf("hip_dns() thread (tid %d pid %d) started...\n",
@@ -193,7 +193,7 @@ void *hip_dns(void *arg)
 		timeout.tv_sec = 0;
 		timeout.tv_usec = 500000;
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
                 now_time = time(NULL);
                 if (now_time - last_time > 60) {
                         printf("hip_dns() heartbeat\n");

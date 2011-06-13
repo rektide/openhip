@@ -63,18 +63,18 @@
 #include <win32/checksum.h>
 #endif
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <utime.h>
 #include <netinet/ether.h>
 #include <hip/hip_cfg_api.h>
 #include <hip/endbox_utils.h>
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 
 /* 
  * Globals
  */
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 int touchHeartbeat;
 #endif
 
@@ -185,7 +185,7 @@ void *hip_esp_output(void *arg)
 	static hip_sadb_entry *entry;
 	struct sockaddr_storage ss_lsi;
 	struct sockaddr *lsi = (struct sockaddr*)&ss_lsi;
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 	__u32 lsi_ip;
 #else
 	time_t last_time, now_time;
@@ -212,7 +212,7 @@ void *hip_esp_output(void *arg)
 	get_preferred_lsi(lsi);
 	g_tap_lsi = LSI4(lsi);
 	
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	touchHeartbeat=1;
 	last_time = time(NULL);
 	printf("hip_esp_output() thread (tid %d pid %d) started...\n",
@@ -233,7 +233,7 @@ void *hip_esp_output(void *arg)
 		timeout.tv_sec = 0;
 		timeout.tv_usec = g_read_usec;
 #endif
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		endbox_periodic_heartbeat(&now_time, &last_time, &packet_count,
 			"output", touchHeartbeat);
 #endif
@@ -269,7 +269,7 @@ void *hip_esp_output(void *arg)
 		if ((raw_buff[12] == 0x08) && (raw_buff[13] == 0x00)) {
 			iph = (struct ip*) &raw_buff[14];
 			/* accept IPv4 traffic to 1.x.x.x here */
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 			if (endbox_ipv4_packet_check(iph, lsi, &packet_count)<0)
 				continue;
 			is_broadcast = FALSE;
@@ -277,7 +277,7 @@ void *hip_esp_output(void *arg)
 			    (((ntohl(iph->ip_dst.s_addr)) & 0x000000FF) ==
 			     0x000000FF)) {
 
-#else /* SMA_CRAWLER */
+#else /* HIP_VPLS */
 
 			if (((iph->ip_v) == IPVERSION) &&
 #if defined(__BIG_ENDIAN__) || defined(__arm__)
@@ -294,7 +294,7 @@ void *hip_esp_output(void *arg)
 			if ((lsi_ip & 0x00FFFFFF)==0x00FFFFFF) {
 				if (!do_bcast())
 					continue;
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 				/* unicast the broadcast to each entry */
 				entry = hip_sadb_get_next(NULL);
 				is_broadcast = TRUE;
@@ -535,7 +535,7 @@ void *hip_esp_input(void *arg)
 	DWORD lenin;
 	OVERLAPPED overlapped = {0};
 #endif
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	time_t last_time, now_time;
 	int packet_count = 0;
 
@@ -580,7 +580,7 @@ void *hip_esp_input(void *arg)
 		memset(data, 0, sizeof(data));
 
 		/* periodic functions called every g_read_usec timeout */
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		endbox_periodic_heartbeat(&now_time, &last_time, &packet_count,
 			"input", touchHeartbeat);
 #endif
@@ -622,15 +622,15 @@ void *hip_esp_input(void *arg)
 				continue;
 			}
 #else /* __WIN32__ */
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		      packet_count++;
 		      iph = (struct ip*) &data[offset + sizeof(struct eth_hdr)];
 		      endbox_ipv4_multicast_write(data, offset, len);
-#else /* SMA_CRAWLER */
+#else /* HIP_VPLS */
 			if (write(tapfd, &data[offset], len) < 0) {
 				printf("hip_esp_input() write() failed.\n");
 			}
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 #endif /* __WIN32__ */
 		} else if (FD_ISSET(s_esp_udp, &fd)) {
 #ifdef __WIN32__
@@ -791,7 +791,7 @@ void *tunreader(void *arg)
 	struct timeval timeout;
 	fd_set read_fdset;
 	
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	time_t last_time, now_time;
 
 	last_time = time(NULL);
@@ -807,7 +807,7 @@ void *tunreader(void *arg)
 		FD_SET((unsigned)tapfd, &read_fdset);
 		timeout.tv_sec = 3;
 		timeout.tv_usec = 0;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		now_time = time(NULL);
 		if (now_time - last_time > 60) {
 			printf("tunreader() heartbeat\n");
@@ -990,7 +990,7 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 		arp_req = (struct arp_req_data*)(arp_req_hdr + 1);
 		ip_sender = arp_req->src_ip;
 		ip_dst = arp_req->dst_ip;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		// log_(NORM, "##################### Raw src ip: %0X\n", ip_sender);
 		// log_(NORM, "##################### Raw dst ip: %0X\n", ip_dst);
 		/* do not proxy legacy node if both are behind the bridge */
@@ -1005,13 +1005,13 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 		return(1);
 
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	struct sockaddr_storage legacy_host_ss, eb_ss;
 	struct sockaddr *legacy_host_p = (struct sockaddr*)&legacy_host_ss;
 	struct sockaddr *eb_p = (struct sockaddr*)&eb_ss;
 	legacy_host_p->sa_family = AF_INET;
 	LSI4(legacy_host_p) = ip_dst;
-	// log_(NORM, "SMA_CRAWLER dst ip: %0X\n", ip_dst);
+	// log_(NORM, "HIP_VPLS dst ip: %0X\n", ip_dst);
 	eb_p->sa_family = AF_INET;
 	if(!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)){
 		if (IS_LSI32(ip_dst)) {
@@ -1096,7 +1096,7 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 	struct ip_esp_padinfo *padinfo=0;
 	__u8 cbc_iv[16];
 	__u8 hmac_md[EVP_MAX_MD_SIZE];
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 	__u16 checksum_fix = 0;
 #endif
 	int family, use_udp = FALSE;
@@ -1110,31 +1110,31 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 	switch (family) {
 	case AF_INET:
 		iph = (struct ip*) &in[sizeof(struct eth_hdr)];
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 		/* BEET mode uses transport mode encapsulation. IP header is
 		 * not included. */
 		hdr_len = sizeof(struct eth_hdr) + sizeof(struct ip);
 		/* rewrite upper-layer checksum, so it is based on HITs */
 		checksum_fix = rewrite_checksum((__u8*)iph, entry->hit_magic);
 #else
-		/* SMA_CRAWLER uses tunnel mode encapsulation. IP header is
+		/* HIP_VPLS uses tunnel mode encapsulation. IP header is
 		 * included. */
 		hdr_len = sizeof(struct eth_hdr);
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 		break;
 	case AF_INET6:
 		ip6h = (struct ip6_hdr*) &in[sizeof(struct eth_hdr)];
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 		hdr_len = sizeof(struct eth_hdr) + sizeof(struct ip6_hdr);
 #else
 		hdr_len = sizeof(struct eth_hdr);
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 		/* assume HITs are used as v6 src/dst, no checksum rewrite */
 		break;
 	}
 
 	/* elen is length of data to encrypt
-	 * for SMA_CRAWLER, this includes the IP header.
+	 * for HIP_VPLS, this includes the IP header.
 	 */
 	elen = len - hdr_len;
 
@@ -1199,7 +1199,7 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 	default:
 		printf("Unsupported encryption transform (%d).\n",
 			entry->e_type);
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		touchHeartbeat = 0;
 #endif
 		return(-1);
@@ -1295,7 +1295,7 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 		break;
 	}
 
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 	/* Record the address family of this packet, so incoming
 	 * replies of the same protocol/ports can be matched to
 	 * the same family.
@@ -1324,7 +1324,7 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 			((struct tcphdr*)(iph + 1))->check = checksum_fix;
 #endif
 	}
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 
 	/* 
 	 * Build a UDP header at the beginning of out buffer. 
@@ -1395,14 +1395,14 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	struct ip_esp_padinfo *padinfo=0;
 	__u8 cbc_iv[16];
 	__u8 hmac_md[EVP_MAX_MD_SIZE];
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 	__u64 dst_mac;
 	__u16 sum;
 	int family_out;
 	struct sockaddr_storage taplsi6;
 	struct tcphdr *tcp=NULL;
 	struct udphdr *udp=NULL;
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 	int use_udp = FALSE;
 	
 	if (!in || !out || !entry)
@@ -1428,7 +1428,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	 * is decrypted into a buffer at the larger offset, since
 	 * we do not know the (inner) IP version before decryption. */
 	*offset = sizeof(struct eth_hdr) + sizeof(struct ip6_hdr); /* 54 */
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
         *offset = sizeof(struct eth_hdr);  /* Tunnel mode */
 #endif
 
@@ -1560,7 +1560,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	padinfo = (struct ip_esp_padinfo*) &out[*offset + elen - 2];
 	elen -= 2 + padinfo->pad_length;
 
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 	/* determine address family for new packet based on 
 	 * decrypted upper layer protocol header
 	 */
@@ -1634,10 +1634,10 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 				NULL, iph, (__u16)elen, padinfo->next_hdr);
 		*outlen = sizeof(struct eth_hdr) + sizeof(struct ip6_hdr)+ elen;
 	}
-#else /* SMA_CRAWLER */
+#else /* HIP_VPLS */
 	endbox_esp_decrypt(out, offset);
 	*outlen = sizeof(struct eth_hdr) + elen;
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 
 	/* previously, this happened after write(), but there
 	 * is some problem with using the entry ptr then */

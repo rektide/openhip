@@ -69,9 +69,9 @@
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 
 #define IPSEC_PFKEYv2_ALIGN (sizeof(uint64_t) / sizeof(uint8_t))
 #define PFKEY_ALIGN8(a) (1 + (((a) - 1) | (8 - 1)))
@@ -1560,7 +1560,7 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 	hi_node *peer_hi = NULL;
 	int want_family = 0, dns_ok = TRUE;
 	struct sockaddr addr;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	sockaddr_list *list;
 	struct sockaddr *old_addr;
 #endif
@@ -1578,7 +1578,7 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 		 * those cached from HIP DNS lookups)
 		 */
 		peer_hi = lsi_lookup(lsi);
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		if (!peer_hi) {
 			log_(NORM, "peer HI not found, "
 			    "reloading from hipcfg\n");
@@ -1599,7 +1599,7 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 				log_(NORM, "Peer IP is unchanged\n");
 			}
 		}
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 		if (!peer_hi || hits_equal(peer_hi->hit, zero_hit)) {
 			/* Peer doesn't exist locally or has an empty HIT.
 			 * TODO: perform DHT lookup to retrieve HIT and adopt

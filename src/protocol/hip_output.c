@@ -72,9 +72,9 @@
 #include "i3_hip.h"
 #endif
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 
 /*
  * Forward declaration of local functions.
@@ -1798,7 +1798,7 @@ int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug)
 	d->pub_len = ntohs((__u16)len);
 	d->length = htons((__u16)(3 + len)); /* group_id + pub */
 	
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 	if (D_VERBOSE == debug) {
 		log_(NORM, "Using DH public value of len %d: 0x", len);
 		print_hex(bin, len);
@@ -1971,7 +1971,7 @@ int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data)
 
 int build_tlv_cert(__u8 *buff)
 {
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 	return 0;
 #else
 	tlv_cert *cert;
@@ -1997,7 +1997,7 @@ int build_tlv_cert(__u8 *buff)
 	memcpy(cert->certificate, data, cert_len); //certificate URL
 
 	return(eight_byte_align(4 + 4 + cert_len ));
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 }
 
 int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)

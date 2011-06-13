@@ -67,9 +67,9 @@
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 
 /*
  * Local function declarations
@@ -375,7 +375,7 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 		
 		/* Find peer HIT */
 		peer_host_id = find_host_identity(peer_hi_head, hiti);
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		if (!peer_host_id && hipcfg_allowed_peers(hiti, hitr)) {
 			log_(NORMT,"Accepted an allowed peer "
 			    "Endbox HIT in I1\n");
@@ -398,7 +398,7 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 				add_peer_hit(hiti, src);
 			}
 		}
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		if(!hipcfg_allowed_peers(hiti, hitr)){
 			log_(NORMT,"ACL denied for HIP peer\n");
 			return -1;
@@ -3354,7 +3354,7 @@ decode_dh:
 	pub_key = malloc(len);
 	memcpy(pub_key, tlv_dh->pub, len);
 
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 	log_(NORM, "Got DH public value of len %d: 0x", len);
 	print_hex(pub_key, len);
 	log_(NORM, "\n");
@@ -3396,7 +3396,7 @@ int handle_cert(hip_assoc *hip_a, const __u8 *data)
 	cert = (tlv_cert*) data;
         len = ntohs(cert->length)-4;
 	memcpy(cert_buf, cert->certificate, len);
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	len = hipcfg_verifyCert(cert_buf, peer_hi->hit);
 	if(len == 1) {
 	  log_(NORM, "validated certificate with url: %s\n", cert_buf);

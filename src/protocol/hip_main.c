@@ -35,7 +35,7 @@
 #include <time.h>            /* time()                       */
 #include <ctype.h>           /* tolower()                    */
 #include <fcntl.h>
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <utime.h>
 #include <sys/resource.h>    /* getrlimit, setrlimit         */
 #endif
@@ -81,7 +81,7 @@
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
 #endif
 
@@ -124,7 +124,7 @@ int hip_trigger_rvs(struct sockaddr*rvs, hip_hit *responder);
 void post_init_tap();
 #endif
 #endif
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 void endbox_init();
 int hipcfg_init();
 extern __u32 get_preferred_lsi(struct sockaddr *);
@@ -167,7 +167,7 @@ int main_loop(int argc, char **argv)
 	int highest_descriptor=0;
 	int flags=0, err=0, length=0, last_expire=0, i;
 	int need_select_preferred=FALSE;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
         time_t last_time, now_time;
         int ret;
         struct rlimit limits;
@@ -410,7 +410,7 @@ int main_loop(int argc, char **argv)
 	 * Load the my_host_identities.xml file.
 	 */
 	my_hi_head = NULL;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	hi_node *my_hi;
 	if (!HCNF.cfg_library) {
 		log_(ERR, "Must specify <cfg_library> in hip.conf\n");
@@ -430,7 +430,7 @@ int main_loop(int argc, char **argv)
 		/* use smartcard for signing */
 		append_hi_node(&my_hi_head, my_hi);
 	} else {
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 	if ((locate_config_file(HCNF.my_hi_filename,
 			sizeof(HCNF.my_hi_filename), HIP_MYID_FILENAME) < 0)) {
 		log_(ERR, "Unable to locate this machine's %s file.\n",
@@ -467,9 +467,9 @@ int main_loop(int argc, char **argv)
 		    log_(ERR, "Because there are no peer identities, you probab"
 			"ly need to run with the -a\n  (allow any) option.\n");
 	}
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	}
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 
 	if (get_preferred_hi(my_hi_head)==NULL) {
 		log_(ERR, "The preferred HI specified in %s was not found.\n",
@@ -477,9 +477,9 @@ int main_loop(int argc, char **argv)
 		goto hip_main_error_exit;
 	}
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	endbox_init();
-	log_(NORM,"Initializing SMA bridge\n");
+	log_(NORM,"Initializing VPLS bridge\n");
 	struct sockaddr_storage ss_lsi;
 	struct sockaddr *lsi = (struct sockaddr*)&ss_lsi;
 	lsi->sa_family = AF_INET;
@@ -664,7 +664,7 @@ int main_loop(int argc, char **argv)
 		iov.iov_len = sizeof(buff);
 		iov.iov_base = buff;
 #endif /* __WIN32__ */
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
                 now_time = time(NULL);
                 if (now_time - last_time > 60) {
                         log_(NORMT, "hipd_main() heartbeat\n");

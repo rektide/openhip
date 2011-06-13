@@ -267,9 +267,9 @@ void hex_print(register const char *indent, register const u_char *cp, register 
 /* hip_xml.c */
 int locate_config_file(char *filename, int filename_size, char *default_name);
 int read_identities_file(char *filename, int mine);
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 int read_peer_identities_from_hipcfg();
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 void print_hi_to_buff(uint8_t **bufp, int *buf_len, hi_node *hi, int mine);
 int save_identities_file(int);
 int read_conf_file(char *);

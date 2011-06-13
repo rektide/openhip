@@ -1,11 +1,11 @@
 #!/bin/sh
 
 # libtool is only used to build the configuration libraries associated
-#  with the --enable-sma-crawler configure option
-if [ "$1a" = "--enable-sma-crawlera" ]; then
+#  with the --enable-vpls configure option
+if [ "$1a" = "--enable-vplsa" ]; then
 	LIBTOOLIZE_MSG="echo '(1.5/3) Running libtoolize...'"
 	LIBTOOLIZE="libtoolize --force --copy --automake"
-	CONFOPTS=" --enable-sma-crawler"
+	CONFOPTS=" --enable-vpls"
 	if [ -e src/util/Makefile.am.disabled ]; then
 		mv src/util/Makefile.am.disabled src/util/Makefile.am
 	fi
@@ -23,7 +23,7 @@ elif [ "$1a" = "a" ]; then
 		mv configure.ac.orig configure.ac
 	fi
 else
-	echo "usage: ./bootstrap.sh [--enable-sma-crawler]"
+	echo "usage: ./bootstrap.sh [--enable-vpls]"
 	exit 1;
 fi
 

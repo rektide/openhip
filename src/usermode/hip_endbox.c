@@ -12,13 +12,13 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- *  hip_sma.c
+ *  hip_endbox.c
  *
  *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  *           Orlie Brewer <orlie.t.brewer@boeing.com>
  *           Jeff Meegan, <jeff.r.meegan@boeing.com>
  * 
- * Secure Mobile Architecture (SMA) crawler specific functions.
+ * HIP Virtual Private LAN Service (VPLS) specific functions.
  *
  */
 #include <stdio.h>		/* printf() */
@@ -51,12 +51,12 @@
 #include <win32/checksum.h>
 #endif
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <utime.h>
 #include <netinet/ether.h>
 #include <hip/hip_cfg_api.h>
 #include <hip/endbox_utils.h>
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 
 #define BUFF_LEN 2000
 

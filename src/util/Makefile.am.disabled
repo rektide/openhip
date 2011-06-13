@@ -18,27 +18,27 @@
 # Author: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
 # 
 # This Makefile builds one of three possible configuration libraries,
-# controlled by the ./configure --enable-sma-crawler={files,LDAP,IFMAP} option
+# controlled by the ./configure --enable-vpls={files,LDAP,IFMAP} option
 #
 
-if WANT_SMA_CRAWLER_FILES_CFG
+if WANT_VPLS_FILES_CFG
 lib_LTLIBRARIES = libhipcfgfiles.la
 SRC_HIPCFGLDAP = cfg-common/hip_cfg.cpp cfg-files/hip_cfg_files.cpp
-libhipcfgfiles_la_CPPFLAGS = -DSMA_CRAWLER -Wall -Woverloaded-virtual -Wcast-qual -DSYSCONFDIR="\"$(sysconfdir)\""
+libhipcfgfiles_la_CPPFLAGS = -DHIP_VPLS -Wall -Woverloaded-virtual -Wcast-qual -DSYSCONFDIR="\"$(sysconfdir)\""
 libhipcfgfiles_la_LDFLAGS = -version_info $(VERSION) -release $(VERSION)
 libhipcfgfiles_la_SOURCES = $(SRC_HIPCFGLDAP)
 endif
 
-if WANT_SMA_CRAWLER_LDAP_CFG
+if WANT_VPLS_LDAP_CFG
 lib_LTLIBRARIES = libhipcfgldap.la
 SRC_HIPCFGLDAP = cfg-common/hip_cfg.cpp cfg-ldap/hip_cfg_ldap.cpp
-libhipcfgldap_la_CPPFLAGS = -DSMA_CRAWLER -Wall -Woverloaded-virtual -Wcast-qual -DSYSCONFDIR="\"$(sysconfdir)\""
+libhipcfgldap_la_CPPFLAGS = -DHIP_VPLS -Wall -Woverloaded-virtual -Wcast-qual -DSYSCONFDIR="\"$(sysconfdir)\""
 libhipcfgldap_la_LDFLAGS = -version_info $(VERSION) -release $(VERSION)
 libhipcfgldap_la_SOURCES = $(SRC_HIPCFGLDAP)
 endif
 
 # IFMAP client library uses Qt build system
-if WANT_SMA_CRAWLER_IFMAP_CFG
+if WANT_VPLS_IFMAP_CFG
 QMAKE_PROG ?= qmake
 all-local:
 	cd cfg-ifmap && $(QMAKE_PROG) -set LIBVERSION $(VERSION) && $(QMAKE_PROG) hipmapcfg.pro && make

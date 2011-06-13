@@ -65,8 +65,8 @@ endif
 INCLUDES = -I./include @libxml2_CFLAGS@
 LDADD = @libxml2_LIBS@ -lz -ldl
 
-# SMA craweler support
-if WANT_SMA_CRAWLER
+# VPLS support
+if WANT_VPLS
 SRC_USERMODE += usermode/hip_endbox.c
 SRC_UTIL +=	util/cfg-api/hip_cfg_api.c
 SRC_HITGEN +=   util/sc_utils.c

@@ -79,7 +79,7 @@
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
 /* From /usr/include/net/if.h - added just this line because of conflicts
  * with /usr/include/linux/if.h
@@ -332,7 +332,7 @@ int select_preferred_address()
 	int preferred_selected, preferred_iface_index;
 	sockaddr_list *l;
 	__u32 ip;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	int ifindex1, ifindex2;
 #endif
 #ifndef USE_LINUX_NETLINK
@@ -438,10 +438,10 @@ int select_preferred_address()
 #else /* USE_LINUX_NETLINK */
 	/* Linux version */
 	/* XXX TODO: dump routing table and choose addr w/default route. */
-#ifdef SMA_CRAWLER
-	log_(NORM,"crawler primary master interface = %s\n",
+#ifdef HIP_VPLS
+	log_(NORM,"VPLS primary master interface = %s\n",
 		HCNF.master_interface);
-	log_(NORM,"crawler secondary master interface = %s\n",
+	log_(NORM,"VPLS secondary master interface = %s\n",
 		HCNF.master_interface2);
 	ifindex1 = ifindex2 = -1;
 	if (HCNF.master_interface)
@@ -459,7 +459,7 @@ int select_preferred_address()
 	/* first check for preferred from conf file */
 	if ((HCNF.preferred.ss_family) || (preferred_iface_index != -1)) {
 		for (l = my_addr_head; l; l=l->next) {
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 			/* Not on primary master interface */
 			if (l->if_index != ifindex1)
 				continue;
@@ -501,7 +501,7 @@ int select_preferred_address()
 				continue;
 			if (IN_LOOP(&l->addr))
 				continue;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 			/* Not on primary master interface */
 			if (l->if_index != ifindex1)
 				continue;
@@ -517,7 +517,7 @@ int select_preferred_address()
 		}
 	}
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	/* Did not find an address on the primary master interface */
 	if (!preferred_selected && !l) {
 		for (l = my_addr_head; l; l=l->next) {
@@ -1300,7 +1300,7 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 {
 	sockaddr_list *list, *l;
 	struct sockaddr *oldaddr;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	int ifindex1, ifindex2;
 #endif
 
@@ -1334,7 +1334,7 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 			/* TODO: IPv6 UDP support here */
 		}
 		list = &hip_a->hi->addrs;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		/* If the new address is on master_interface and it is not
 		 * the current interface, switch to the new address */
 		ifindex1 = ifindex2 = -1;
@@ -1349,7 +1349,7 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 			/* this function checks if the address already exists */
 			l = add_address_to_list(&list, newaddr, if_index);
 			make_address_active(l);
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		}
 #endif
 	}

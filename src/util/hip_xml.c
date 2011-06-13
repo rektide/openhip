@@ -54,9 +54,9 @@
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 #ifdef __UMH__
 #include <hip/hip_dns.h>	/* DNS headers			*/
 #endif
@@ -279,7 +279,7 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
 	}
 }
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 /*
  * function read_peer identities_from_hipcfg()
  *
@@ -379,7 +379,7 @@ int read_peer_identities_from_hipcfg()
 	add_addresses_from_dns(NULL, NULL);
 	return(0);
 }
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 
 /*
  * function read_identities_file()
@@ -399,10 +399,10 @@ int read_identities_file(char *filename, int mine)
 	uint8_t *out_buff = NULL;
 	int out_buff_len = 0;
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	if (!mine)
 		return(read_peer_identities_from_hipcfg());
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 
 	doc = xmlParseFile(filename);
 	if (doc == NULL) {
@@ -417,7 +417,7 @@ int read_identities_file(char *filename, int mine)
 			hi = create_new_hi_node();
 			parse_xml_attributes(node->properties, hi);
 			switch (hi->algorithm_id) {
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 			case HI_ALG_DSA:
 				hi->dsa = hip_dsa_new();
 				break;
@@ -431,7 +431,7 @@ int read_identities_file(char *filename, int mine)
 			case HI_ALG_RSA:
 				hi->rsa = RSA_new();
 				break;
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 			 default:
 				if (mine) {
 					log_(WARN, "Unknown algorithm found ");
@@ -667,7 +667,7 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
 		xmlNewChild(hi, NULL, BAD_CAST "RVS", BAD_CAST addr);
 	}
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
         if(!mine){
 	  struct sockaddr_storage hosts[MAX_LEGACY_HOSTS];
 	  struct sockaddr *eb_p, *host_p;
@@ -734,7 +734,7 @@ int save_identities_file(int mine)
 		}
 		hi = hi->next;
 	}
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	/* XXX TODO: clean this up! */
 	hip_hit hits1[MAX_HI_NAMESIZE], hits2[MAX_HI_NAMESIZE];
 	int rc, i;
@@ -812,7 +812,7 @@ int read_conf_file(char *filename)
 		} else if (strcmp((char *)node->name, "dh_group")==0) {
 			sscanf(data, "%d", &tmp);
 			HCNF.dh_group = (__u8)tmp;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
                } else if (strcmp((char *)node->name, "master_interface")==0) {
                        HCNF.master_interface = strdup(data);
                } else if (strcmp((char *)node->name, "master_interface2")==0) {
@@ -970,7 +970,7 @@ int read_conf_file(char *filename)
 				HCNF.peer_certificate_required = TRUE;
 			else
 				HCNF.peer_certificate_required = FALSE;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		} else if (strcmp((char*)node->name, 
 				"use_local_known_identities")==0){
 			if (strncmp(data, "yes", 3)==0)

@@ -70,7 +70,7 @@ int pfkey_send_hip_packet(char *data, int len);
 #define CONFIG_HIP
 #endif
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #define HIP_TAP_INTERFACE_MTU 1500
 #else
 #define HIP_TAP_INTERFACE_MTU 1400

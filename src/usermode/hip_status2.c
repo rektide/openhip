@@ -37,7 +37,7 @@
 #include <hip/hip_funcs.h>	/* pthread_mutex_lock() */
 #include <win32/rtnetlink.h>		/* from <linux/rtnetlink.h> */
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <utime.h>
 #endif
 
@@ -74,7 +74,7 @@ void *hip_status(void *arg)
 	struct sockaddr *from = (struct sockaddr*) &ss_from;
 	struct status_tlv *req;
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
         time_t last_time, now_time;
 
         last_time = time(NULL);
@@ -114,7 +114,7 @@ void *hip_status(void *arg)
 		timeout.tv_sec = 1;
 		timeout.tv_usec = 0;
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
                 now_time = time(NULL);
                 if (now_time - last_time > 60) {
                         printf("hip_status() heartbeat\n");

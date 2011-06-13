@@ -52,7 +52,7 @@
 
 #include <hip/hip_proto.h>
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #define NIPQUAD(addr) \
        ((unsigned char *)&addr)[0], \
        ((unsigned char *)&addr)[1], \
@@ -86,9 +86,9 @@
 
 #define MAX_REGISTRATIONS 1024
 #define MAX_REGISTRATION_TYPES 8 /* number of registration services */
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #define MAX_LEGACY_HOSTS 255 /* how many legacy hosts can attached to endbox */
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 #ifdef MOBILE_ROUTER
 #define MAX_MR_CLIENTS MAX_CONNECTIONS /* Number of mobile router clients */
 #endif /* MOBILE_ROUTER */
@@ -450,7 +450,7 @@ typedef struct _hi_node {
 	int name_len;		/* use this instead of strlen()		*/
 } hi_node;
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 struct peer_node
 {
   hip_hit hit; 
@@ -463,7 +463,7 @@ struct peer_node
   char name[MAX_HI_NAMESIZE];
 	struct _sockaddr_list **rvs_addrs;
 };
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 
 /* DH Cache
  */
@@ -856,7 +856,7 @@ struct hip_conf {
 	__u8 max_reg_lifetime;		/* offered max registration lifetime */
 	__u8 peer_certificate_required;
 	__u8 use_smartcard;		/* use smartcard for hostid, RSA/DSA sign and X.509 certificate */
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	char *smartcard_pin;		/* the pin */
 	char *smartcard_key_id;		/* the smartcard key to use */
 	char *smartcard_openssl_engine;	/* the smartcard openssl engine interface */
@@ -868,7 +868,7 @@ struct hip_conf {
 	char *cfg_serv_basedn;          /* e.g. ldap base dn */
 	char *cfg_serv_login_id;        /* e.g. ldap binddn */
 	char *cfg_serv_login_pwd;	/* e.g. ldap bindpw */
-#endif /* SMA_CRAWLER */
+#endif /* HIP_VPLS */
 	char conf_filename[255];
 	char my_hi_filename[255];
 	char known_hi_filename[255];

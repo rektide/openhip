@@ -61,7 +61,7 @@ int set_secret_key(unsigned char *key, hip_assoc *hip_a)
 		free(hip_a->dh_secret);
 	hip_a->dh_secret = key;
 	
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 	log_(NORM, "************\nDH secret key set to:\n0x");
 	print_hex(hip_a->dh_secret, keylen);
 	log_(NORM, "\n***********\n");

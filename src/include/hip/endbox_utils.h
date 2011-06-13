@@ -1,5 +1,5 @@
-#ifndef __SMA_ENDBOX_UTILS__
-#define __SMA_ENDBOX_UTILS__
+#ifndef _ENDBOX_UTILS_H_
+#define _ENDBOX_UTILS_H_
 
 #include <asm/types.h>
 #include <ctype.h>
@@ -62,4 +62,4 @@ void endbox_periodic_heartbeat(time_t *now_time, time_t *last_time,
 void endbox_ipv4_multicast_write(__u8 *data, int offset, int len);
 void endbox_esp_decrypt(__u8 *out, int *offset);
 
-#endif
+#endif /* _ENDBOX_UTILS_H_ */

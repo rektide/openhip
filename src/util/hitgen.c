@@ -45,7 +45,7 @@
 #include <hip/hip_types.h>
 #include <hip/hip_funcs.h>
 #include <hip/hip_globals.h>
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <openssl/ssl.h>
 #include <openssl/crypto.h>     /* OpenSSL's crypto library     */
 #include <openssl/bn.h>         /* Big Numbers                  */
@@ -249,7 +249,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 }
 
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 int output_HI(xmlNodePtr root_node, hi_options *opts)
 {
 	int err, rc;
@@ -693,7 +693,7 @@ int main(int argc, char *argv[])
 	char rnd_seed[255];
 	int i, have_filename=0, do_publish=0, do_conf=0, do_noinput=0;
 	int do_append=0;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 	int do_sc_out=0;
 #endif
 	hi_options opts;
@@ -802,7 +802,7 @@ int main(int argc, char *argv[])
 			do_append = 1;
 			argv++, argc--;
 			continue;
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		} else if (strcmp(*argv, "-scout") == 0) {
 			do_sc_out = 1;
 			argv++, argc--;
@@ -866,7 +866,7 @@ int main(int argc, char *argv[])
 	// dtd = xmlCreateIntSubset(doc,BAD_CAST "root",NULL,BAD_CAST "x.dtd");
 	// xmlNewChild(parent, NsPtr ns, name, content)
 	// 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
      if(!do_sc_out){
 #endif
 	if (do_noinput) {
@@ -902,7 +902,7 @@ int main(int argc, char *argv[])
 			printf("Warning: could not read any input.\n");
 	}
 	RAND_seed(rnd_seed, sizeof rnd_seed); 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
      } 
 #endif
 
@@ -911,7 +911,7 @@ int main(int argc, char *argv[])
 		if (!opts.type)
 			opts.type = HI_ALG_DSA;
 		sprintf(opts.name, "%s-%d", basename, opts.bitsize);
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 		if(do_sc_out)
 		  output_HI(root_node, &opts);
 		else
@@ -924,7 +924,7 @@ int main(int argc, char *argv[])
 				opts.type = HI_ALG_RSA;
 			opts.bitsize = default_sizes[i];
 			sprintf(opts.name, "%s-%d", basename, opts.bitsize);
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 			if(do_sc_out)
 			  output_HI(root_node, &opts);
 			else

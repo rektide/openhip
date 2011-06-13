@@ -72,7 +72,7 @@
 #endif /* __WIN32__ */
 #include <hip/hip_dns.h>	/* DNS headers			*/
 #endif
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
 #endif
 
@@ -510,7 +510,7 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
 		hi->dsa->g = BN_bin2bn(&data[offset], key_len, 0);
 		offset += key_len;
 		hi->dsa->pub_key = BN_bin2bn(&data[offset], key_len, 0);
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 		log_(NORM, "Found DSA HI with public key: 0x");
 		print_hex((char *)&data[offset], key_len);
 		log_(NORM, "\n");
@@ -523,7 +523,7 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
 		hi->rsa->e = BN_bin2bn(&data[offset], e_len, 0);
 		offset += e_len;
 		hi->rsa->n = BN_bin2bn(&data[offset], key_len, 0);
-#ifndef SMA_CRAWLER
+#ifndef HIP_VPLS
 		log_(NORM, "Found RSA HI with public modulus: 0x");
 		print_hex((char *)&data[offset], key_len);
 		log_(NORM, "\n");
@@ -3058,7 +3058,7 @@ void hip_exit(int signal)
 	close_log();
 	xmlCleanupParser();
 	deinit_crypto();
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
         err = system("/usr/local/etc/hip/bridge_down.sh");
 	//Allow config library to perform any shutdown ops
 	hipcfg_close();

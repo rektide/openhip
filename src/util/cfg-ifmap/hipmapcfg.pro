@@ -6,7 +6,7 @@ CONFIG += debug \
 TARGET = hipmapcfg
 TEMPLATE = lib
 VERSION = $$[LIBVERSION]
-DEFINES += SMA_CRAWLER
+DEFINES += HIP_VPLS
 DEFINES += DEBUG
 LIBS += -lifmap \
     -lxml2 \

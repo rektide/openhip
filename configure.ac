@@ -63,8 +63,6 @@ if test "x$ac_cv_lib_crypto_RSA_verify" != "xyes"; then
 	AC_MSG_ERROR([Could not find RSA functions from OpenSSL. Make sure the openssl-devel package is installed or that you have installed the suitable source.])
 fi
 
-#
-# configure option to define SMA_CRAWLER
 AC_CHECK_LIB([pthread], [pthread_create])
 # FIXME: Replace `main' with a function in `-li3', `-li3client':
 #AC_CHECK_LIB([i3], [main])
@@ -110,12 +108,12 @@ AC_ARG_ENABLE(kernel-support,
 	[enable_kernel=default
 	 AC_MSG_RESULT(no)])
 
-AC_MSG_CHECKING(if --enable-sma-crawler option is specified)
-AC_ARG_ENABLE(sma-crawler,
-	[  --enable-sma-crawler=config  enable SMA crawler with configuration via {files, LDAP, IFMAP}],
-	[enable_sma_crawler=$enable_sma_crawler
+AC_MSG_CHECKING(if --enable-vpls option is specified)
+AC_ARG_ENABLE(vpls,
+	[  --enable-vpls=config  enable VPLS with configuration via {files, LDAP, IFMAP}],
+	[enable_vpls=$enable_vpls
 	 AC_MSG_RESULT(yes)],
-	[enable_sma_crawler=default
+	[enable_vpls=default
 	 AC_MSG_RESULT(no)])
 
 AC_MSG_CHECKING(if --enable-mobile-router option is specified)
@@ -207,42 +205,42 @@ if test "$kernel_support" = "yes"; then
 fi
 
 #
-# configure option to define SMA_CRAWLER
+# configure option to define HIP_VPLS
 ################################################################################
-if test "$enable_sma_crawler" = "yes"; then
-	enable_sma_crawler="files" ;# default value
+if test "$enable_vpls" = "yes"; then
+	enable_vpls="files" ;# default value
 fi
-if test "$enable_sma_crawler" = "files" -o "$enable_sma_crawler" = "LDAP" -o "$enable_sma_crawler" = "IFMAP"; then
-	want_sma_crawler=true
-	want_sma_crawler_files_cfg=false
-	want_sma_crawler_LDAP_cfg=false
-	want_sma_crawler_IFMAP_cfg=false
-	CFLAGS=" -DSMA_CRAWLER $CFLAGS"
+if test "$enable_vpls" = "files" -o "$enable_vpls" = "LDAP" -o "$enable_vpls" = "IFMAP"; then
+	want_vpls=true
+	want_vpls_files_cfg=false
+	want_vpls_LDAP_cfg=false
+	want_vpls_IFMAP_cfg=false
+	CFLAGS=" -DHIP_VPLS $CFLAGS"
 
 	AC_CHECK_LIB([ssl], [SSL_library_init])
 	if test "x$ac_cv_lib_ssl_SSL_library_init" = "xyes"; then
 		AC_MSG_RESULT(
-			[OpenSSL library found for SMA crawler extensions])
+			[OpenSSL library found for VPLS extensions])
 	else
 		AC_MSG_ERROR(
-			[SMA crawler extensions requested but OpenSSL library not found.])
+			[VPLS extensions requested but OpenSSL library not found.])
 	fi
 
-	if test "$enable_sma_crawler" = "files"; then
+	if test "$enable_vpls" = "files"; then
 		AC_MSG_RESULT([Will use file-based configuration library libhipcfgfiles.so])
-		want_sma_crawler_files_cfg=true
-	elif test "$enable_sma_crawler" = "LDAP"; then
+		want_vpls_files_cfg=true
+	elif test "$enable_vpls" = "LDAP"; then
 		AC_CHECK_LIB([ldap],ldap_add_ext,,AC_MSG_ERROR([LDAP-based configuration library requested but OpenLDAP development libraries not found. Aborting.]))
 		AC_CHECK_LIB([ldapcpp],main,,AC_MSG_ERROR([LDAP-based configuration library requested but LDAP C++ library not found. Aborting]))
 		AC_MSG_RESULT([Will use LDAP-based configuration library libhipcfgldap.so])
-		want_sma_crawler_LDAP_cfg=true
-	elif test "$enable_sma_crawler" = "IFMAP"; then
+		want_vpls_LDAP_cfg=true
+	elif test "$enable_vpls" = "IFMAP"; then
 		AC_MSG_RESULT([Will use IFMAP-based configuration library libhipcfgmap.so])
-		want_sma_crawler_IFMAP_cfg=true
+		want_vpls_IFMAP_cfg=true
 	fi
 
 else
-       want_sma_crawler=false
+       want_vpls=false
 fi
 
 #
@@ -276,13 +274,13 @@ esac
 AM_CONDITIONAL(WANT_KERNEL, test x$want_kernel = xtrue)
 AM_CONDITIONAL(WANT_MOBILE_ROUTER, test x$want_mobile_router = xtrue)
 AM_CONDITIONAL(WANT_OSX, test x$want_osx = xtrue)
-AM_CONDITIONAL(WANT_SMA_CRAWLER, test x$want_sma_crawler = xtrue)
-AM_CONDITIONAL(WANT_SMA_CRAWLER_FILES_CFG, 
-	test x$want_sma_crawler_files_cfg = xtrue)
-AM_CONDITIONAL(WANT_SMA_CRAWLER_LDAP_CFG,
-	test x$want_sma_crawler_LDAP_cfg = xtrue)
-AM_CONDITIONAL(WANT_SMA_CRAWLER_IFMAP_CFG,
-	test x$want_sma_crawler_IFMAP_cfg = xtrue)
+AM_CONDITIONAL(WANT_VPLS, test x$want_vpls = xtrue)
+AM_CONDITIONAL(WANT_VPLS_FILES_CFG, 
+	test x$want_vpls_files_cfg = xtrue)
+AM_CONDITIONAL(WANT_VPLS_LDAP_CFG,
+	test x$want_vpls_LDAP_cfg = xtrue)
+AM_CONDITIONAL(WANT_VPLS_IFMAP_CFG,
+	test x$want_vpls_IFMAP_cfg = xtrue)
 
 #AC_SUBST(WANT_KERNEL, $want_kernel)
 
@@ -317,11 +315,11 @@ else
 fi
 AC_MSG_NOTICE([ ])
 
-if test $want_sma_crawler = true; then
-	AC_MSG_NOTICE([    - building HIP SMA crawler extensions])
-	AC_MSG_NOTICE([    	- will use $enable_sma_crawler-based configuration library])
+if test $want_vpls = true; then
+	AC_MSG_NOTICE([    - building virtual private LAN service extensions])
+	AC_MSG_NOTICE([    	- will use $enable_vpls-based configuration library])
 else
-	AC_MSG_NOTICE([    - NOT building HIP SMA crawler extensions])
+	AC_MSG_NOTICE([    - NOT building virtual private LAN service extensions])
 fi
 AC_MSG_NOTICE([ ])
 

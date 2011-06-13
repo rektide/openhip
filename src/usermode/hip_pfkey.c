@@ -36,7 +36,7 @@
 #include <hip/hip_service.h>
 #include <hip/hip_sadb.h>		/* access to SADB */
 #include <win32/pfkeyv2.h>
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
 #include <utime.h>
 #endif
 
@@ -88,7 +88,7 @@ void *hip_pfkey(void *arg)
 	char buff[1024];
 	struct sadb_msg *msg;
 
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
         time_t last_time, now_time;
  
         last_time = time(NULL);
@@ -123,7 +123,7 @@ void *hip_pfkey(void *arg)
 		timeout.tv_sec = 0;
 		timeout.tv_usec = 1000000;
 #endif
-#ifdef SMA_CRAWLER
+#ifdef HIP_VPLS
                 now_time = time(NULL);
                 if (now_time - last_time > 60) {
                         printf("hip_pfkey() heartbeat\n");
