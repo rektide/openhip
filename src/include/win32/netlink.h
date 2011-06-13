@@ -16,7 +16,7 @@
 #define MAX_LINKS 32		
 
 #ifdef __WIN32__
-typedef unsigned char sa_family_t;
+typedef unsigned short sa_family_t;
 #endif
 
 struct sockaddr_nl
