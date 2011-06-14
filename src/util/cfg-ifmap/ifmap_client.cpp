@@ -150,7 +150,7 @@ void IfmapClient::newSession()
 			   << "and publisherId:" << _publisherId;
 	_haveValidSession = true;
 
-        if (!purgePublisher() || !publishCurrentState() || !setupEndboxMapSubscriptions()) {
+        if (!purgePublisher() || !publishCurrentState() || !setupEndboxMapSubscriptions() || !searchCurrentConfig()) {
             // Try to connect every _retryDelay milliseconds
             QTimer::singleShot(_retryDelay, this, SLOT(newSession()));
         } else {
@@ -291,6 +291,32 @@ void IfmapClient::publishUnderlayIp()
 	// Restart MAP Client session and re-publish everything
 	QTimer::singleShot(_retryDelay, this, SLOT(newSession()));
     }
+}
+
+bool IfmapClient::searchCurrentConfig()
+{
+    const char *fnName = "IfmapClient::searchCurrentConfig:";
+    bool rc = false;
+
+    IdentityId myId(Identifier::IdentityDistinguishedName, _mapConfig.value("DistinguishedName"));
+
+    SearchRequest search(&myId, _matchLinks, _maxDepth);	
+    search.setResultFilter(_resultsFilter);
+
+    MapResponse *mapResponse = _ifmap->submitRequest(&search);
+    if (mapResponse->type() == MapResponse::SearchResponse) {
+        qDebug() << fnName << "Got SearchResponse";
+	QList <MapResult *> mapResults = mapResponse->mapResultList();
+	if (mapResults.at(0)) {
+	    this->updateEndboxMapping((SearchResult *)mapResults.at(0));
+	    rc = true;
+	}
+    } else {
+        qDebug() << fnName << "Did not get expected response type:" <<
+                 mapResponse->typeString();
+    }
+
+    return rc;
 }
 
 bool IfmapClient::setupEndboxMapSubscriptions()

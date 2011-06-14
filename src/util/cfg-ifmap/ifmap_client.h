@@ -49,6 +49,7 @@ private:
     bool purgePublisher();
     bool publishCurrentState();
     bool setupEndboxMapSubscriptions();
+    bool searchCurrentConfig();
     void processPollResponse(MapResponse *mapResponse);
 
 private:
