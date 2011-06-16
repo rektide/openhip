@@ -76,6 +76,7 @@
 
 #ifdef HIP_VPLS
 int touchHeartbeat;
+static int get_more_legacy_macs;
 #endif
 
 #ifdef __WIN32__
@@ -215,9 +216,9 @@ void *hip_esp_output(void *arg)
 #ifdef HIP_VPLS
 	touchHeartbeat=1;
 	last_time = time(NULL);
-	printf("hip_esp_output() thread (tid %d pid %d) started...\n",
+	printf("hip_esp_output() thread (tid %u pid %d) started...\n",
 	       (unsigned)pthread_self(), getpid());
-	build_host_mac_map();
+	get_more_legacy_macs = build_host_mac_map();
 #else
 	printf("hip_esp_output() thread started...\n");
 #endif
@@ -236,6 +237,8 @@ void *hip_esp_output(void *arg)
 #ifdef HIP_VPLS
 		endbox_periodic_heartbeat(&now_time, &last_time, &packet_count,
 			"output", touchHeartbeat);
+		if (get_more_legacy_macs)
+			get_more_legacy_macs = build_host_mac_map();
 #endif
 
 		if ((err = select(readsp[1]+1, &fd, NULL, NULL, &timeout))< 0) {

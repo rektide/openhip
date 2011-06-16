@@ -267,6 +267,11 @@ int ack_request(__u32 src, __u32 dst)
 	return rc;
 }
 
+/* Return value:
+ * -1 => error
+ *  0 => completed
+ *  1 => not completed, need to call again
+ */
 
 int build_host_mac_map()
 {
@@ -279,53 +284,85 @@ int build_host_mac_map()
   struct timeval timeout;
   fd_set read_fdset;
   __u32 resp_ip;
-  char *resp_ip_s;
   struct in_addr resp_ip_in;
   __u8 resp_mac[6];
   char resp_mac_s[32];
-  struct in_addr eb_in, dst_in;
-  char *eb_s, dst_s[32];
+  char eb_s[32], dst_s[32], resp_ip_s[32];
   int host_cnt;
   struct sockaddr_storage legacyHosts[5], eb_ss;
   struct sockaddr *dst_p, *eb_p = (struct sockaddr *)&eb_ss;
   struct stat stat_buf;
+  static time_t now_time, last_time;
+  static int mac_table_full = FALSE;
+  static unsigned call_count = 0;
+  static unsigned cycle_time = 15, max_cycle_time = 60;;
 
-  if(stat("/tmp/private_hosts", &stat_buf)==0){
-    log_(NORM, "loading legacy node MAC addresses from /tmp/private_hosts.\n");
-    if(read_private_hosts()>0){
-      printf("loaded %d entries from /tmp/private_hosts.\n", numHosts);
+  if (mac_table_full)
+    return 0;
+
+  if ((stat("/tmp/private_hosts", &stat_buf) == 0) && (numHosts == 0)) {
+    log_(NORM, "Loading legacy node MAC addresses from /tmp/private_hosts.\n");
+    if (read_private_hosts() > 0) {
+      log_(NORM, "Loaded %d entries from /tmp/private_hosts.\n", numHosts);
+      mac_table_full = TRUE;
       return 0;
+    } else {
+      log_(WARN, "Error reading /tmp/private_hosts; attempting discovery.\n");
     }
   }
-      
-  log_(NORM, "Lookup MAC addresses for legacy hosts attached this endobx...\n");
-  eb_in.s_addr = g_tap_lsi;
-  eb_s = inet_ntoa(eb_in);
-  
-  s[numHosts].ip = strdup(eb_s);
-  s[numHosts].mac = strdup("00:00:00:00:00:00");
-  numHosts++; 
 
-  if(eb_s == NULL)
-    return -1;
-  eb_p->sa_family=AF_INET;
-  inet_pton(AF_INET, eb_s, SA2IP(eb_p));
+  inet_ntop(AF_INET, &g_tap_lsi, eb_s, sizeof(eb_s));
  
-  host_cnt=hipcfg_getLegacyNodesByEndbox(eb_p,
+  now_time = time(NULL);
+  if (numHosts == 0) {
+    s[numHosts].ip = strdup(eb_s);
+    s[numHosts].mac = strdup("00:00:00:00:00:00");
+    numHosts++; 
+    last_time = time(NULL);
+    return 1;
+  } else if (now_time - last_time < cycle_time) {
+    return 1;
+  } else {
+    last_time = now_time;
+  }
+
+  eb_p->sa_family = AF_INET;
+  memcpy(SA2IP(eb_p), &g_tap_lsi, SAIPLEN(eb_p));
+ 
+  host_cnt = hipcfg_getLegacyNodesByEndbox(eb_p,
 	legacyHosts, sizeof(legacyHosts)/sizeof(struct sockaddr_storage));
-  if(host_cnt <0 )
+
+  if(host_cnt < 0 ) {
+    log_(WARN, "Error getting legacy hosts serviced by endbox %s\n", eb_s);
     return -1;
-  if(host_cnt == 0){
-    log_(WARN, "no legacy hosts servied by endbox %s\n", eb_s);
+  } else if(host_cnt == 0) {
+    log_(WARN, "No legacy hosts serviced by endbox %s\n", eb_s);
+    return -1;
+  } else if (numHosts == host_cnt + 1) { /* Already full */
+    mac_table_full = TRUE;
     return 0;
   }
  
-  hip_sleep(30); //HIP threads initialization complete
-  for(i = 0; i<host_cnt; i++){
+  log_(NORM, "Lookup MAC addresses for legacy hosts for endbox %s\n", eb_s);
+
+  for(i = 0; i < host_cnt; i++) {
     dst_p = (struct sockaddr *)&legacyHosts[i];
+
+    /* Only support IPv4 at present */
+
+    if (dst_p->sa_family != AF_INET)
+      continue;
+
+    /* Is legacy host MAC already saved? */
+
     inet_ntop(dst_p->sa_family, SA2IP(dst_p), dst_s, sizeof(dst_s));
-    log_(NORM, "finding MAC for legacy node %s...\n", dst_s);
-    inet_aton(dst_s, &dst_in);
+    for (j = 0; j < numHosts; j++)
+      if (strcmp(s[j].ip, dst_s) == 0)
+        break;
+    if (j < numHosts)
+      continue;
+
+    log_(NORM, "Finding MAC for legacy node %s\n", dst_s);
    
     src_mac = (__u64)g_tap_lsi << 16;
     add_eth_header(out, src_mac, dst_mac, 0x0806);
@@ -337,102 +374,95 @@ int build_host_mac_map()
     arp_request->ar_hln = 6;
     arp_request->ar_pln = 4;
     arp_request->ar_op = htons(ARPOP_REQUEST);
-    p = (__u8 *)(arp_request +1);
+    p = (__u8 *)(arp_request + 1);
     memcpy(p, &src_mac, 6);		/* sender MAC */
-    memcpy(p+6, &g_tap_lsi, 4);	/* sender address */
+    memset(p+6, 0, 4);			/* sender (zero) address */
     memcpy(p+10, &dst_mac, 6);		/* target MAC */
-    memcpy(p+16, &dst_in.s_addr, 4);	/* target address */
+    memcpy(p+16, SA2IP(dst_p), 4);	/* target address */
 
     outlen = sizeof(struct eth_hdr) + sizeof(struct arp_hdr) + 20;
 
     FD_ZERO(&read_fdset);
     FD_SET((unsigned)readsp[1], &read_fdset);
-    time_t poll_time, cur_time;
-    time(&poll_time);
-    while(1){
-      time(&cur_time);
-      if((cur_time-poll_time)>20){
-	log_(WARN, "cannot get ARP response for legacy host %s\n", dst_s);
-	break;
-      }
-      if(write(tapfd, out, outlen) < 0) {
-          log_(WARN, "send ARP request failed while aquiring MAC addresses.\n");
-          return -1;
-      }
-      fflush(stdout);
-      timeout.tv_sec = 3;
-      timeout.tv_usec = 0;
-      rc=select(readsp[1]+1, &read_fdset, NULL, NULL, &timeout);
-      if(rc == 0) {
-	continue;
-      }
-      if(rc < 0 ){
-        if(rc == EINTR)
-          continue;
-        log_(WARN, "error polling on socket to get MAC address, error: %s\n",
+
+    if (write(tapfd, out, outlen) < 0) {
+      log_(WARN, "Send ARP request failed while aquiring MAC addresses.\n");
+      continue;
+    }
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+    rc = select(readsp[1]+1, &read_fdset, NULL, NULL, &timeout);
+    if (rc == 0) {
+      log_(WARN, "Cannot get ARP response for legacy host %s\n", dst_s);
+      continue;
+    } 
+    if (rc < 0) {
+      log_(WARN, "Error polling on socket to get MAC address, error: %s\n",
 		strerror(errno));
-        return -1;
-      } 
-      rc = read(readsp[1], in, BUFF_LEN);
-      //printf("read readsp returned %d bytes", rc);
-      if(rc <= 0) {
-         log_(WARN, "error read on socket to get MAC address, error: %s\n",
+      continue;
+    }
+    rc = read(readsp[1], in, BUFF_LEN);
+    if (rc <= 0) {
+      log_(WARN, "Error read on socket to get MAC address, error: %s\n",
 		strerror(errno));
-         return -1;
-      }
-      j=0; // supress compling error.
-   /*
-      printf("\n");
-      for(j=0; j<14; j++)
-        printf("%02x ", in[j]);
-      printf("\n");
-   */
-      if(in[12]!=0x08 || in[13]!=0x06) {
-        //printf("read readsp - not a ARP reply %02x %02x\n", in[12], in[13]);
+      continue;
+    }
+    if (in[12] != 0x08 || in[13] != 0x06) {
+      log_(WARN, "Cannot get ARP response for legacy host %s\n", dst_s);
+      continue;
+    }
+
+    /* Is this an ARP reply? */
+
+    if (ntohs(arp_reply->ar_hrd)==0x01 &&     /* Ethernet */
+        ntohs(arp_reply->ar_pro)==0x0800 &&   /* IPv4 */
+        arp_reply->ar_hln==6 && arp_reply->ar_pln == 4 &&
+        ntohs(arp_reply->ar_op)==0x0002) {    /* ARP reply */
+
+      /* Is the reply from the legacy host? */
+
+      resp_ip = ((__u32)in[28]<<24) + ((__u32)in[29]<<16) +
+                ((__u32)in[30]<<8)  + ((__u32)in[31]);
+      resp_ip_in.s_addr = htonl(resp_ip);
+      inet_ntop(AF_INET, &resp_ip_in.s_addr, resp_ip_s, sizeof(resp_ip_s));
+      if (strcmp(resp_ip_s, dst_s)) {
+        log_(WARN, "Cannot get ARP response for legacy host %s\n", dst_s);
         continue;
       }
-    /*
-      printf("ar_hrd %x\n", ntohs(arp_reply->ar_hrd));
-      printf("ar_pro %x\n", ntohs(arp_reply->ar_pro));
-      printf("ar_hln %x\n", arp_reply->ar_hln);
-      printf("ar_pln %x\n", arp_reply->ar_pln);
-      printf("ar_op %x\n", ntohs(arp_reply->ar_op));
-    */
-	     
-      if(ntohs(arp_reply->ar_hrd)==0x01 &&     /* Ethernet */
-         ntohs(arp_reply->ar_pro)==0x0800 && /* IPv4 */
-         arp_reply->ar_hln==6 && arp_reply->ar_pln == 4 &&
-         ntohs(arp_reply->ar_op)==0x0002){ /* ARP reply */
-	/*
-	   for(j=0; j<10; j++)
-	    printf("%0x ", in[22+j]);
-	   printf("\n");
-	*/
-           memcpy(resp_mac, &in[22], 6);
-           resp_ip = ((__u32)in[28]<<24) + ((__u32)in[29]<<16) + ((__u32)in[30]<<8) + (__u32)in[31];
-	   resp_ip_in.s_addr = htonl(resp_ip);
-	 /*
-	   printf("got ARP response - responder IP %s", inet_ntoa(resp_ip_in));
-	   printf("dest IP %s\n", inet_ntoa(dst_in));
-	 */
-	   if(resp_ip_in.s_addr != dst_in.s_addr)
-	      continue;
-	   resp_ip_s = inet_ntoa(resp_ip_in);
-	   sprintf(resp_mac_s, "%02x:%02x:%02x:%02x:%02x:%02x", 
+
+      /* Save result */
+
+      memcpy(resp_mac, &in[22], 6);
+      sprintf(resp_mac_s, "%02x:%02x:%02x:%02x:%02x:%02x", 
 		resp_mac[0],resp_mac[1], resp_mac[2],
 		resp_mac[3],resp_mac[4], resp_mac[5]);
-	   log_(NORM, "got MAC [%s] for legacy host [%s]\n",
-		resp_mac_s, resp_ip_s);
-	   s[numHosts].ip = strdup(resp_ip_s);
-	   s[numHosts].mac = strdup(resp_mac_s);
-	   numHosts++;
-	   break;
-      }
+      log_(NORM, "Got MAC [%s] for legacy host [%s]\n", resp_mac_s, resp_ip_s);
+      s[numHosts].ip = strdup(resp_ip_s);
+      s[numHosts].mac = strdup(resp_mac_s);
+      numHosts++;
+    } else {
+      log_(WARN, "Cannot get ARP response for legacy host %s\n", dst_s);
     }
   }
-  log_(NORM, "complete aquiring legacy hosts MAC addresses on this endbox.\n");
-  save_private_hosts();
-  return(0);
+
+  if (numHosts == host_cnt + 1) {
+    log_(NORM, "Acquired all legacy hosts MAC addresses on this endbox.\n");
+    mac_table_full = TRUE;
+    return 0;
+  } else {
+    /* Gradually increase times between MAC discovery */
+    if (numHosts > 1 && cycle_time < max_cycle_time) {
+      call_count++;
+      if (call_count == 3 || call_count == 6 || call_count == 9)
+        cycle_time += 5;
+      else if (call_count > 9 && call_count < 20)
+        cycle_time += 2;
+      else if (call_count >= 20)
+        cycle_time++;
+    }
+    log_(WARN, "Did not acquire all legacy hosts MAC addresses.\n");
+    return 1;
+  }
 }
 
 /*
