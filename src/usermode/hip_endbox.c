@@ -246,6 +246,9 @@ int ack_request(__u32 src, __u32 dst)
 		return 0;
 	}
 
+	if (!dst)
+		return 1;
+
 	memcpy(hit1, SA2IP(eb_p), HIT_SIZE);
 
 	host_p->sa_family = AF_INET;
@@ -489,7 +492,11 @@ int endbox_ipv4_packet_check(struct ip *iph, struct sockaddr *lsi,
 			LSI4(lsi) = ntohl(LSI4(eb_p));
 		  }
 		  (*packet_count)++;
-	} /* end if not multicast */
+	} else {
+		if(!ack_request(iph->ip_src.s_addr, 0))
+			return(-1);
+		  (*packet_count)++;
+	}
 	return(0);
 }
 
