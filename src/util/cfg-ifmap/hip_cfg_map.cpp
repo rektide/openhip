@@ -711,18 +711,18 @@ void hipCfgMap::updateMaps(string myDN,
 
         // Endbox HIT to hip peer entry
 	cout << fnName << "Adding entry to hit_to_peers HIT: " << peerHIT << endl;
-        struct peer_node p;
-        memset(&p, 0, sizeof(struct peer_node));
-        hitstr2hit(p.hit, (char *)peerHIT.c_str());
-        strcpy(p.name, (char *)peerDN.c_str());
+        struct peer_node *p = new(struct peer_node);
+        memset(p, 0, sizeof(struct peer_node));
+        hitstr2hit(p->hit, (char *)peerHIT.c_str());
+        strcpy(p->name, (char *)peerDN.c_str());
         //TODO: These parameters should be specified somewhere?
-        p.algorithm_id = 0;
-        p.r1_gen_count = 10;
-        p.anonymous = 0;
-        p.allow_incoming = 1;
-        p.skip_addrcheck = 0;
+        p->algorithm_id = 0;
+        p->r1_gen_count = 10;
+        p->anonymous = 0;
+        p->allow_incoming = 1;
+        p->skip_addrcheck = 0;
         // Make pair
-        hit_to_peers.insert(std::make_pair(peerHIT, &p));
+        hit_to_peers.insert(std::make_pair(peerHIT, p));
     }
 
     // This needs to be mutex'd because ifmap_client calls this function from
@@ -731,6 +731,13 @@ void hipCfgMap::updateMaps(string myDN,
 	_allowed_peers = allowed_peers;
 	_endbox2LlipMap = endbox2LlipMap;
 	_legacyNode2EndboxMap = legacyNode2EndboxMap;
+
+	// Delete existing peer_node structs
+	map <string, struct peer_node *>::iterator i;
+	for(i=_hit_to_peers.begin(); i!=_hit_to_peers.end(); i++) {
+	    struct peer_node *p = (*i).second;
+	    delete p;
+	}
 	_hit_to_peers = hit_to_peers;
     pthread_mutex_unlock(&hipcfgmap_mutex);
 
