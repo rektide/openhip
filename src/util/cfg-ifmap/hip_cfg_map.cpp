@@ -711,18 +711,18 @@ void hipCfgMap::updateMaps(string myDN,
 
         // Endbox HIT to hip peer entry
 	cout << fnName << "Adding entry to hit_to_peers HIT: " << peerHIT << endl;
-        struct peer_node *p = new(struct peer_node);
-        memset(p, 0, sizeof(struct peer_node));
-        hitstr2hit(p->hit, (char *)peerHIT.c_str());
-        strcpy(p->name, (char *)peerDN.c_str());
+        struct peer_node p;
+        memset(&p, 0, sizeof(struct peer_node));
+        hitstr2hit(p.hit, (char *)peerHIT.c_str());
+        strcpy(p.name, (char *)peerDN.c_str());
         //TODO: These parameters should be specified somewhere?
-        p->algorithm_id = 0;
-        p->r1_gen_count = 10;
-        p->anonymous = 0;
-        p->allow_incoming = 1;
-        p->skip_addrcheck = 0;
+        p.algorithm_id = 0;
+        p.r1_gen_count = 10;
+        p.anonymous = 0;
+        p.allow_incoming = 1;
+        p.skip_addrcheck = 0;
         // Make pair
-        hit_to_peers.insert(std::make_pair(peerHIT, p));
+        hit_to_peers.insert(std::make_pair(peerHIT, &p));
     }
 
     // This needs to be mutex'd because ifmap_client calls this function from
@@ -829,6 +829,8 @@ int hipCfgMap::getHITFromLocalFile()
 
        }
     }
+
+    xmlFreeDoc(doc);
 
     memset(&lsi, 0, sizeof(struct sockaddr_in));
     memset(lsi_str, 0, INET_ADDRSTRLEN);

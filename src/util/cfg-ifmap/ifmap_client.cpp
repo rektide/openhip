@@ -150,7 +150,21 @@ void IfmapClient::newSession()
 			   << "and publisherId:" << _publisherId;
 	_haveValidSession = true;
 
-        if (!purgePublisher() || !publishCurrentState() || !setupEndboxMapSubscriptions() || !searchCurrentConfig()) {
+    } else {
+        qDebug() << fnName << "Received unexpected response type:" <<
+		 mapResponse->typeString();
+
+	// Try to connect every _retryDelay milliseconds
+	QTimer::singleShot(_retryDelay, this, SLOT(newSession()));
+    }
+
+    delete mapResponse;
+
+    if (_haveValidSession) {
+        if (!purgePublisher() || 
+	    !publishCurrentState() || 
+	    !setupEndboxMapSubscriptions() || 
+	    !searchCurrentConfig()) {
             // Try to connect every _retryDelay milliseconds
             QTimer::singleShot(_retryDelay, this, SLOT(newSession()));
         } else {
@@ -158,12 +172,6 @@ void IfmapClient::newSession()
             AttachSessionRequest attachSession(_sessionId);
             _ifmap->submitRequest(&attachSession);
         }
-    } else {
-        qDebug() << fnName << "Received unexpected response type:" <<
-		 mapResponse->typeString();
-
-	// Try to connect every _retryDelay milliseconds
-	QTimer::singleShot(_retryDelay, this, SLOT(newSession()));
     }
 }
 
@@ -179,6 +187,8 @@ bool IfmapClient::purgePublisher() {
     } else {
         qDebug() << fnName << "Got unexpected response:" << mapResponse->typeString();
     }
+
+    delete mapResponse;
 
     return rc;
 }
@@ -216,6 +226,8 @@ bool IfmapClient::publishCurrentState()
     } else {
         qDebug() << fnName << "Got unexpected response:" << mapResponse->typeString();
     }
+
+    delete mapResponse;
 
     return rc;
 }
@@ -291,6 +303,8 @@ void IfmapClient::publishUnderlayIp()
 	// Restart MAP Client session and re-publish everything
 	QTimer::singleShot(_retryDelay, this, SLOT(newSession()));
     }
+
+    delete mapResponse;
 }
 
 bool IfmapClient::searchCurrentConfig()
@@ -315,6 +329,8 @@ bool IfmapClient::searchCurrentConfig()
         qDebug() << fnName << "Did not get expected response type:" <<
                  mapResponse->typeString();
     }
+
+    delete mapResponse;
 
     return rc;
 }
@@ -342,6 +358,8 @@ bool IfmapClient::setupEndboxMapSubscriptions()
 		 mapResponse->typeString();
     }
 
+    delete mapResponse;
+
     return rc;
 }
 
@@ -366,6 +384,9 @@ void IfmapClient::mapResponseOnARC(MapResponse *mapResponse)
 
         QTimer::singleShot(_retryDelay, this, SLOT(newSession()));
     }
+
+    qDebug() << fnName << "Deleting mapResponse !!!!!!!!!!!!!!!!!!";
+    delete mapResponse;
 }
 
 void IfmapClient::processPollResponse(MapResponse *mapResponse)
