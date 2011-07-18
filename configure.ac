@@ -23,7 +23,7 @@
 
 AC_PREREQ(2.59)
 # change the HIP version here
-AC_INIT(OpenHIP, 0.7, [openhip-developers@lists.sourceforge.net], openhip)
+AC_INIT(OpenHIP, 0.8_RC1, [openhip-developers@lists.sourceforge.net], openhip)
 AC_CONFIG_SRCDIR([src/protocol/hip_main.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
