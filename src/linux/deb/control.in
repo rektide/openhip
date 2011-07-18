@@ -2,7 +2,7 @@ Package: openhip
 Version: @PACKAGE_VERSION@
 Section: Networking
 Priority: optional
-Architecture: i386
+Architecture: @build_cpu@
 Essential: no
 Depends: libxml2, openssl
 Installed-Size: 404
