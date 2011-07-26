@@ -9,7 +9,7 @@ This file recognizes the individuals who have contributed to this project.
 
 Original authors:
 Jeff Ahrenholz (siliconja@users.sourceforge.net) 
- - primary author and maintainer for past few years
+ - primary author and lead maintainer since 2005
 Tom Henderson (tom_henderson@users.sourceforge.net)
  - started the original implementation
 Jeff Meegan (jmeegan@users.sourceforge.net)  
@@ -22,3 +22,13 @@ Miriam Esteban (miriam.esteban@netlab.nec.de)
 - rendezvous extensions
 Andrei Gurtov (gurtov@cs.helsinki.fi)
 - Hi3 patch
+David Mattes (sarabito@users.sourceforge.net)
+- VPLS, IF-MAP configuration plugin, smart card support
+Jin Fang (jin.fang@boeing.com)
+- config API, certificates support
+Orlie Brewer (orliebrewer@users.sourceforge.net)
+- mobile router, VPLS
+Randy Groves (randygroves@users.sourceforge.net) and Darren Lissimore
+- ARM support
+Alexander Kiening
+- improved DNS and RVS support
