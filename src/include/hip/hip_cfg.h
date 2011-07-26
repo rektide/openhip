@@ -92,7 +92,7 @@ protected:
 
 protected:
   map <string, string> _legacyNode2EndboxMap;
-  map <string, string> _endbox2LlipMap; /* endbox (LSI) to Llip (BCWIN) mapping */
+  map <string, string> _endbox2LlipMap; /* endbox (LSI) to Llip mapping */
   string _localCertUrl;
   map <string, certInfo> _certs; /* cached certificates data indexed by cert url*/
   set <hitPair, hp_compare> _allowed_peers; /* pairs of hits allowed to start HIP base exchange */

@@ -77,7 +77,7 @@ extern int hipcfg_getEndboxByLegacyNode(const struct sockaddr *host, struct sock
 /* Input: eb - endbox address either in IPv4 (LSI) or IPv6 (HIT)
  *             The sa_family must be set to ether  AF_INET or AF_INET6
  *             before calling this function.
- * Output: llip -  lower layer IP address (e.g. BCWIN) in eihter IPv4/v6.
+ * Output: llip -  lower layer IP address, either IPv4/v6.
  *             sa_family will be set to either AF_INET or AF_INET6 after successfully
  *             calling this function per its actual IP address family.
  * Return: 0 - if the lookup succeeed, 1 - if the mapping is not found, -1 if error.
