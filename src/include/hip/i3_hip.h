@@ -1,9 +1,21 @@
 /*
- * Interface with i3 and HIP for Hi3
- * Author: (c) Andrei Gurtov, HIIT
- * Licence: GPLv2
- * Written: 3.4.2005
-*/
+ * Copyright (C) 2005 Andrei Gurtov
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ *  Authors:    Andrei Gurtov, HIIT
+ *  Written: 3.4.2005
+ *
+ * \brief Interface with i3 and HIP for Hi3
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
