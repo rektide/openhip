@@ -36,9 +36,6 @@
 /* Define to 1 if you have the `ipq' library (-lipq). */
 #undef HAVE_LIBIPQ
 
-/* Define to 1 if you have the `ipsec' library (-lipsec). */
-#undef HAVE_LIBIPSEC
-
 /* Define to 1 if you have the `ldap' library (-lldap). */
 #undef HAVE_LIBLDAP
 
