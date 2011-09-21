@@ -2120,9 +2120,6 @@ void print_usage()
 	printf("  -nr\t no retransmit mode (for testing)\n");    
 	printf("  -t <addr>  manually trigger a HIP exchange with the ");
 	printf("given address\n");
-#ifdef HIP_I3
-	printf("  -i3\t enable Hi3: use i3 overlay for control packets\n");    
-#endif /* HIP_I3 */
 	printf("  -rvs\t rendezvous server mode\n");
 #ifdef MOBILE_ROUTER
 	printf("  -mr\t mobile router mode\n");

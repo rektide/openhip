@@ -85,11 +85,6 @@
 #include <hip/hip_cfg_api.h>
 #endif
 
-#ifdef HIP_I3
-#include "i3_hip.h"
-int (*select_func)(int, fd_set*, fd_set*, fd_set*, struct timeval *);
-#endif
-
 #ifdef __MACOSX__
 extern void del_divert_rule(int);
 #endif
@@ -105,7 +100,6 @@ extern void del_divert_rule(int);
 int main(int argc, char *argv[]);
 
 /* HIP packets */
-/*I3: static */
 #ifdef __WIN32__
 void hip_handle_packet(__u8* buff, int length, struct sockaddr *src);
 #else
@@ -198,9 +192,6 @@ int main_loop(int argc, char **argv)
 	OPT.rvs = FALSE;
 #ifdef MOBILE_ROUTER
 	OPT.mr = FALSE;
-#endif
-#ifdef HIP_I3
-	OPT.i3 = FALSE;
 #endif
 	
 	/*
@@ -314,17 +305,6 @@ int main_loop(int argc, char **argv)
 			log_(WARN, "The -u option has been deprecated. UDP "
 				"encapsulation is enabled by default and can be"
 				"disabled in hip.conf.\n");
-			argv++, argc--;
-			continue;
-		}
-		if (strcmp(*argv, "-i3") == 0) {
-#ifndef HIP_I3
-			log_(ERR, "Error: -i3 option specified but I3 support "
-				"not enabled at compile time.\n");
-			exit(1);
-#else
-			OPT.i3 = TRUE;
-#endif /* HIP_I3 */
 			argv++, argc--;
 			continue;
 		}
@@ -621,11 +601,6 @@ int main_loop(int argc, char **argv)
 
 	log_(NORMT, "Listening on HIP and PF_KEY sockets...\n");
 
-#ifdef HIP_I3
-	if (OPT.i3)
-	        i3_init((hip_hit *)get_preferred_hi(my_hi_head)->hit);
-#endif
-
 	/* main event loop */
 	for (;;) {
 		/* this line causes a performance hit, used for debugging... */
@@ -673,17 +648,9 @@ int main_loop(int argc, char **argv)
                 }
 #endif
 
-#ifdef HIP_I3
-		select_func = OPT.i3 ? &cl_select : &select;
-		/* wait for I3 socket activity */
-		if ((err = (*select_func)((highest_descriptor + 1), &read_fdset,
-		    NULL, NULL, &timeout)) < 0) {
-#else
-
 		/* wait for socket activity */
 		if ((err = select((highest_descriptor + 1), &read_fdset, 
 		    NULL, NULL, &timeout)) < 0) {
-#endif
 			/* sometimes select receives interrupt in addition
 			 * to the hip_exit() signal handler */
 			if (errno == EINTR)

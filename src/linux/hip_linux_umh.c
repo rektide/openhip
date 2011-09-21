@@ -379,7 +379,7 @@ int main (int argc, char **argv)
 */
 	argv++, argc--;
 	while (argc > 0) {
-		if (strstr("-v-q-d-r1-p-nr-o-a-t-u-i3-conf-mn-mr-g", *argv)) {
+		if (strstr("-v-q-d-r1-p-nr-o-a-t-u-conf-mn-mr-g", *argv)) {
 			argv--, argc++;
 			goto start_hip;
 		} else {

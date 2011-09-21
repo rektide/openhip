@@ -64,9 +64,6 @@ if test "x$ac_cv_lib_crypto_RSA_verify" != "xyes"; then
 fi
 
 AC_CHECK_LIB([pthread], [pthread_create])
-# FIXME: Replace `main' with a function in `-li3', `-li3client':
-#AC_CHECK_LIB([i3], [main])
-#AC_CHECK_LIB([i3client], [main])
 # FIXME: Replace `main' with a function in `-liphlpapi':
 #AC_CHECK_LIB([iphlpapi], [])
 AC_CHECK_LIB([ipsec], [pfkey_send_hip_x1])

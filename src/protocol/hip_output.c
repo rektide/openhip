@@ -68,10 +68,6 @@
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
 
-#ifdef HIP_I3
-#include "i3_hip.h"
-#endif
-
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
 #endif /* HIP_VPLS */
@@ -201,11 +197,6 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
 		hiph->checksum = checksum_packet(&buff[0], src, dst);
 
  	/* send the packet */
-#ifdef HIP_I3
-	if (OPT.i3)
-	     return(send_i3(buff, location, hit, src, dst));
-	else
-#endif
 	return(hip_send(buff, location, src, dst, hip_a, do_retrans));
 }
 
@@ -281,11 +272,6 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 
 	/* send the packet */
 	log_(NORMT, "Sending HIP_R1 packet (%d bytes)...\n", total_len);
-#ifdef HIP_I3
-        if (OPT.i3)
-                err = send_i3(data, r1_entry->len, hiti, src, dst);
-	else
-#endif
 	err = hip_send(data, total_len, src, dst, NULL, FALSE);
 
 	free(data); /* not retransmitted */
@@ -701,11 +687,6 @@ int hip_send_I2(hip_assoc *hip_a)
 
 	/* send the packet */
 	log_(NORMT, "Sending HIP_I2 packet (%d bytes)...\n", location);
-#ifdef HIP_I3
-	if (OPT.i3)
-     		return(send_i3(buff, location, &hip_a->peer_hi->hit, HIPA_SRC(hip_a), HIPA_DST(hip_a)));
-	else
-#endif
      return(hip_send(buff, location, HIPA_SRC(hip_a), HIPA_DST(hip_a),
                         hip_a, TRUE));
 }
@@ -798,12 +779,7 @@ int hip_send_R2(hip_assoc *hip_a)
 	log_(NORMT, "Sending HIP_R2 packet (%d bytes)...\n", location);
 	/* R2 packet is not scheduled for retrans., but saved for retrans. */
 
-#ifdef HIP_I3
-	if (OPT.i3)
-     		return(send_i3(buff, location, &hiph->hit_rcvr, HIPA_SRC(hip_a), HIPA_DST(hip_a)));
-	else
-#endif	
-     return(hip_send(buff, location, HIPA_SRC(hip_a), HIPA_DST(hip_a),
+	return(hip_send(buff, location, HIPA_SRC(hip_a), HIPA_DST(hip_a),
                         hip_a, TRUE));
 }
 
