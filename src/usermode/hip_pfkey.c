@@ -269,7 +269,7 @@ int pfkey_handle_add(int sock, char *data, int len)
 
 	__u8 *a_key, *e_key;
 	__u16 hitmagic;
-	int is_src=0, addr_len=0;
+	int is_src=0;
 	
 	struct sadb_msg *msg;
 	struct sadb_ext *ext;
@@ -318,7 +318,6 @@ int pfkey_handle_add(int sock, char *data, int len)
 			is_src = 1;
 		case SADB_EXT_ADDRESS_DST:
 			addr = (struct sadb_address*) ext;
-			addr_len = addr->sadb_address_prefixlen;
 			addr++;
 			if (is_src) src = (struct sockaddr*)addr;
 			else dst = (struct sockaddr*)addr;
@@ -328,7 +327,6 @@ int pfkey_handle_add(int sock, char *data, int len)
 			is_src = 1;
 		case SADB_EXT_IDENTITY_DST:
 			ident = (struct sadb_ident*) ext;
-			addr_len = ident->sadb_ident_len;
 			ident++;
 			if (is_src) inner_src = (struct sockaddr*)ident;
 			else inner_dst = (struct sockaddr*)ident;
@@ -401,7 +399,7 @@ int pfkey_handle_delete(int sock, char *data, int len)
 	__u32 type, spi;
 	int err, location, msg_length, ext_len;
 	struct sockaddr *src, *dst;
-	int is_src=0, addr_len=0;
+	int is_src=0;
 	
 	struct sadb_msg *msg;
 	struct sadb_ext *ext;
@@ -426,7 +424,6 @@ int pfkey_handle_delete(int sock, char *data, int len)
 			is_src = 1;
 		case SADB_EXT_ADDRESS_DST:
 			addr = (struct sadb_address*) ext;
-			addr_len = addr->sadb_address_prefixlen;
 			addr++;
 			if (is_src) src = (struct sockaddr*)addr;
 			else dst = (struct sockaddr*)addr;
@@ -462,19 +459,15 @@ int pfkey_handle_get(int sock, char *data, int len)
 	char buff[255];
 	__u32 spi;
 	int err, location, msg_length, ext_len;
-	struct sockaddr *src, *dst;
-	int is_src=0, addr_len=0;
 	__u64 bytes, usetime;
 	
 	struct sadb_msg *msg, *reply_msg;
 	struct sadb_ext *ext;
 	struct sadb_sa *sa;
-	struct sadb_address *addr;
 	struct sadb_lifetime *life;
 	hip_sadb_entry *entry;
 
 	spi = 0;
-	src = dst = NULL;
 	bytes = 0;
 	usetime = 0;
 	err = 0;
@@ -490,23 +483,12 @@ int pfkey_handle_get(int sock, char *data, int len)
 			sa = (struct sadb_sa*) ext;
 			spi = ntohl(sa->sadb_sa_spi);
 			break;
-		case SADB_EXT_ADDRESS_SRC:
-			is_src = 1;
-		case SADB_EXT_ADDRESS_DST:
-			addr = (struct sadb_address*) ext;
-			addr_len = addr->sadb_address_prefixlen;
-			addr++;
-			if (is_src) src = (struct sockaddr*)addr;
-			else dst = (struct sockaddr*)addr;
-			is_src = 0;
-			break;
 		default:
 			break;
 		}
 		location += ext_len;
 	}
 	
-	/* src, dst are ignored */
 	/* get the bytes used from the SADB entry */
 	if ((entry = hip_sadb_lookup_spi(spi))) {
 		bytes = entry->bytes;
@@ -574,8 +556,7 @@ int pfkey_handle_register(int sock, char *data, int len)
 int pfkey_handle_spdadd(int sock, char *data, int len)
 {
 	int location, msg_length, ext_len;
-	struct sockaddr *src, *dst;
-	int is_src=0, addr_len=0;
+	struct sockaddr *dst;
 	__u8 direction;
 	
 	struct sadb_msg *msg;
@@ -585,7 +566,7 @@ int pfkey_handle_spdadd(int sock, char *data, int len)
 
 	hip_sadb_entry *entry;
 
-	src = dst = NULL;
+	dst = NULL;
 	direction = 0;
 	
 	msg = (struct sadb_msg*) data;
@@ -599,15 +580,10 @@ int pfkey_handle_spdadd(int sock, char *data, int len)
 			break;
 		}
 		switch (ext->sadb_ext_type) {
-		case SADB_EXT_ADDRESS_SRC:
-			is_src = 1;
 		case SADB_EXT_ADDRESS_DST:
 			addr = (struct sadb_address*) ext;
-			addr_len = addr->sadb_address_prefixlen;
 			addr++;
-			if (is_src) src = (struct sockaddr*)addr;
-			else dst = (struct sockaddr*)addr;
-			is_src = 0;
+			dst = (struct sockaddr*)addr;
 			break;
 		case SADB_X_EXT_POLICY:
 			/* direction: 2 == outgoing, 1 == incoming*/
@@ -665,8 +641,6 @@ int pfkey_handle_spddelete(int sock, char *data, int len)
  */
 int pfkey_handle_readdress(int sock, char *data, int len)
 {
-	struct sadb_msg *msg;
-	msg = (struct sadb_msg*) data;
 	/* TODO: 
 	 * 	 perform any action here?
 	 * 	 In the Linux kernel, we must walk the established sockets
@@ -694,15 +668,12 @@ int pfkey_handle_readdress(int sock, char *data, int len)
  */
 int pfkey_handle_acquire(char *data, int len)
 {
-	struct sadb_msg *msg;
 	struct sadb_address *addr;
 	struct sockaddr_storage ss_src, ss_lsi4, ss_lsi6;
 	struct sockaddr *src = (struct sockaddr*)&ss_src;
 	struct sockaddr *lsi4 = (struct sockaddr*)&ss_lsi4;
 	struct sockaddr *lsi6 = (struct sockaddr*)&ss_lsi6;
 	int location, addr_len;
-
-	msg = (struct sadb_msg*) data;
 
 	/* retrieve the new IP address */
 	location = sizeof(struct sadb_msg);

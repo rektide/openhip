@@ -370,7 +370,6 @@ void init_hip(int ac, char **av)
  */
 int main (int argc, char **argv)
 {
-	int rc;
 /*
 	if (freopen("hip_ipsec_error.log", "a", stderr) == NULL)
 		return;
@@ -380,7 +379,6 @@ int main (int argc, char **argv)
 */
 	argv++, argc--;
 	while (argc > 0) {
-		rc = 0;
 		if (strstr("-v-q-d-r1-p-nr-o-a-t-u-i3-conf-mn-mr-g", *argv)) {
 			argv--, argc++;
 			goto start_hip;

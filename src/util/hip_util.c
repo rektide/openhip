@@ -1223,9 +1223,7 @@ void print_rvs_addr_list(sockaddr_list *list)
 void *background_resolve(void *arg) {
 	hi_node	*hi;
 	char	*name;
-	int	addr, err;
 	struct addrinfo hints, *aux, *res = NULL;
-	struct sockaddr_in *a;
 	struct rvs_dns_request *req;
 	
 	req = (struct rvs_dns_request *) arg;
@@ -1237,16 +1235,13 @@ void *background_resolve(void *arg) {
 	hints.ai_socktype = SOCK_RAW;
 	
 	log_(NORM, "*** Trying resolve %s ***\n", name);
-	err = getaddrinfo(name, NULL, &hints, &res);
+	getaddrinfo(name, NULL, &hints, &res);
 	log_(NORM, "*** RESOLVE %s FINISHED!! ***\n", name);
 
 	/* Start critical section */
 	pthread_mutex_lock(hi->rvs_mutex);
 	
 	for(aux = res; aux !=NULL; aux = aux->ai_next) {
-		a = (struct sockaddr_in *)aux->ai_addr;
- 		/* addr = ntohl(a->sin_addr.s_addr); */
-		addr = a->sin_addr.s_addr;
 		add_address_to_list(hi->rvs_addrs, aux->ai_addr, 0);
 		print_rvs_addr_list(*(hi->rvs_addrs));
 	}
@@ -1358,6 +1353,9 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 			log_(NORM, "HIP DNS RR: ");
 			hi_len = key_data_to_hi(p, pk_alg, pk_len, DIT_NONE, 0,
 						&hi, len - (p - buff));
+			if (hi_len < 0) {
+				log_(WARN, "invalid HI in HIP DNS RR\n");
+			}
 		}
 
 		/* stop after the first valid Host Identity */

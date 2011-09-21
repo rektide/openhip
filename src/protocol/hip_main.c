@@ -1523,16 +1523,11 @@ int hip_trigger(struct sockaddr *dst)
  */
 int hip_trigger_rvs(struct sockaddr *rvs, hip_hit *rsp)
 {
-        struct sockaddr *src;
-        struct sockaddr_storage src_buff;
         hip_assoc* hip_a = NULL;
         hiphdr hiph;
         hi_node *mine = NULL;
         sockaddr_list *a;
 	
-        memset(&src_buff, 0, sizeof(struct sockaddr_storage));
-        src = (struct sockaddr*) &src_buff;
-
 	log_(NORMT,	"Manually triggering exchange with rvs: %s to "  
 			"communicate with responder: ", logaddr(rvs));
 	print_hex(rsp, HIT_SIZE);

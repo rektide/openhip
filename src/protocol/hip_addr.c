@@ -1212,6 +1212,10 @@ void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
 	rebuild_sa(hip_a, newaddr, 0, FALSE, FALSE);
 	rebuild_sa(hip_a, newaddr, 0, TRUE, FALSE);
 	err = sadb_readdress(oldaddr, newaddr, hip_a, hip_a->spi_in);
+	if (err < 0) {
+		log_(WARN, "readdress_association() had problem sending "
+			"readdress message\n");
+	}
 	
 	/* replace the old preferred address */
 	memcpy(&hip_a->hi->addrs.addr, newaddr, SALEN(newaddr));
@@ -1260,6 +1264,10 @@ void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
 	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, FALSE);
 	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, TRUE);
 	err = sadb_readdress(oldaddr, newsrcaddr, hip_a, hip_a->spi_in);
+	if (err < 0) {
+		log_(WARN, "readdress_association_x2() had problem sending "
+			"readdress message\n");
+	}
 	
 	/* replace the old preferred address */
 	memcpy(&hip_a->hi->addrs.addr, newsrcaddr, SALEN(newsrcaddr));

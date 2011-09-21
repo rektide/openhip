@@ -532,7 +532,7 @@ void *hip_esp_input(void *arg)
 	struct ip_esp_hdr *esph;
 	udphdr *udph;
 
-	__u32 spi, seq_no;
+	__u32 spi; /*, seq_no;*/
 	hip_sadb_entry *entry;
 #ifdef __WIN32__
 	DWORD lenin;
@@ -605,7 +605,7 @@ void *hip_esp_input(void *arg)
 			iph = (struct ip *) &buff[0];
 			esph = (struct ip_esp_hdr *) &buff[sizeof(struct ip)];
 			spi 	= ntohl(esph->spi);
-			seq_no 	= ntohl(esph->seq_no);
+			/*seq_no = ntohl(esph->seq_no);*/
 			if (!(entry = hip_sadb_lookup_spi(spi))) {
 				/*printf("Warning: SA not found for SPI 0x%x\n",
 					spi);*/
@@ -649,7 +649,7 @@ void *hip_esp_input(void *arg)
 			esph = (struct ip_esp_hdr *) \
 				&buff[sizeof(struct ip) + sizeof(udphdr)];
 			spi 	= ntohl(esph->spi);
-			seq_no 	= ntohl(esph->seq_no);
+			/*seq_no = ntohl(esph->seq_no);*/
 
 			/* SOCK_RAW receives all UDP traffic, not just
 			 * HIP_UDP_PORT, even though we used bind(). */
@@ -709,7 +709,7 @@ void *hip_esp_input(void *arg)
 			/* there is no IPv6 header supplied */
 			esph = (struct ip_esp_hdr *) &buff[0];
 			spi 	= ntohl(esph->spi);
-			seq_no 	= ntohl(esph->seq_no);
+			/* seq_no = ntohl(esph->seq_no);*/
 			if (!(entry = hip_sadb_lookup_spi(spi))) {
 				printf("Warning: SA not found for SPI 0x%x\n",
 					spi);
@@ -975,7 +975,10 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 	struct arp_hdr *arp_req_hdr, *arp_reply_hdr;
 	struct arp_req_data *arp_req, *arp_rply;
 	__u64 src=0, dst=0;
-	__u32 ip_dst, ip_sender;
+	__u32 ip_dst;
+#ifdef HIP_VPLS
+	__u32 ip_sender;
+#endif /* HIP_VPLS */
 
 	/* only handle ARP requests (opcode 1) here */
 	arp_req_hdr = (struct arp_hdr*) &in[14];
@@ -991,9 +994,9 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 	    (arp_req_hdr->ar_hln == 6) && (arp_req_hdr->ar_pln == 4)) {
 		/* skip sender MAC, sender IP, target MAC */
 		arp_req = (struct arp_req_data*)(arp_req_hdr + 1);
-		ip_sender = arp_req->src_ip;
 		ip_dst = arp_req->dst_ip;
 #ifdef HIP_VPLS
+		ip_sender = arp_req->src_ip;
 		// log_(NORM, "##################### Raw src ip: %0X\n", ip_sender);
 		// log_(NORM, "##################### Raw dst ip: %0X\n", ip_dst);
 		/* do not proxy legacy node if both are behind the bridge */
@@ -1393,7 +1396,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	int alen=0, elen=0, iv_len=0;
 	unsigned int hmac_md_len;
 	struct ip_esp_hdr *esp;
-	udphdr *udph;
+	/*udphdr *udph;*/
 
 	struct ip_esp_padinfo *padinfo=0;
 	__u8 cbc_iv[16];
@@ -1414,7 +1417,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 
 	if (entry->mode == 3) {	/*(HIP_ESP_OVER_UDP) */
 		use_udp = TRUE;
-		udph = (udphdr*) &in[sizeof(struct ip)];
+		/*udph = (udphdr*) &in[sizeof(struct ip)];*/
 		esp = (struct ip_esp_hdr*)&in[sizeof(struct ip)+sizeof(udphdr)];
 		/* TODO: IPv6 UDP here */
 	} else { 		/* not UDP-encapsulated */

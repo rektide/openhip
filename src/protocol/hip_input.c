@@ -744,9 +744,6 @@ restore_saved_peer_hi:
 int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src)
 {
 	int err=0;
-	hiphdr *hiph;
-
-	hiph = (hiphdr*) buff;
 
 	/* R1 only accepted in these states */
 	if ((hip_a->state != I1_SENT) && (hip_a->state != I2_SENT) &&
@@ -3352,7 +3349,7 @@ int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh)
 decode_dh:
 	/* g_id, len, pub are set before this */
 	pub_key = malloc(len);
-	memcpy(pub_key, tlv_dh->pub, len);
+	memcpy(pub_key, pub, len);
 
 #ifndef HIP_VPLS
 	log_(NORM, "Got DH public value of len %d: 0x", len);
@@ -3430,13 +3427,12 @@ int handle_hi(hi_node **hi_p, const __u8 *data)
 	 * RDATA header   4
 	 */
 	
-	int type, length, hi_length, di_length;
+	int length, hi_length, di_length;
 	char di_type;
 	tlv_host_id *tlv = (tlv_host_id*)data;
 	__u32 hi_hdr;
 	__u8 alg;
 	
-	type = ntohs(tlv->type);
 	length = ntohs(tlv->length);
 	hi_length = ntohs(tlv->hi_length);
 	di_type = ntohs(tlv->di_type_length) >> 12; /* 4 bits type */
