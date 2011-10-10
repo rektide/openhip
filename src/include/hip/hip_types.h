@@ -116,10 +116,6 @@
 
 #define H_PROTO_UDP 17
 
-/* PFKEY message sizes*/
-#define SADB_RESPONSE_BUFFER	20
-#define SADB_MSG_SIZE_ADD	304
-#define SADB_MSG_SIZE_DELETE    150
 	
 /* 
  * Miscellaneous constants and enums 
@@ -136,6 +132,18 @@
 #ifndef HIP_UPDATE_BIND_CHECKS
 #define HIP_UPDATE_BIND_CHECKS 5
 #endif
+
+/* Messages from the ESP input/output thread to hipd */
+typedef enum {
+	ESP_ACQUIRE_LSI=1,
+	ESP_EXPIRE_SPI,
+	ESP_UDP_CTL,
+} ESP_MESSAGES;
+
+typedef struct _espmsg {
+	__u8 message_type;
+	__u32 message_data;
+} espmsg;
 
 /* Unoffical Registration states */
 

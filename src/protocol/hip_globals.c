@@ -37,11 +37,9 @@ dh_cache_entry *dh_cache = NULL;
 const hip_hit zero_hit = {0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,
 			  0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0};
 
-int pfk_seqno=0;           /* sequence number for sending PF_KEY messages */
-
 int s_hip = 0;
-int s_pfk = 0;
-int s6_hip = 0; /* PFKEY and RAW socket handles */
+int s6_hip = 0; /* RAW socket handles */
+int espsp[2]; /* ESP socket pair */
 #undef s_net
 int s_net = 0; /* netlink socket */
 int s_stat = 0; /* status socket */

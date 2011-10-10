@@ -798,7 +798,7 @@ void init_hip(DWORD ac, char **av)
 	WORD wVer;
 	WSADATA wsaData;
 	__u32 tunreader_thrd, esp_output_thrd, esp_input_thrd;
-	__u32 pfkey_thrd, hipd_thrd, netlink_thrd, dns_thrd, status_thrd;
+	__u32 hipd_thrd, netlink_thrd, dns_thrd, status_thrd;
 	int err;
 	char hipd_args[255];
 	int i;
@@ -833,10 +833,6 @@ void init_hip(DWORD ac, char **av)
 	/*
 	 * Kernel helpers
 	 */
-	if (!(pfkey_thrd = _beginthread(&hip_pfkey, 0, NULL))) {
-		printf("Error creating PFKEY thread.\n");
-		exit(-1);
-	}
 	if (!(netlink_thrd = _beginthread(hip_netlink, 0, NULL))) {
 		printf("Error creating netlink thread.\n");
 		exit(-1);

@@ -47,9 +47,8 @@ extern const int dhprime_len[DH_MAX]; /* only used by new_dh_cache_entry()
 					   use DH_size() elsewhere */
 extern unsigned char dhgen[DH_MAX];
 
-extern int pfk_seqno; /* PFKEY messages need to be numbered */
 
-extern int s_hip, s_pfk; /* PFKEY and RAW socket handles */
+extern int s_hip; /* RAW socket handle */
 #undef s_net
 extern int s_net; /* netlink socket */
 extern int s6_hip; /* RAW IPv6 socket handle */
@@ -61,10 +60,8 @@ extern struct hip_opt OPT;
 /* Global configuration data */
 extern struct hip_conf HCNF;
 
-#ifdef __UMH__
-extern int pfkeysp[2];
+extern int espsp[2]; /* ESP thread socket pair */
 extern int g_state;
-#endif
 #ifdef __WIN32__
 extern int netlsp[2];
 #endif

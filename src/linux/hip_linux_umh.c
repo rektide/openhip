@@ -203,7 +203,7 @@ post_init_tap_retry:
 void init_hip(int ac, char **av)
 {
 	pthread_t tunreader_thrd, esp_output_thrd, esp_input_thrd;
-	pthread_t pfkey_thrd, hipd_thrd, dns_thrd, status_thrd;
+	pthread_t hipd_thrd, dns_thrd, status_thrd;
 #ifdef MOBILE_ROUTER
 	pthread_t mr_thrd;
 #endif /* MOBILE_ROUTER */
@@ -252,10 +252,6 @@ void init_hip(int ac, char **av)
 	/*
 	 * Kernel helpers
 	 */
-	if (pthread_create(&pfkey_thrd, NULL, hip_pfkey, NULL)) {
-		printf("Error creating PFKEY thread.\n");
-		exit(1);
-	}
 	if (pthread_create(&status_thrd, NULL, hip_status, NULL)) {
 		printf("Error creating status thread.\n");
 		exit(1);

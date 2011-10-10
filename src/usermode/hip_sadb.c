@@ -48,8 +48,7 @@
 #include <hip/hip_types.h>
 #include <hip/hip_sadb.h>
 #include <hip/hip_funcs.h> /* gettimeofday() for win32 */
-#include <hip/hip_usermode.h> /* pfkey_send_expire() */
-#include <win32/pfkeyv2.h>
+#include <hip/hip_usermode.h>
 
 
 /*
@@ -222,13 +221,15 @@ void hip_sadb_deinit() {
 /*
  * hip_sadb_add()
  *
- * Add an SADB entry to the SADB hash table.
+ * New call to add an SADB entry to the SADB hash table.
  */ 
-int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *src_hit,
-    struct sockaddr *dst_hit, struct sockaddr *src, struct sockaddr *dst, 
-    __u16 port,
-    __u32 spi, __u8 *e_key, __u32 e_type, __u32 e_keylen, __u8 *a_key,
-    __u32 a_type, __u32 a_keylen, __u32 lifetime, __u16 hitmagic, __u32 spinat)
+int hip_sadb_add(__u32 mode, int direction,
+    struct sockaddr *src_hit, struct sockaddr *dst_hit,
+    struct sockaddr *src, struct sockaddr *dst, 
+    __u32 spi, __u32 spinat,
+    __u8 *e_key, __u32 e_type, __u32 e_keylen,
+    __u8 *a_key, __u32 a_type, __u32 a_keylen,
+    __u32 lifetime)
 {
 	hip_sadb_entry *entry, *prev = NULL;
 	hip_lsi_entry *lsi_entry;
@@ -258,10 +259,12 @@ int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *src_hit,
 	pthread_mutex_init(&entry->rw_lock, NULL);
 	pthread_mutex_lock(&entry->rw_lock);
 	entry->mode = mode;
+	entry->direction = direction;
 	entry->next = NULL;
 	entry->spi = spi;
 	entry->spinat = spinat;
-	entry->hit_magic = hitmagic;
+	entry->hit_magic = checksum_magic((const hip_hit*)(SA2IP(src_hit)),
+					  (const hip_hit*)(SA2IP(dst_hit)));
 	entry->src_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
 	entry->dst_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
 	memset(&entry->src_hit, 0, sizeof(struct sockaddr_storage));
@@ -381,12 +384,10 @@ hip_sadb_add_error_nofree:
  * hip_sadb_delete()
  *
  * Remove an SADB entry from the SADB hash table.
- * type, src, dst are provided for compatibility but are currently ignored.
  * First free dynamically-allocated elements, then unlink the entry and
  * either replace it or zero it.
  */ 
-int hip_sadb_delete(__u32 type, struct sockaddr *src, struct sockaddr *dst,
-    __u32 spi) {
+int hip_sadb_delete(__u32 spi) {
 	hip_sadb_entry *entry;
 	hip_lsi_entry *lsi_entry;
 
@@ -401,7 +402,7 @@ int hip_sadb_delete(__u32 type, struct sockaddr *src, struct sockaddr *dst,
 	if (entry->mode==3) { /*(HIP_ESP_OVER_UDP) */
 		hip_sadb_delete_dst_entry(SA(&entry->dst_hit));
 	} else {
-		hip_sadb_delete_dst_entry(dst);
+		hip_sadb_delete_dst_entry(SA(&entry->dst_addrs->addr));
 	}
 
 	/* set LSI entry to expire */
@@ -555,6 +556,9 @@ void hip_add_lsi(struct sockaddr *addr, struct sockaddr *lsi4,
 		struct sockaddr *lsi6)
 {
 	hip_lsi_entry *entry;
+	if (lsi4 && lsi4->sa_family == AF_INET) {
+	    LSI4(lsi4) = htonl(LSI4(lsi4));
+	}
 
 	if ( !(entry = hip_lookup_lsi(lsi4)) &&
 	     !(entry = hip_lookup_lsi(lsi6)) ) {
@@ -885,18 +889,22 @@ void hip_sadb_expire(struct timeval *now)
 {
 	int i;
 	hip_sadb_entry *e;
+	__u32 spi;
 
 	for (i=0; i < SADB_SIZE; i++) {
+		spi = 0;
 		pthread_mutex_lock(&hip_sadb_locks[i]);
 		for (e = hip_sadb[i]; e; e = e->next) {
 		    if (now->tv_sec > e->exptime.tv_sec) {
 			/* wait another lifetime before expiring this SA again;
 			 * this causes only one expire message to be sent */
 			e->exptime.tv_sec = now->tv_sec + (time_t)e->lifetime;
-			pfkey_send_expire(e->spi);
+			spi = e->spi;
 		    }
 		}
 		pthread_mutex_unlock(&hip_sadb_locks[i]);
+		if (spi > 0)
+			start_expire(spi);
 	}
 }
 

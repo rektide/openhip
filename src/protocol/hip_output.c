@@ -57,11 +57,6 @@
 #endif
 #include <netinet/ip.h>  	/* struct iphdr                 */
 #endif
-#if defined(__MACOSX__) || defined(__UMH__)
-#include <win32/pfkeyv2.h>
-#else
-#include <linux/pfkeyv2.h> /* PF_KEY_V2 support */
-#endif
 
 #include <hip/hip_types.h>
 #include <hip/hip_proto.h>
@@ -2332,7 +2327,7 @@ int build_rekey(hip_assoc *hip_a)
 	}
 
 	gettimeofday(&hip_a->rekey->rk_time, NULL);
-	hip_a->rekey->new_spi = get_next_spi(hip_a);
+	hip_a->rekey->new_spi = get_next_spi();
 	hip_a->rekey->need_ack = TRUE;
 	hip_a->rekey->update_id = hip_a->hi->update_id++;
 

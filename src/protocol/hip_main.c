@@ -72,11 +72,6 @@
 #include <openssl/dh.h>      /* Diffie-Hellman contexts      */
 #include <openssl/sha.h>     /* SHA1 algorithms              */
 #include <openssl/rand.h>    /* RAND_seed()                  */
-#if defined(__UMH__) || defined(__MACOSX__)
-#include <win32/pfkeyv2.h>
-#else
-#include <linux/pfkeyv2.h>	/* PF_KEY_V2 support */
-#endif
 #include <hip/hip_types.h>
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
@@ -131,15 +126,13 @@ extern __u32 get_preferred_lsi(struct sockaddr *);
  *     - crypto init -- generate Diffie Hellman material
  *     - generate R1s 
  *     - some timer for timeout activies (rotate R1, expire states)
- *     - create HIP and PFKEY sockets
+ *     - create HIP and ESP sockets
  *     - go to endless loop, selecting on the sockets
  */
 
 int main_loop(int argc, char **argv)
 {
 	struct timeval time1, timeout; /* Used in select() loop */
-
-	/* HIP and PFKEY socket data structures */
 #ifndef __WIN32__
 	struct msghdr msg;
 	struct iovec iov;
@@ -544,34 +537,14 @@ int main_loop(int argc, char **argv)
 		goto hip_main_error_exit;
 	}
 
-	/* PF_KEY socket */
-#ifndef __UMH__
-	s_pfk = socket(PF_KEY, SOCK_RAW, PF_KEY_V2);
-	if (s_pfk < 0) {
-		log_(ERR, "PF_KEY socket() failed.\n%s.\n", strerror(errno));
-		goto hip_main_error_exit;
-	}
+	/* socketpair for communicating with the ESP input/output threads */
+#ifdef __MACOSX__
+	if (socketpair(AF_UNIX, SOCK_DGRAM, PF_UNSPEC, espsp)) {
 #else
-	while (pfkeysp[1] < 0) {
-		hip_sleep(1); /* wait for PFKEY thread to become ready */
+	if (socketpair(AF_UNIX, SOCK_DGRAM, PF_UNIX, espsp)) {
+#endif /* __MACOSX__ */
+		log_(ERR, "socketpair() for ESP threads failed\n");
 	}
-	s_pfk = pfkeysp[1]; /* UMH */
-#endif
-
-	/* register PF_KEY types with kernel */
-	if ((err = sadb_register(SADB_SATYPE_ESP) < 0)) {
-		log_(ERR, "Unable to register PFKEY handler w/kernel.\n");
-		goto hip_main_error_exit;
-	} else {
-#ifdef __UMH__
-		log_(NORMT, 
-		    "Registered PF_KEY handler with usermode thread.\n");
-#else
-		log_(NORMT, 
-		    "Registered PF_KEY handler with the kernel.\n");
-#endif
-	}
-
 
 #ifndef __WIN32__
 #if !defined(__MACOSX__)
@@ -594,12 +567,12 @@ int main_loop(int argc, char **argv)
 		goto hip_main_error_exit;
 	}
 	
-	highest_descriptor = maxof(5, s_pfk, s_hip, s6_hip, s_net, s_stat);
+	highest_descriptor = maxof(5, espsp[1], s_hip, s6_hip, s_net, s_stat);
 #else /* IPV6_HIP */
-	highest_descriptor = maxof(4, s_pfk, s_hip, s_net, s_stat);
+	highest_descriptor = maxof(4, espsp[1], s_hip, s_net, s_stat);
 #endif /* IPV6_HIP */
 
-	log_(NORMT, "Listening on HIP and PF_KEY sockets...\n");
+	log_(NORMT, "Listening for HIP control packets...\n");
 
 	/* main event loop */
 	for (;;) {
@@ -617,7 +590,7 @@ int main_loop(int argc, char **argv)
 #ifdef IPV6_HIP
 		FD_SET((unsigned)s6_hip, &read_fdset);
 #endif
-		FD_SET((unsigned)s_pfk, &read_fdset);
+		FD_SET((unsigned)espsp[1], &read_fdset);
 		FD_SET((unsigned)s_net, &read_fdset);
 		FD_SET((unsigned)s_stat, &read_fdset);
 		timeout.tv_sec = 1;
@@ -663,7 +636,6 @@ int main_loop(int argc, char **argv)
 		} else if (err == 0) { 
 			/* idle cycle - select() timeout */
 			/* retransmit any waiting packets */
-			hip_check_pfkey_buffer();
 			gettimeofday(&time1, NULL);
 			hip_retransmit_waiting_packets(&time1);
 			hip_handle_state_timeouts(&time1);
@@ -768,17 +740,18 @@ int main_loop(int argc, char **argv)
 #endif
 			}
 #endif /* IPV6_HIP */
-		} else if (FD_ISSET(s_pfk, &read_fdset)) {
-			/* Something on PF_KEY socket */
+		} else if (FD_ISSET(espsp[1], &read_fdset)) {
+			/* Data from the ESP input/output threads */
 #ifdef __WIN32__
-			if ((length = recv(s_pfk, buff, sizeof(buff), 0)) < 0) {
+			if ((length = recv(espsp[1], buff, sizeof(buff), 0)) < 0) {
 #else
-			if ((length = read(s_pfk, buff, sizeof(buff))) < 0) {
+			if ((length = read(espsp[1], buff, sizeof(buff))) < 0) {
 #endif
-				log_(WARN, "PFKEY read() error - %d %s\n", 
+				log_(WARN, "ESP socket read() error - %d %s\n", 
 				    errno, strerror(errno));
 			} else {
-				hip_handle_pfkey(buff);
+				/* acquire, expire, or control data over UDP */
+				hip_handle_esp(buff, length);
 			}
 		} else if (FD_ISSET(s_net, &read_fdset)) {
 			/* Something on Netlink socket */

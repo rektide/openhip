@@ -132,33 +132,22 @@ int hip_handle_CER(__u8 *data, hip_assoc *hip_a);
 int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
 			DSA *dsa, RSA *rsa);
 int handle_hi(hi_node **hi_p, const __u8 *data);
+int complete_base_exchange(hip_assoc *hip_a);
 int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi, 
 			int in, int peer);
 int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
 			struct sockaddr *newdstaddr, __u32 newspi, int in);
+void update_lsi_mapping(struct sockaddr *dst, struct sockaddr *lsi,hip_hit hit);
 
 /* hip_ipsec.c */
-__u32 get_next_spi(hip_assoc *hip_a);
-int sadb_add(struct sockaddr *src, struct sockaddr *dst, hip_assoc *hip_a,
-	__u32 spi, int direction);
-int sadb_readdress(struct sockaddr *src, struct sockaddr *dst, hip_assoc *hip_a,
-	__u32 spi);
-int sadb_add_policy(hip_assoc *hip_a, struct sockaddr *src,
-	struct sockaddr *dst, int direction);
-int sadb_delete(hip_assoc *hip_a, struct sockaddr *src, struct sockaddr *dst,
-	__u32 spi);
-int sadb_delete_policy(struct sockaddr *src,struct sockaddr *dst,int direction);
-int sadb_register(int satype);
+__u32 get_next_spi();
 int check_last_used(hip_assoc *hip_a, int direction, struct timeval *now);
-int sadb_lsi(struct sockaddr *ip, struct sockaddr *lsi4, struct sockaddr *lsi6);
 int delete_associations(hip_assoc *hip_a, __u32 old_spi_in, __u32 old_spi_out);
 int flush_hip_associations();
-int parse_acquire(char *data, struct sockaddr *src, struct sockaddr *dst);
-int parse_expire(char *data, __u32 *spi);
-void pfkey_packet_type(int type, char *r);
-void hip_handle_pfkey(char *buff);
-void hip_check_pfkey_buffer();
-void update_lsi_mapping(struct sockaddr *dst, struct sockaddr *lsi,hip_hit hit);
+void hip_handle_esp(char *data, int length);
+void start_base_exchange(struct sockaddr *dst);
+void start_expire(__u32 spi);
+void receive_udp_hip_packet(char *buff, int len);
 
 /* hip_keymat.c */
 int set_secret_key(unsigned char *key, hip_assoc *hip_a);
@@ -170,6 +159,8 @@ int draw_mr_key(hip_assoc *hip_a, int keymat_index);
 int auth_key_len(int suite_id);
 int enc_key_len(int suite_id);
 int enc_iv_len(int suite_id);
+int transform_to_ealg(int transform);
+int transform_to_aalg(int transform);
 
 /* hip_util.c */
 int add_addresses_from_dns(char *name, hi_node *hi);

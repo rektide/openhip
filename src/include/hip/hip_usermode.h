@@ -33,7 +33,6 @@
 #ifdef __WIN32__
 void hip_esp_output(void *arg);
 void hip_esp_input(void *arg);
-void hip_pfkey(void *arg);
 void tunreader(void *arg);
 void hip_dns(void *arg);
 void hipd_main(void *arg);
@@ -45,7 +44,6 @@ extern int socketpair(int, int, int, int sv[2]);
 #else
 void *hip_esp_output(void *arg);
 void *hip_esp_input(void *arg);
-void *hip_pfkey(void *arg);
 void *tunreader(void *arg);
 void *hip_dns(void *arg);
 void *hipd_main(void *arg);
@@ -58,10 +56,6 @@ void *hip_mobile_router(void *arg);
 int init_esp_input(int family, int type, int proto, int port, char *msg);
 int main_loop(int argc, char **argv);
 int str_to_addr(unsigned char *data, struct sockaddr *addr);
-
-int pfkey_send_acquire(struct sockaddr *target);
-int pfkey_send_expire(__u32 spi);
-int pfkey_send_hip_packet(char *data, int len);
 
 /*
  * Global definitions

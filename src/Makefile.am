@@ -40,9 +40,10 @@ hitgen_CFLAGS =	-DHITGEN -D__UMH__
 # Usermode version
 hip_CFLAGS =	-D__UMH__
 SRC_USERMODE =	usermode/hip_umh_main.c \
-		usermode/hip_dns.c  usermode/hip_pfkey.c \
-		usermode/libipsec_stub.c usermode/hip_esp.c \
-		usermode/hip_sadb.c   usermode/hip_status2.c
+		usermode/hip_dns.c \
+		usermode/hip_esp.c \
+		usermode/hip_sadb.c \
+		usermode/hip_status2.c
 if WANT_MOBILE_ROUTER
 SRC_USERMODE += usermode/hip_mr.c
 endif

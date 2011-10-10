@@ -164,6 +164,14 @@ typedef enum {
 #define HI_TYPESTR(a)  ((a==HI_ALG_DSA) ? "DSA" : \
 			(a==HI_ALG_RSA) ? "RSA" : "UNKNOWN")
 
+/* SADB algorithms */
+#define SADB_EALG_3DESCBC 3
+#define SADB_X_EALG_BLOWFISHCBC 7
+#define SADB_EALG_NULL 11
+#define SADB_X_EALG_AESCBC 12
+#define SADB_AALG_MD5HMAC 2
+#define SADB_AALG_SHA1HMAC 3
+
 /* HI Domain Identifier types */
 typedef enum {
 	DIT_NONE,	/* none included */

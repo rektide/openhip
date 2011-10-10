@@ -33,13 +33,12 @@
 #include <netinet/tcp.h>	/* struct tcphdr */
 #include <netinet/udp.h>	/* struct udphdr */
 #include <arpa/inet.h>		
-#include <linux/types.h>	/* for pfkeyv2.h types */
+#include <linux/types.h>
 #include <string.h>		/* memset, etc */
 #include <openssl/hmac.h>	/* HMAC algorithms */
 #include <openssl/sha.h>	/* SHA1 algorithms */
 #include <openssl/des.h>	/* 3DES algorithms */
 #include <openssl/rand.h>	/* RAND_bytes() */
-#include <win32/pfkeyv2.h>
 #include <hip/hip_types.h>
 #include <hip/hip_funcs.h>
 #include <hip/hip_usermode.h>

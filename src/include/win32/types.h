@@ -14,7 +14,6 @@ typedef signed int __s32;
 
 typedef unsigned __int64 __u64;
 
-/* mostly for PFKEY */
 typedef char * caddr_t;
 typedef unsigned char uint8_t;
 typedef unsigned char u_int8_t;

@@ -50,7 +50,6 @@ OBJS =	$(SRC)\$(SRCPROTO)\hip_addr.obj \
 	$(SRC)\$(SRCUM)\hip_dns.obj \
 	$(SRC)\$(SRCUM)\hip_esp.obj \
 	$(SRC)\$(SRCUM)\hip_nl.obj \
-	$(SRC)\$(SRCUM)\hip_pfkey.obj \
 	$(SRC)\$(SRCUM)\hip_sadb.obj \
 	$(SRC)\$(SRCUM)\hip_status2.obj \
 	$(SRC)\$(SRCUM)\hip_umh_main.obj \
@@ -75,11 +74,9 @@ OBJNAMES=hip_addr.obj \
 	hip_dns.obj \
 	hip_esp.obj \
 	hip_nl.obj \
-	hip_pfkey.obj \
 	hip_sadb.obj \
 	hip_status2.obj \
 	hip_umh_main.obj \
-	libipsec_stub.obj \
 	hip_util.obj \
 	hip_xml.obj \
 	socketpair.obj \

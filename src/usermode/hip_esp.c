@@ -43,7 +43,7 @@
 #include <netinet/udp.h>	/* struct udphdr */
 #include <arpa/inet.h>		
 #ifndef __MACOSX__
-#include <linux/types.h>	/* for pfkeyv2.h types */
+#include <linux/types.h>
 #endif /* __MACOSX__ */
 #endif /* __WIN32__ */
 #include <string.h>		/* memset, etc */
@@ -51,11 +51,11 @@
 #include <openssl/sha.h>	/* SHA1 algorithms */
 #include <openssl/des.h>	/* 3DES algorithms */
 #include <openssl/rand.h>	/* RAND_bytes() */
-#include <win32/pfkeyv2.h>
 #include <hip/hip_types.h>
 #include <hip/hip_funcs.h>
 #include <hip/hip_usermode.h>
 #include <hip/hip_sadb.h>
+#include <hip/hip_globals.h>
 
 #if defined(__BIG_ENDIAN__) || defined( __MACOSX__)
 #include <mac/checksum_mac.h>
@@ -133,6 +133,10 @@ void add_ipv6_header(__u8 *data, struct sockaddr *src, struct sockaddr *dst,
 	struct ip6_hdr *old, struct ip *old4, __u16 len, __u8 proto);
 __u16 in_cksum(struct ip *iph);
 __u64 get_eth_addr(int family, __u8 *addr);
+
+void esp_start_base_exchange(struct sockaddr *lsi);
+void esp_start_expire(__u32 spi);
+void esp_receive_udp_hip_packet(char *buff, int len);
 
 extern __u32 get_preferred_lsi(struct sockaddr *lsi);
 extern int do_bcast();
@@ -306,7 +310,7 @@ void *hip_esp_output(void *arg)
 				/* No SADB entry. Send ACQUIRE if we haven't
 				 * already, i.e. a new lsi_entry was created */
 				if (buffer_packet(lsi, raw_buff, len)==TRUE)
-					pfkey_send_acquire(lsi);
+					esp_start_base_exchange(lsi);
 				continue;
 			}
 			raw_len = len;
@@ -422,7 +426,7 @@ void *hip_esp_output(void *arg)
 			memcpy(SA2IP(lsi), &ip6h->ip6_dst, SAIPLEN(lsi));
 			if (!(entry = hip_sadb_lookup_addr(lsi))) {
 				if (buffer_packet(lsi, raw_buff, len)==TRUE)
-					pfkey_send_acquire(lsi);
+					esp_start_base_exchange(lsi);
 				continue;
 			} 
 			raw_len = len;
@@ -472,10 +476,6 @@ void *hip_esp_output(void *arg)
 				printf("hip_esp_output write() failed.\n");
 			}
 #endif
-			/* Why send acquire during ARP? */
-			/*if (!hip_sadb_lookup_addr(lsi))
-				pfkey_send_acquire(lsi);
-			*/
 			continue;
 		} else {
 			/* debug other eth headers here */
@@ -660,13 +660,10 @@ void *hip_esp_input(void *arg)
 			}
 
 			/* UDP packet with SPI of zero is a HIP control packet,
-			 * send it to the hipd protocol thread via PFKEY.
+			 * send it to the hipd thread via ESP socketpair.
 			 */
 			if (0x0 == spi) {
-				if (pfkey_send_hip_packet((char *)buff, len) <0)
-					printf("Failed to process UDP-encapsu"
-					    "lated HIP packet of %d bytes.\n",
-					    len);
+				esp_receive_udp_hip_packet((char *)buff, len);
 				continue;
 			}
 
@@ -1197,11 +1194,6 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 			return(-1);
 		}
 		break;
-	case SADB_EALG_NONE:
-	case SADB_EALG_DESCBC:
-	case SADB_X_EALG_CASTCBC:
-	case SADB_X_EALG_SERPENTCBC:
-	case SADB_X_EALG_TWOFISHCBC:
 	default:
 		printf("Unsupported encryption transform (%d).\n",
 			entry->e_type);
@@ -1263,8 +1255,6 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 	 * Authentication 
 	 */
 	switch (entry->a_type) {
-	case SADB_AALG_NONE:
-		break;
 	case SADB_AALG_MD5HMAC:
 		alen = HMAC_SHA_96_BITS / 8; /* 12 bytes */
 		if (!entry->a_key || entry->a_keylen==0) {
@@ -1290,12 +1280,6 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 		memcpy(&out[elen + (use_udp ? sizeof(udphdr) : 0)],
 			hmac_md, alen);
 		*outlen += alen;
-		break;
-	case SADB_X_AALG_SHA2_256HMAC:
-	case SADB_X_AALG_SHA2_384HMAC:
-	case SADB_X_AALG_SHA2_512HMAC:
-	case SADB_X_AALG_RIPEMD160HMAC:
-	case SADB_X_AALG_NULL:
 		break;
 	default:
 		break;
@@ -1442,8 +1426,6 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	 *   Authentication 
 	 */
 	switch (entry->a_type) {
-	case SADB_AALG_NONE:
-		break;
 	case SADB_AALG_MD5HMAC:
 		alen = HMAC_SHA_96_BITS / 8; /* 12 bytes */
 		elen = len - sizeof(struct ip_esp_hdr) - alen;
@@ -1483,12 +1465,6 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 			return(-1);
 		}
 		break;
-	case SADB_X_AALG_SHA2_256HMAC:
-	case SADB_X_AALG_SHA2_384HMAC:
-	case SADB_X_AALG_SHA2_512HMAC:
-	case SADB_X_AALG_RIPEMD160HMAC:
-	case SADB_X_AALG_NULL:
-		break;
 	default:
 		break;
 	}
@@ -1527,11 +1503,6 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 			return(-1);
 		}
 		break;
-	case SADB_EALG_NONE:
-	case SADB_EALG_DESCBC:
-	case SADB_X_EALG_CASTCBC:
-	case SADB_X_EALG_SERPENTCBC:
-	case SADB_X_EALG_TWOFISHCBC:
 	default:
 		printf("Unsupported decryption algorithm (%d)\n", 
 			entry->e_type);
@@ -1868,4 +1839,56 @@ __u64 get_eth_addr(int family, __u8 *addr)
 	return(r);
 }
 
+/* helper for sending ESP message to hipd over the espsp socketpair */
+void esp_send_to_hipd(char *data, int len, char *errmsg) {
+	/* int i;
+	printf("sending this to hipd:\n");
+	for (i = 0; i < len; i ++) {
+	    printf("%02x ", data[i] & 0xFF);
+	} */
+#ifdef __WIN32__
+	if (send(espsp[0], data, len, 0) < 0) {
+#else
+	if (write(espsp[0], data, len) != len) {
+#endif /* __WIN32__ */
+	    printf("%s write error: %s\n", errmsg, strerror(errno));
+	}
+}
+
+/* send an ESP_ACQUIRE_LSI message, which results in a
+ * call to start_base_exchange() in hipd */
+void esp_start_base_exchange(struct sockaddr *lsi)
+{
+	const int len = sizeof(espmsg) + sizeof(struct sockaddr_storage);
+	char msgbuff[len];
+	espmsg *msg = (espmsg*) &msgbuff[0];
+	msg->message_type = ESP_ACQUIRE_LSI;
+	msg->message_data = htonl(sizeof(struct sockaddr_storage));
+	memcpy(&msgbuff[sizeof(espmsg)], lsi, sizeof(struct sockaddr_storage));
+	esp_send_to_hipd( (char*) msg, len, "esp_start_base_exchange()");
+}
+
+
+/* send an ESP_EXPIRE_SPI message, which results in a
+ * call to start_expire() in hipd */
+void esp_start_expire(__u32 spi)
+{
+	espmsg msg;
+	msg.message_type = ESP_EXPIRE_SPI;
+	msg.message_data = htonl(spi);
+	esp_send_to_hipd( (char*) &msg, sizeof(msg), "esp_start_expire()");
+}
+
+/* send an ESP_UDP_CTL message, which results in a
+ * call to receive_udp_hip_packet() in hipd */
+void esp_receive_udp_hip_packet(char *buff, int len)
+{
+	char msgbuff[sizeof(espmsg) + BUFF_LEN];
+	espmsg *msg = (espmsg*) &msgbuff[0];
+	msg->message_type = ESP_UDP_CTL;
+	msg->message_data = htonl((__u32)len);
+	memcpy(&msgbuff[sizeof(espmsg)], buff, len);
+	esp_send_to_hipd( msgbuff, len+sizeof(espmsg),
+		"esp_receive_udp_hip_packet()");
+}
 

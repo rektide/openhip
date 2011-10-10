@@ -34,7 +34,6 @@
 #ifdef __WIN32__
 void hip_esp_output(void *arg);
 void hip_esp_input(void *arg);
-void hip_pfkey(void *arg);
 void tunreader(void *arg);
 void hip_dns(void *arg);
 void hipd_main(void *arg);
@@ -45,7 +44,6 @@ extern int socketpair(int, int, int, int sv[2]);
 #else
 void *hip_esp_output(void *arg);
 void *hip_esp_input(void *arg);
-void *hip_pfkey(void *arg);
 void *tunreader(void *arg);
 void *hip_dns(void *arg);
 void *hipd_main(void *arg);
@@ -54,7 +52,6 @@ void *hip_status(void *arg);
 #define RETNULL NULL;
 #endif
 
-int pfkey_send_acquire(struct sockaddr *target);
 extern void hip_sleep(int seconds);
 
 /*

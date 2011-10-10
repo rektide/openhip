@@ -42,6 +42,29 @@
 #include <openssl/blowfish.h>	/* bf_key */
 
 /*
+ * Algorithms
+ */
+#define SADB_AALG_NONE			0
+#define SADB_AALG_MD5HMAC		2
+#define SADB_AALG_SHA1HMAC		3
+#define SADB_X_AALG_SHA2_256HMAC	5
+#define SADB_X_AALG_SHA2_384HMAC	6
+#define SADB_X_AALG_SHA2_512HMAC	7
+#define SADB_X_AALG_RIPEMD160HMAC	8
+#define SADB_X_AALG_NULL		251
+
+#define SADB_EALG_NONE			0
+#define SADB_EALG_DESCBC		2
+#define SADB_EALG_3DESCBC		3
+#define SADB_X_EALG_CASTCBC		6
+#define SADB_X_EALG_BLOWFISHCBC		7
+#define SADB_EALG_NULL			11
+#define SADB_X_EALG_AESCBC		12
+#define SADB_X_EALG_SERPENTCBC		252
+#define SADB_X_EALG_TWOFISHCBC		253
+
+
+/*
  * definitions
  */
 #define SADB_SIZE 512 
@@ -126,13 +149,14 @@ typedef struct _hip_proto_sel_entry
  */
 void hip_sadb_init();
 void hip_sadb_deinit();
-int hip_sadb_add(__u32 type, __u32 mode, struct sockaddr *src_hit,
-    struct sockaddr *dst_hit, struct sockaddr *src, struct sockaddr *dst,
-    __u16 port, __u32 spi, __u8 *e_key, __u32 e_type, __u32 e_keylen,
-    __u8 *a_key, __u32 a_type, __u32 a_keylen, __u32 lifetime, __u16 hitmagic,
-    __u32 spinat);
-int hip_sadb_delete(__u32 type, struct sockaddr *src, struct sockaddr *dst,
-    __u32 spi);
+int hip_sadb_add(__u32 mode, int direction,
+    struct sockaddr *src_hit, struct sockaddr *dst_hit,
+    struct sockaddr *src, struct sockaddr *dst,
+    __u32 spi, __u32 spinat,
+    __u8 *e_key, __u32 e_type, __u32 e_keylen,
+    __u8 *a_key, __u32 a_type, __u32 a_keylen,
+    __u32 lifetime);
+int hip_sadb_delete(__u32 spi);
 void hip_remove_expired_lsi_entries(struct timeval *now);
 void hip_add_lsi(struct sockaddr *addr, struct sockaddr *lsi4, 
 	struct sockaddr *lsi6);

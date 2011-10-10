@@ -29,6 +29,7 @@
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
+#include <hip/hip_sadb.h>
 
 #define MAX_KEYS 8
 
@@ -387,4 +388,38 @@ int enc_iv_len(int suite_id)
 		break;
 	}
 	return(0);
+}
+
+int transform_to_ealg(int transform)
+{
+	switch(transform) {
+	case ESP_AES_CBC_HMAC_SHA1:		/* AES-CBC enc */
+		return SADB_X_EALG_AESCBC;
+	case ESP_3DES_CBC_HMAC_SHA1:		/* 3DES-CBC enc */
+	case ESP_3DES_CBC_HMAC_MD5:
+		return SADB_EALG_3DESCBC;
+	case ESP_BLOWFISH_CBC_HMAC_SHA1:	/* BLOWFISH-CBC enc */
+		return SADB_X_EALG_BLOWFISHCBC;
+	case ESP_NULL_HMAC_SHA1:		/* NULL enc */
+	case ESP_NULL_HMAC_MD5:
+		return SADB_EALG_NULL;
+	default:
+		return 0;
+	}
+}
+
+int transform_to_aalg(int transform)
+{
+	switch(transform) {
+	case ESP_AES_CBC_HMAC_SHA1:		/* HMAC-SHA1 auth */
+	case ESP_3DES_CBC_HMAC_SHA1:
+	case ESP_BLOWFISH_CBC_HMAC_SHA1:
+	case ESP_NULL_HMAC_SHA1:
+		return SADB_AALG_SHA1HMAC;
+	case ESP_3DES_CBC_HMAC_MD5:		/* HMAC-MD5 auth */
+	case ESP_NULL_HMAC_MD5:
+		return SADB_AALG_MD5HMAC;
+	default:
+		return 0;
+	}
 }
