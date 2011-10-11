@@ -321,6 +321,8 @@ void *hip_esp_output(void *arg)
 #else
 				offset = 0;
 #endif
+				if (check_esp_seqno_overflow(entry))
+					start_expire(entry->spi);
 				err = hip_esp_encrypt(raw_buff, raw_len,
 					&data[offset], &len, entry, &now);
 				pthread_mutex_unlock(&entry->rw_lock);
@@ -431,6 +433,8 @@ void *hip_esp_output(void *arg)
 			} 
 			raw_len = len;
 			pthread_mutex_lock(&entry->rw_lock);
+			if (check_esp_seqno_overflow(entry))
+				start_expire(entry->spi);
 			err = hip_esp_encrypt(raw_buff, raw_len,
 					      data, &len, entry, &now);
 			pthread_mutex_unlock(&entry->rw_lock);
@@ -1151,7 +1155,7 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 		esp = (struct ip_esp_hdr*) out;
 	}
 	esp->spi = htonl(entry->spi);
-	esp->seq_no = htonl(entry->sequence++);
+	esp->seq_no = htonl(++entry->sequence);
 	padlen = 0;
 	*outlen = sizeof(struct ip_esp_hdr);
 	

@@ -69,6 +69,8 @@
  */
 #define SADB_SIZE 512 
 #define LSI4(a) (((struct sockaddr_in*)a)->sin_addr.s_addr)
+#define ESP_SEQNO_MAX (0xFFFFFFFF - 0x20)
+#define check_esp_seqno_overflow(e) e && (e->sequence >= ESP_SEQNO_MAX)
 
 /* HIP Security Association entry */
 typedef struct _hip_sadb_entry 

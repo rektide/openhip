@@ -284,7 +284,7 @@ int hip_sadb_add(__u32 mode, int direction,
 	entry->bytes = 0;
 	entry->usetime.tv_sec = 0;
 	entry->usetime.tv_usec = 0;
-	entry->sequence = 1;
+	entry->sequence = 0;
 	entry->replay_win = 0;
 	entry->replay_map = 0;
 
