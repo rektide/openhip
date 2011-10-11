@@ -1863,12 +1863,19 @@ void esp_send_to_hipd(char *data, int len, char *errmsg) {
  * call to start_base_exchange() in hipd */
 void esp_start_base_exchange(struct sockaddr *lsi)
 {
+	struct sockaddr_storage dst;
 	const int len = sizeof(espmsg) + sizeof(struct sockaddr_storage);
 	char msgbuff[len];
+	
+        /* lsi is in host byte order, convert to network for ACQUIRE message */
+	memcpy(&dst, lsi, sizeof(struct sockaddr_storage));
+	if (dst.ss_family == AF_INET) {
+	    LSI4(&dst) = htonl(LSI4(lsi));
+	}
 	espmsg *msg = (espmsg*) &msgbuff[0];
 	msg->message_type = ESP_ACQUIRE_LSI;
 	msg->message_data = htonl(sizeof(struct sockaddr_storage));
-	memcpy(&msgbuff[sizeof(espmsg)], lsi, sizeof(struct sockaddr_storage));
+	memcpy(&msgbuff[sizeof(espmsg)], &dst, sizeof(struct sockaddr_storage));
 	esp_send_to_hipd( (char*) msg, len, "esp_start_base_exchange()");
 }
 

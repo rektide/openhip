@@ -287,17 +287,12 @@ void start_base_exchange(struct sockaddr *dst)
 	hip_assoc* hip_a = NULL;
 	hi_node *mine;
 	hiphdr hiph;
-	__u32 tmp;
 
 	struct sockaddr_storage lsi, lsi6, ss_src;
 	struct sockaddr *src = SA(&ss_src);
 	hip_hit newhit;
 	int previous_state = UNASSOCIATED;
 
-	if (dst->sa_family == AF_INET) {
-	    tmp = ((struct sockaddr_in*)dst)->sin_addr.s_addr;
-	    ((struct sockaddr_in*)dst)->sin_addr.s_addr = htonl(tmp);
-	}
 	/* replace LSI with IP address */
 	memset(&lsi, 0, sizeof(struct sockaddr_storage));
 	memcpy(&lsi, dst, SALEN(dst));
