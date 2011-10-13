@@ -1,6 +1,6 @@
 /*
  * Host Identity Protocol
- * Copyright (C) 2004-06 the Boeing Company
+ * Copyright (C) 2004-11 the Boeing Company
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -97,6 +97,7 @@ long g_read_usec;
 
 #define BUFF_LEN 2000
 #define HMAC_SHA_96_BITS 96 /* 12 bytes */
+#define REPLAY_WIN_SIZE 64 /* 64 packets */
 
 /* array of Ethernet addresses used by get_eth_addr() */
 #define MAX_ETH_ADDRS 255
@@ -137,7 +138,12 @@ __u64 get_eth_addr(int family, __u8 *addr);
 void esp_start_base_exchange(struct sockaddr *lsi);
 void esp_start_expire(__u32 spi);
 void esp_receive_udp_hip_packet(char *buff, int len);
+__u32 get_next_seqno(hip_sadb_entry *entry);
+int esp_anti_replay_check_initial(hip_sadb_entry *entry, __u32 seqno,
+	__u32 *sequence_hi);
+void esp_update_anti_replay(hip_sadb_entry *entry, __u32 seqno, __u32 seqno_hi);
 
+/* externals */
 extern __u32 get_preferred_lsi(struct sockaddr *lsi);
 extern int do_bcast();
 extern int maxof(int num_args, ...);
@@ -536,7 +542,7 @@ void *hip_esp_input(void *arg)
 	struct ip_esp_hdr *esph;
 	udphdr *udph;
 
-	__u32 spi; /*, seq_no;*/
+	__u32 spi;
 	hip_sadb_entry *entry;
 #ifdef __WIN32__
 	DWORD lenin;
@@ -609,7 +615,6 @@ void *hip_esp_input(void *arg)
 			iph = (struct ip *) &buff[0];
 			esph = (struct ip_esp_hdr *) &buff[sizeof(struct ip)];
 			spi 	= ntohl(esph->spi);
-			/*seq_no = ntohl(esph->seq_no);*/
 			if (!(entry = hip_sadb_lookup_spi(spi))) {
 				/*printf("Warning: SA not found for SPI 0x%x\n",
 					spi);*/
@@ -1155,7 +1160,7 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 		esp = (struct ip_esp_hdr*) out;
 	}
 	esp->spi = htonl(entry->spi);
-	esp->seq_no = htonl(++entry->sequence);
+	esp->seq_no = htonl(get_next_seqno(entry));
 	padlen = 0;
 	*outlen = sizeof(struct ip_esp_hdr);
 	
@@ -1398,6 +1403,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	struct udphdr *udp=NULL;
 #endif /* HIP_VPLS */
 	int use_udp = FALSE;
+	__u32 new_seqno_hi = 0;
 	
 	if (!in || !out || !entry)
 		return(-1);
@@ -1425,6 +1431,16 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 #ifdef HIP_VPLS
         *offset = sizeof(struct eth_hdr);  /* Tunnel mode */
 #endif
+
+	/*
+	 *  Preliminary anti-replay check.
+	 */
+	if (esp_anti_replay_check_initial(entry, ntohl(esp->seq_no),
+		    &new_seqno_hi)) {
+		printf("duplicate sequence number detected: %x\n",
+			ntohl(esp->seq_no));
+		return(-1);
+	}
 
 	/* 
 	 *   Authentication 
@@ -1472,6 +1488,9 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	default:
 		break;
 	}
+
+	/* update anti-replay window now that integrity has been verified */
+	esp_update_anti_replay(entry, ntohl(esp->seq_no), new_seqno_hi);
 	
 	/*
 	 *   Decryption
@@ -1903,3 +1922,101 @@ void esp_receive_udp_hip_packet(char *buff, int len)
 		"esp_receive_udp_hip_packet()");
 }
 
+/*
+ * update the sequence number counters in the sadb entry and return the next
+ * sequence number
+ */
+__u32 get_next_seqno(hip_sadb_entry *entry)
+{
+    __u32 r = ++entry->sequence;
+    /* overflow of lower 32 bits */
+    if (r == 0) {
+	r = ++entry->sequence; /* don't use zero */
+	entry->sequence_hi++;
+    }
+    return r;
+}
+
+/*
+ * Perform preliminary anti-replay verification on an ESP packet's sequence
+ * number against the receive window of the SA; sadb entry is not modified.
+ * Determine the high-order bits of a 64-bit ESN based on anti-replay packet
+ * window and received lower bits.
+ *
+ * Returns 0 if the check passes, 1 if the check fails.
+ * Returns value high-order ESN bits in  sequqnce_hi.
+ */
+int esp_anti_replay_check_initial(hip_sadb_entry *entry, __u32 seqno, 
+	__u32 *sequence_hi)
+{
+	/* T: top of window */
+	__u32 replay_win_maxl = (__u32)(entry->replay_win_max & 0xFFFFFFFF);
+	/* B: botttom of window */
+	__u64 replay_win_min = entry->replay_win_max - REPLAY_WIN_SIZE + 1;
+	__u32 replay_win_minl = (__u32)(replay_win_min & 0xFFFFFFFF);
+	__u64 shift, esn;
+	int do_replay_check;
+	
+	*sequence_hi = entry->sequence_hi;
+
+	/* RFC 4303 Appendix A Case A: window within one subspace */
+	if (replay_win_maxl >= REPLAY_WIN_SIZE - 1) {
+		do_replay_check = 1;
+		if (seqno >= replay_win_minl) {
+			if (seqno > replay_win_maxl) {
+				/* seq number to the right of the window */
+				do_replay_check = 0;
+			}
+		} else {
+			/* assume seq number wrap around to next subspace */
+			(*sequence_hi)++;
+			do_replay_check = 0; /* new subspace */
+		}
+	/* RFC 4303 Appendix A Case B: window spans two seq no subspaces */
+	} else {
+		do_replay_check = 0;
+		if (seqno >= replay_win_minl) {
+			/* seq number from previous subspace;
+			 * don't wrap 64-bit ESN space */
+			if (*sequence_hi > 0) {
+				(*sequence_hi)--;
+				do_replay_check = 1;
+			}
+		} else {
+			/* seq number in current sequence_hi subspace */
+			if (seqno <= replay_win_maxl) {
+				do_replay_check = 1;
+			}
+			/* else seq number to the right of the window */
+		}
+	}
+
+	/* check if this sequence number has already been seen in the
+	 * receive window bitmap
+	 */
+	if (do_replay_check) {
+		esn = ((__u64)(*sequence_hi) << 32) | seqno;
+		shift = entry->replay_win_max - esn;
+		if ((entry->replay_win_map >> (__u32)shift) & 0x1) {
+			return 1; /* drop packet - duplicate detected */
+		}
+	}
+	return 0; /* pass packet */
+}
+
+void esp_update_anti_replay(hip_sadb_entry *entry, __u32 seqno, __u32 seqno_hi) {
+	__u64 esn = ((__u64)seqno_hi << 32) | seqno;
+	__u64 shift;
+	if (esn > entry->replay_win_max) {
+		/* shift window to the left, new max seq no received */
+		shift = esn - entry->replay_win_max;
+		entry->replay_win_map = entry->replay_win_map << shift;
+		entry->replay_win_max = esn;
+		entry->replay_win_map |= 0x1;
+		entry->sequence_hi = seqno_hi;
+	} else {
+		/* update bit corresponding to esn in window */
+		shift = entry->replay_win_max - esn;
+		entry->replay_win_map |= 0x1 << shift;
+	}
+}

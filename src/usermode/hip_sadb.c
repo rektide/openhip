@@ -285,8 +285,9 @@ int hip_sadb_add(__u32 mode, int direction,
 	entry->usetime.tv_sec = 0;
 	entry->usetime.tv_usec = 0;
 	entry->sequence = 0;
-	entry->replay_win = 0;
-	entry->replay_map = 0;
+	entry->sequence_hi = 0;
+	entry->replay_win_max = 0;
+	entry->replay_win_map = 0;
 
 	/* malloc error */
 	if (!entry->src_addrs || !entry->dst_addrs || !entry->a_key)

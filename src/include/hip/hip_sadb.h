@@ -1,6 +1,6 @@
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-04 the Boeing Company
+ * Copyright (C) 2002-11 the Boeing Company
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -70,16 +70,17 @@
 #define SADB_SIZE 512 
 #define LSI4(a) (((struct sockaddr_in*)a)->sin_addr.s_addr)
 #define ESP_SEQNO_MAX (0xFFFFFFFF - 0x20)
-#define check_esp_seqno_overflow(e) e && (e->sequence >= ESP_SEQNO_MAX)
+#define check_esp_seqno_overflow(e) e && (e->sequence_hi == 0xFFFFFFFF) && \
+					 (e->sequence >= ESP_SEQNO_MAX)
 
 /* HIP Security Association entry */
 typedef struct _hip_sadb_entry 
 {
 	struct _hip_sadb_entry *next;
 	__u32 spi;			/* primary index into SADB */
-	__u32 spinat;			/* OTB -- spinat for mobile router */
+	__u32 spinat;			/* spinat for mobile router */
 	__u32 mode; 	/* ESP mode :  0-default 1-transport 2-tunnel 3-beet */
-	int direction;			/* in/out */
+	int direction;			/* 1-in/2-out */
 	__u16 hit_magic;		/* for quick checksum calculation */
 	sockaddr_list *src_addrs;	/* source addresses 		*/
 	sockaddr_list *dst_addrs;	/* destination addresses 	*/
@@ -97,9 +98,10 @@ typedef struct _hip_sadb_entry
 	struct timeval exptime;		/* expiration timestamp */
 	__u64 bytes;			/* bytes transmitted */
 	struct timeval usetime;		/* last used timestamp */
-	__u32 sequence;			/* sequence number counter */
-	__u32 replay_win;		/* anti-replay window */
-	__u32 replay_map;		/* anti-replay bitmap */
+	__u32 sequence;			/* outgoing or highest received seq no*/
+	__u32 sequence_hi;		/* high-order bits of 64-bit ESN */
+	__u64 replay_win_max;		/* right side of received window */
+	__u64 replay_win_map;		/* anti-replay bitmap */
 	char iv[8];
 	des_key_schedule ks[3];		/* 3-DES keys */
 	AES_KEY *aes_key;		/* AES key */
@@ -176,3 +178,4 @@ int hip_add_proto_sel_entry(__u32 lsi, __u8 proto, __u8 *header, int family,
         int dir, struct timeval *now);
 void hip_remove_expired_sel_entries(struct timeval *now);
 void print_sadb();
+
