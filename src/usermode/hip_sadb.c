@@ -556,14 +556,16 @@ void hip_remove_expired_lsi_entries(struct timeval *now)
 void hip_add_lsi(struct sockaddr *addr, struct sockaddr *lsi4, 
 		struct sockaddr *lsi6)
 {
+	struct sockaddr_storage lsi4n;
 	hip_lsi_entry *entry;
 	if (lsi4 && lsi4->sa_family == AF_INET) {
-	    LSI4(lsi4) = htonl(LSI4(lsi4));
+		memcpy(&lsi4n, lsi4, sizeof(struct sockaddr_storage));
+		LSI4(&lsi4n) = htonl(LSI4(&lsi4n));
 	}
 
-	if ( !(entry = hip_lookup_lsi(lsi4)) &&
+	if ( !(entry = hip_lookup_lsi(SA(&lsi4n))) &&
 	     !(entry = hip_lookup_lsi(lsi6)) ) {
-		entry = create_lsi_entry(lsi4);
+		entry = create_lsi_entry(SA(&lsi4n));
 	} else { /* refresh timer for existing LSI entry */
 		gettimeofday(&entry->creation_time, NULL);
 	}
