@@ -2864,7 +2864,7 @@ void log_hipa_fromto(int level, char *msg, hip_assoc *hip_a, __u8 from, __u8 to)
 	memset(logstr, 0, sizeof(logstr));
 	/* from HIT/IP to HIT/IP occupies max 46*4 + 10 = 128  bytes */
 	strncat(logstr, msg, 1024 - 130);
-	if (from && hip_a->hi) { /* from HIT/src */
+	if (from && hip_a->hi) { /* from HIT/src/LSI */
 		strcat(logstr, " from \n\t");
 		hit_to_sockaddr(SA(&hit), hip_a->hi->hit);
 		if (addr_to_str(SA(&hit), addrstr, INET6_ADDRSTRLEN)) {
@@ -2878,8 +2878,15 @@ void log_hipa_fromto(int level, char *msg, hip_assoc *hip_a, __u8 from, __u8 to)
 		} else {
 			strcat(logstr, (char *)addrstr);
 		}
+		strcat(logstr, " / ");
+		if (addr_to_str(SA(&hip_a->hi->lsi), addrstr,
+			    INET6_ADDRSTRLEN)) {
+			strcat(logstr, "(none)");
+		} else {
+			strcat(logstr, (char *)addrstr);
+		}
 	}
-	if (to && hip_a->peer_hi) { /* to HIT/dst */
+	if (to && hip_a->peer_hi) { /* to HIT/dst/LSI */
 		strcat(logstr, " to \n\t");
 		hit_to_sockaddr(SA(&hit), hip_a->peer_hi->hit);
 		if (addr_to_str(SA(&hit), addrstr, INET6_ADDRSTRLEN)) {
@@ -2889,6 +2896,13 @@ void log_hipa_fromto(int level, char *msg, hip_assoc *hip_a, __u8 from, __u8 to)
 		}
 		strcat(logstr, " / ");
 		if (addr_to_str(HIPA_DST(hip_a), addrstr, INET6_ADDRSTRLEN)) {
+			strcat(logstr, "(none)");
+		} else {
+			strcat(logstr, (char *)addrstr);
+		}
+		strcat(logstr, " / ");
+		if (addr_to_str(SA(&hip_a->peer_hi->lsi), addrstr,
+			    INET6_ADDRSTRLEN)) {
 			strcat(logstr, "(none)");
 		} else {
 			strcat(logstr, (char *)addrstr);
