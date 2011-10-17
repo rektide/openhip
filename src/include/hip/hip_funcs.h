@@ -137,7 +137,6 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 			int in, int peer);
 int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
 			struct sockaddr *newdstaddr, __u32 newspi, int in);
-void update_lsi_mapping(struct sockaddr *dst, struct sockaddr *lsi,hip_hit hit);
 
 /* hip_ipsec.c */
 __u32 get_next_spi();

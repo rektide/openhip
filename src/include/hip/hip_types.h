@@ -351,6 +351,8 @@ typedef struct _hip_assoc {
 } hip_assoc;
 #define HIPA_SRC(h) ((struct sockaddr*)&h->hi->addrs.addr)
 #define HIPA_DST(h) ((struct sockaddr*)&h->peer_hi->addrs.addr)
+#define HIPA_SRC_LSI(h) ((struct sockaddr*)&h->hi->lsi)
+#define HIPA_DST_LSI(h) ((struct sockaddr*)&h->peer_hi->lsi)
 
 /*
  * list of struct sockaddrs

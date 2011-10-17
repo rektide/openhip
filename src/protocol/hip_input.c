@@ -765,12 +765,9 @@ int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src)
 		log_(WARN, "Error: after parsing R1, DH is null.\n");
 	/* Need to send an SPI to peer */
 	hip_a->spi_in = get_next_spi();
-	/* Fill in the destination address for when an RVS was used,
-	 * and ensure that the LSI mapping exists */
+	/* Fill in the destination address for when an RVS was used, */
 	if (VALID_FAM(&hip_a->peer_hi->lsi)) {
 		memcpy(HIPA_DST(hip_a), src, SALEN(src));
-		update_lsi_mapping(HIPA_DST(hip_a), SA(&hip_a->peer_hi->lsi),
-				   hip_a->peer_hi->hit);
 	}
 	/* Update peer_hi_head and fill in LSI*/
 	update_peer_list(hip_a);
@@ -1394,9 +1391,6 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 			err = delete_associations(hip_a, old_spi_in, 
 				old_spi_out);
 		}
-		/* update LSI mapping */
-		update_lsi_mapping(HIPA_DST(hip_a), SA(&hip_a->peer_hi->lsi),
-				   hip_a->peer_hi->hit);
 
 		err = complete_base_exchange(hip_a);
 
@@ -3618,6 +3612,7 @@ int complete_base_exchange(hip_assoc *hip_a)
 	if (hip_sadb_add(hip_a->udp ? 3 : 0, 2,
 		    SA(&src_hit), SA(&dst_hit),
 		    HIPA_SRC(hip_a), HIPA_DST(hip_a),
+		    HIPA_SRC_LSI(hip_a), HIPA_DST_LSI(hip_a),
 		    hip_a->spi_out, hip_a->spi_nat,
 		    get_key(hip_a, ESP_ENCRYPTION, 0),
 		    transform_to_ealg(hip_a->esp_transform),
@@ -3634,6 +3629,7 @@ int complete_base_exchange(hip_assoc *hip_a)
 	if (hip_sadb_add(hip_a->udp ? 3: 0, 1,
 		    SA(&dst_hit), SA(&src_hit),
 		    HIPA_DST(hip_a), HIPA_SRC(hip_a),
+		    HIPA_DST_LSI(hip_a), HIPA_SRC_LSI(hip_a),
 		    hip_a->spi_in, hip_a->spi_nat,
 		    get_key(hip_a, ESP_ENCRYPTION, 1),
 		    transform_to_ealg(hip_a->esp_transform),
@@ -3676,9 +3672,8 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 	struct sockaddr_storage src_hit_s, dst_hit_s;
 	struct sockaddr *src_new, *dst_new, *src_old, *dst_old;
 	struct sockaddr *src_hit = SA(&src_hit_s), *dst_hit = SA(&dst_hit_s);
+	struct sockaddr *src_lsi, *dst_lsi;
 
-	src_old = in ? HIPA_DST(hip_a) : HIPA_SRC(hip_a);
-	dst_old = in ? HIPA_SRC(hip_a) : HIPA_DST(hip_a);
 	if (in) { /* incoming */
 	    direction = 1;
 	    spi = hip_a->spi_in;
@@ -3686,6 +3681,8 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 	    hit_to_sockaddr(dst_hit, hip_a->hi->hit);
 	    src_old = HIPA_DST(hip_a);
 	    dst_old = HIPA_SRC(hip_a);
+	    src_lsi = HIPA_DST_LSI(hip_a);
+	    dst_lsi = HIPA_SRC_LSI(hip_a);
 	} else { /* outgoing */
 	    direction = 2;
 	    spi = hip_a->spi_out;
@@ -3693,6 +3690,8 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 	    hit_to_sockaddr(dst_hit, hip_a->peer_hi->hit);
 	    src_old = HIPA_SRC(hip_a);
 	    dst_old = HIPA_DST(hip_a);
+	    src_lsi = HIPA_SRC_LSI(hip_a);
+	    dst_lsi = HIPA_DST_LSI(hip_a);
 	}
 	if (newaddr && (peer == in)) {
 		src_new = newaddr;
@@ -3711,12 +3710,9 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 		err--;
 	}
 
-	/* update LSI mapping for success with sadb_add() */
-	update_lsi_mapping(in ? src_new : dst_new, SA(&hip_a->peer_hi->lsi),
-			   hip_a->peer_hi->hit);
 	/* new SPI is used if it is nonzero */
 	if (hip_sadb_add(hip_a->udp ? 3 : 0, direction,
-		    src_hit, dst_hit, src_new, dst_new,
+		    src_hit, dst_hit, src_new, dst_new, src_lsi, dst_lsi,
 		    newspi > 0 ? newspi : spi, hip_a->spi_nat,
 		    get_key(hip_a, ESP_ENCRYPTION, in),
 		    transform_to_ealg(hip_a->esp_transform),
@@ -3745,7 +3741,7 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
  * 		newspi = the new SPI, or zero if readdress only
  * 		in = TRUE for incoming, FALSE for outgoing
  *
- * This function takes care of rebuilding an SA and its SPD entry
+ * This function takes care of rebuilding an SA
  * when readdress involves a change of address family.
  */
 int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
@@ -3756,6 +3752,7 @@ int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
 	struct sockaddr_storage src_hit_s, dst_hit_s;
 	struct sockaddr *src_old, *dst_old;
 	struct sockaddr *src_hit = SA(&src_hit_s), *dst_hit = SA(&dst_hit_s);
+	struct sockaddr *src_lsi, *dst_lsi;
 
 	if (in) { /* incoming */
 	    direction = 1;
@@ -3764,6 +3761,8 @@ int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
 	    hit_to_sockaddr(dst_hit, hip_a->hi->hit);
 	    src_old = HIPA_DST(hip_a);
 	    dst_old = HIPA_SRC(hip_a);
+	    src_lsi = HIPA_DST_LSI(hip_a);
+	    dst_lsi = HIPA_SRC_LSI(hip_a);
 	} else { /* outgoing */
 	    direction = 2;
 	    spi = hip_a->spi_out;
@@ -3771,6 +3770,8 @@ int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
 	    hit_to_sockaddr(dst_hit, hip_a->peer_hi->hit);
 	    src_old = HIPA_SRC(hip_a);
 	    dst_old = HIPA_DST(hip_a);
+	    src_lsi = HIPA_SRC_LSI(hip_a);
+	    dst_lsi = HIPA_DST_LSI(hip_a);
 	}
 
 	/* In Windows, SAs stored based on SPI, so must delete first */
@@ -3780,12 +3781,8 @@ int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
 		err--;
 	}
 
-	/* update LSI mapping for success with sadb_add() */
-	update_lsi_mapping(in ? src_new : dst_new, SA(&hip_a->peer_hi->lsi),
-			   hip_a->peer_hi->hit);
-
 	if (hip_sadb_add(hip_a->udp ? 3 : 0, direction,
-		    src_hit, dst_hit, src_new, dst_new,
+		    src_hit, dst_hit, src_new, dst_new, src_lsi, dst_lsi,
 		    newspi > 0 ? newspi : spi, hip_a->spi_nat,
 		    get_key(hip_a, ESP_ENCRYPTION, in),
 		    transform_to_ealg(hip_a->esp_transform),
@@ -3867,16 +3864,6 @@ void update_peer_list(hip_assoc *hip_a)
 			SALEN(&hip_a->peer_hi->lsi));
 	}
 	
-}
-
-void update_lsi_mapping(struct sockaddr *dst, struct sockaddr *lsi, hip_hit hit)
-{
-	struct sockaddr_storage lsi6;
-	hit_to_sockaddr(SA(&lsi6), hit);
-	log_(NORM, "Updating mapping for LSI %s/", logaddr(dst));
-	log_(NORM, "%s/", logaddr(lsi));
-	log_(NORM, "%s\n", logaddr(SA(&lsi6)));
-	hip_add_lsi(dst, lsi, SA(&lsi6));
 }
 
 void log_sa_info(hip_assoc *hip_a)

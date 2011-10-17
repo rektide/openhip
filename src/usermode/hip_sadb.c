@@ -226,6 +226,7 @@ void hip_sadb_deinit() {
 int hip_sadb_add(__u32 mode, int direction,
     struct sockaddr *src_hit, struct sockaddr *dst_hit,
     struct sockaddr *src, struct sockaddr *dst, 
+    struct sockaddr *src_lsi, struct sockaddr *dst_lsi, 
     __u32 spi, __u32 spinat,
     __u8 *e_key, __u32 e_type, __u32 e_keylen,
     __u8 *a_key, __u32 a_type, __u32 a_keylen,
@@ -236,6 +237,7 @@ int hip_sadb_add(__u32 mode, int direction,
 	int hash, err, key_len;
 	__u8 key1[8], key2[8], key3[8]; /* for 3-DES */
 	struct timeval now;
+	struct sockaddr *peer_lsi;
 
 	/* type is currently ignored */	
 	if (!src || !dst || !a_key)
@@ -270,7 +272,6 @@ int hip_sadb_add(__u32 mode, int direction,
 	memset(&entry->src_hit, 0, sizeof(struct sockaddr_storage));
 	memset(&entry->dst_hit, 0, sizeof(struct sockaddr_storage));
 	memset(&entry->lsi, 0, sizeof(struct sockaddr_storage));
-	memset(&entry->lsi6, 0, sizeof(struct sockaddr_storage));
 	entry->a_type = a_type;
 	entry->e_type = e_type;
 	entry->a_keylen = a_keylen;
@@ -303,6 +304,37 @@ int hip_sadb_add(__u32 mode, int direction,
 	memcpy(&entry->src_hit, src_hit, SALEN(src_hit));
 	memcpy(&entry->dst_hit, dst_hit, SALEN(dst_hit));
 
+	/* 1 = incoming, 2 = outgoing */
+	if (! (direction == 1 || direction == 2)) {
+		printf("sadb_add() invalid direction specified: %d\n",
+			direction);
+		goto hip_sadb_add_error;
+	}
+	peer_lsi = (direction == 1) ? src_lsi : dst_lsi;
+	memcpy(&entry->lsi, peer_lsi, SALEN(peer_lsi));
+	if (entry->lsi.ss_family == AF_INET) {
+		/* LSI parameters are in network byte order, but here
+		 * they are used in host byte order */
+		LSI4(SA(&entry->lsi)) = ntohl(LSI4(SA(&entry->lsi)));
+	}
+
+	if (direction == 2) { /* outgoing */
+		/* add to destination cache for easy lookup via address */
+		hip_sadb_add_dst_entry(SA(&entry->lsi), entry);
+		hip_sadb_add_dst_entry(dst_hit, entry);
+		if ((lsi_entry = hip_lookup_lsi(SA(&entry->lsi)))) {
+			lsi_entry->send_packets = 1;
+		/* Once an incoming SA is added (outgoing is always added 
+		 * first in hipd) then we need to send unbuffered packets.
+		 * While that could be done here, instead we decrease the
+		 * timeout of hip_esp_input so it is done later. Otherwise,
+		 * experience shows a race condition where the first
+		 * unbuffered packet arrives at the peer before its SAs
+		 * are built. */
+			g_read_usec = 200000;
+		}
+	}
+
 	/* copy keys */
 	memcpy(entry->a_key, a_key, a_keylen);
 	if (e_keylen > 0)
@@ -327,41 +359,6 @@ int hip_sadb_add(__u32 mode, int direction,
 	} else if ((e_keylen > 0) && (e_type == SADB_X_EALG_BLOWFISHCBC)) {
 		entry->bf_key = malloc(sizeof(BF_KEY));
 		BF_set_key(entry->bf_key, e_keylen, e_key);
-	}
-
-	/* add to destination cache for easy lookup via address */
-	hip_sadb_add_dst_entry(dst, entry);
-
-	/* TODO: remove the below code; now the HITs are stored in the sadb
-	 * entry, so we can derive the lsi6/4 from that, and then trigger
-	 * the lsi_entry->send_packets here (this would remove the ability to
-	 * specify any number as an LSI)
-	 */
-	/* fill in LSI, add entry to destination cache for outbound;
-	 * the LSI is needed for both outbound and inbound SAs */
-	if ((lsi_entry = hip_lookup_lsi_by_addr(dst))) {
-		if (lsi_entry->lsi4.ss_family == AF_INET) { /* lsi exists? */
-			memcpy(&entry->lsi,  &lsi_entry->lsi4, 
-				SALEN(&lsi_entry->lsi4));
-			hip_sadb_add_dst_entry(SA(&lsi_entry->lsi4), entry);
-		}
-		if (lsi_entry->lsi6.ss_family == AF_INET6) { /* lsi6 exists? */
-			memcpy(&entry->lsi6, &lsi_entry->lsi6,
-				SALEN(&lsi_entry->lsi6));
-			hip_sadb_add_dst_entry(SA(&lsi_entry->lsi6), entry);
-		}
-	} else if ((lsi_entry = hip_lookup_lsi_by_addr(src))) {
-		memcpy(&entry->lsi,  &lsi_entry->lsi4, SALEN(&lsi_entry->lsi4));
-		memcpy(&entry->lsi6, &lsi_entry->lsi6, SALEN(&lsi_entry->lsi6));
-		lsi_entry->send_packets = 1;
-		/* Once an incoming SA is added (outgoing is always added 
-		 * first in hipd) then we need to send unbuffered packets.
-		 * While that could be done here, instead we decrease the
-		 * timeout of hip_esp_input so it is done later. Otherwise,
-		 * experience shows a race condition where the first
-		 * unbuffered packet arrives at the peer before its SAs
-		 * are built. */
-		g_read_usec = 200000;
 	}
 
 	/* finally, link the new entry into the chain */
@@ -396,14 +393,9 @@ int hip_sadb_delete(__u32 spi) {
 		return(-1);
 
 	pthread_mutex_lock(&entry->rw_lock);
-	if (entry->direction == 2) {
+	if (entry->direction == 2) { /* outgoing */
 		hip_sadb_delete_dst_entry(SA(&entry->lsi));
-		hip_sadb_delete_dst_entry(SA(&entry->lsi6));
-	}
-	if (entry->mode==3) { /*(HIP_ESP_OVER_UDP) */
 		hip_sadb_delete_dst_entry(SA(&entry->dst_hit));
-	} else {
-		hip_sadb_delete_dst_entry(SA(&entry->dst_addrs->addr));
 	}
 
 	/* set LSI entry to expire */
@@ -516,8 +508,8 @@ hip_lsi_entry *create_lsi_entry(struct sockaddr *lsi)
 /*
  * hip_remove_expired_lsi_entries()
  *
- * LSI entries are only used temporarily, so sadb_add() can know the LSI
- * mapping and for embargoed packets that are buffered. This checks the
+ * LSI entries are only used temporarily, for embargoed packets that are
+ * buffered. This checks the
  * creation time and removes those entries older than LSI_ENTRY_LIFETIME.
  */
 void hip_remove_expired_lsi_entries(struct timeval *now)
@@ -544,34 +536,6 @@ void hip_remove_expired_lsi_entries(struct timeval *now)
 		prev = entry;
 		entry = entry->next;
 	}
-}
-
-/*
- * hip_add_lsi()
- *
- * Adds an <IP,LSI> mapping to the temporary LSI list.
- * This list is used only on SA creation, to provide the <IP,LSI> mapping
- * before an SADB entry exists.
- */
-void hip_add_lsi(struct sockaddr *addr, struct sockaddr *lsi4, 
-		struct sockaddr *lsi6)
-{
-	struct sockaddr_storage lsi4n;
-	hip_lsi_entry *entry;
-	if (lsi4 && lsi4->sa_family == AF_INET) {
-		memcpy(&lsi4n, lsi4, sizeof(struct sockaddr_storage));
-		LSI4(&lsi4n) = htonl(LSI4(&lsi4n));
-	}
-
-	if ( !(entry = hip_lookup_lsi(SA(&lsi4n))) &&
-	     !(entry = hip_lookup_lsi(lsi6)) ) {
-		entry = create_lsi_entry(SA(&lsi4n));
-	} else { /* refresh timer for existing LSI entry */
-		gettimeofday(&entry->creation_time, NULL);
-	}
-	if (lsi6)
-		memcpy(&entry->lsi6, lsi6, SALEN(lsi6));
-	memcpy(&entry->addr, addr, SALEN(addr));
 }
 
 /*
@@ -668,26 +632,10 @@ void unbuffer_packets(hip_lsi_entry *entry)
 }
 
 /*
- * hip_lookup_lsi_by_addr()
- *
- * LSI entry lookup based on corresponding destination (peer) address.
- */
-hip_lsi_entry *hip_lookup_lsi_by_addr(struct sockaddr *addr)
-{
-	hip_lsi_entry *entry;
-	for (entry = lsi_temp; entry; entry = entry->next) {
-		if (memcmp(SA2IP(&entry->addr),
-			   SA2IP(addr), SAIPLEN(addr))==0) {
-			return(entry);
-		}
-	}
-	return(NULL);
-}
-
-/*
  * hip_lookup_lsi()
  *
  * LSI entry lookup based on the LSI.
+ * Used by buffer_packet() for outgoing data packets.
  */
 hip_lsi_entry *hip_lookup_lsi(struct sockaddr *lsi)
 {
@@ -1141,7 +1089,7 @@ void print_sadb()
 				entry->spi, entry->direction, entry->hit_magic,
 				entry->mode, 
 				((struct sockaddr_in*)&entry->lsi)->sin_addr.s_addr);
-			printf("lsi6= a_type=%d e_type=%d a_keylen=%d "
+			printf("a_type=%d e_type=%d a_keylen=%d "
 				"e_keylen=%d lifetime=%llu seq=%d\n",
 				entry->a_type, entry->e_type,
 				entry->a_keylen, entry->e_keylen,

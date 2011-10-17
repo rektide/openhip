@@ -297,10 +297,6 @@ int parse_response(char *buff, int len)
 			pss = (struct sockaddr_storage*) p32;
 			ip = htonl(((struct sockaddr_in*)pss)->sin_addr.s_addr);
 			printf("LSI: %u.%u.%u.%u\n", NIPQUAD(ip));
-			pss++;
-			printf("\tLSI6: ");
-			print_ipv6(pss);
-			printf("\n");
 			PRINTPTR(__u32, "\ta_type=%d ", p32, (pss+1));
 			PRINTPTR(__u32, "e_type=%d ", p32, p32);
 			PRINTPTR(__u32, "a_keylen=%d ", p32, p32);
@@ -329,7 +325,7 @@ int parse_response(char *buff, int len)
 				count++;
 				pss++;
 			}
-			printf("\n");
+			printf("\n\n");
 			break;
 		case HIP_STATUS_REPLY_DST_ENTRY:
 			pss = (struct sockaddr_storage*) (r+1);

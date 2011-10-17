@@ -248,7 +248,6 @@ void dump_sadb(char *buff, int *tlv_len, __u32 spi)
 			ADD_ITEM(p, entry->hit_magic, len);
 			ADD_ITEM(p, entry->mode, len);
 			ADD_ITEM(p, entry->lsi, len);
-			ADD_ITEM(p, entry->lsi6, len);
 			ADD_ITEM(p, entry->a_type, len);
 			ADD_ITEM(p, entry->e_type, len);
 			ADD_ITEM(p, entry->a_keylen, len);

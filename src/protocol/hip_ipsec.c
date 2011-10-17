@@ -288,7 +288,7 @@ void start_base_exchange(struct sockaddr *dst)
 	hi_node *mine;
 	hiphdr hiph;
 
-	struct sockaddr_storage lsi, lsi6, ss_src;
+	struct sockaddr_storage lsi, ss_src;
 	struct sockaddr *src = SA(&ss_src);
 	hip_hit newhit;
 	int previous_state = UNASSOCIATED;
@@ -350,10 +350,6 @@ void start_base_exchange(struct sockaddr *dst)
 		}
 		hip_a->preserve_outbound_policy = TRUE;
 	}
-	/* XXX skip this when using RVS? */
-	/* update SADB with LSI mapping */
-	hit_to_sockaddr(SA(&lsi6), *hitp);
-	update_lsi_mapping(dst, SA(&lsi), *hitp);
 
 	/* fill in addresses */
 	memcpy(HIPA_SRC(hip_a), src, SALEN(src));

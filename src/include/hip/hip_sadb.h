@@ -86,8 +86,7 @@ typedef struct _hip_sadb_entry
 	sockaddr_list *dst_addrs;	/* destination addresses 	*/
 	struct sockaddr_storage src_hit; /* source HIT */
 	struct sockaddr_storage dst_hit; /* destination HIT */
-	struct sockaddr_storage lsi;	/* LSI 				*/
-	struct sockaddr_storage lsi6;	/* IPv6 LSI (peer HIT)		*/
+	struct sockaddr_storage lsi;	/* peer's IPv4 1.x.x.x LSI */
 	__u32 a_type;			/* crypto parameters 		*/
 	__u32 e_type;
 	__u32 a_keylen;
@@ -156,6 +155,7 @@ void hip_sadb_deinit();
 int hip_sadb_add(__u32 mode, int direction,
     struct sockaddr *src_hit, struct sockaddr *dst_hit,
     struct sockaddr *src, struct sockaddr *dst,
+    struct sockaddr *src_lsi, struct sockaddr *dst_lsi,
     __u32 spi, __u32 spinat,
     __u8 *e_key, __u32 e_type, __u32 e_keylen,
     __u8 *a_key, __u32 a_type, __u32 a_keylen,

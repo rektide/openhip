@@ -677,8 +677,8 @@ void *hip_esp_input(void *arg)
 			}
 
 			if (!(entry = hip_sadb_lookup_spi(spi))) {
-				/*printf("Warning: SA not found for SPI 0x%x\n",
-					spi);*/
+				printf("Warning: SA not found for SPI 0x%x\n",
+					spi);
 				continue;
 			}
 
@@ -1398,7 +1398,6 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	__u64 dst_mac;
 	__u16 sum;
 	int family_out;
-	struct sockaddr_storage taplsi6;
 	struct tcphdr *tcp=NULL;
 	struct udphdr *udp=NULL;
 #endif /* HIP_VPLS */
@@ -1615,7 +1614,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	/* Ethernet header */
 	dst_mac = get_eth_addr(family_out, 
 				(family_out==AF_INET) ? SA2IP(&entry->lsi) : 
-							SA2IP(&entry->lsi6));
+							SA2IP(&entry->dst_hit));
 	add_eth_header(&out[*offset], dst_mac, g_tap_mac, 
 			(family_out == AF_INET) ? 0x0800 : 0x86dd);
 	
@@ -1627,10 +1626,8 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 				padinfo->next_hdr);
 		*outlen = sizeof(struct eth_hdr) + sizeof(struct ip) + elen;
 	} else {
-		taplsi6.ss_family = AF_INET6;
-		get_preferred_lsi(SA(&taplsi6));
 		add_ipv6_header(&out[*offset+sizeof(struct eth_hdr)],
-				SA(&entry->lsi6), SA(&taplsi6),
+				SA(&entry->src_hit), SA(&entry->dst_hit),
 				NULL, iph, (__u16)elen, padinfo->next_hdr);
 		*outlen = sizeof(struct eth_hdr) + sizeof(struct ip6_hdr)+ elen;
 	}
