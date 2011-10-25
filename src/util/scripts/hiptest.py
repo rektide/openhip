@@ -65,7 +65,12 @@ class HipNode(pycore.nodes.LxcNode):
         ''' Install a TAP device into the namespace for use by the HIP daemon.
         '''
         localname = "%s.%s" % (self.name, name)
-        mutecheck_call(["tunctl", "-t", localname])
+        try:
+            mutecheck_call(["tunctl", "-t", localname])
+        except OSError, e:
+            print "error creating TUN/TAP device '%s':\n\t%s" % (localname, e)
+            print "make sure the 'tunctl' utility is installed"
+            sys.exit(1)
         tap = pycore.nodes.TunTap(node=self, name=name, localname=localname)
         tap.install()
 
