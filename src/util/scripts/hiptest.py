@@ -11,6 +11,7 @@
 
 
 HIP_CFG_CACHE="~/.hiptest"
+HIP_CFG_DIR="/usr/local/etc/hip"
 
 import optparse, sys, os, datetime, time, shutil, re
 from core import pycore
@@ -90,7 +91,7 @@ class HipNode(pycore.nodes.LxcNode):
         if not os.path.exists(hipconf):
             mutecheck_call(["./hitgen", "-file", hipconf, "-conf"])
 
-        self.mount(cfgpath, "/usr/local/etc/hip")
+        self.mount(cfgpath, HIP_CFG_DIR)
         pub = os.path.join(cfgpath, "%s_host_identities.pub.xml" % self.name)
         if not os.path.exists(pub):
             self.cmd([os.path.join(self.hip_path, "hitgen"), "-publish"])
@@ -108,6 +109,18 @@ class HipNode(pycore.nodes.LxcNode):
                 elif family == socket.AF_INET6 and isIPv6Address(ip):
                     return ip
 
+
+    def sethippath(self, path):
+        ''' Set the path to HIP binaries and create some useful symlinks.
+        '''
+        self.hip_path = path
+        for p in ["hip", "hitgen", "hipstatus"]:
+            os.symlink(os.path.join(self.hip_path, p),
+                       os.path.join(self.nodedir, p))
+        for p in ["hip.conf", "my_host_identities.xml",
+                  "known_host_identities.xml"]:
+            os.symlink(os.path.join(HIP_CFG_DIR, p),
+                       os.path.join(self.nodedir, p))
 
     def starthip(self):
         ''' Start the HIP daemon.
@@ -212,7 +225,7 @@ def main():
         n = session.addobj(cls = HipNode, name = "n%d" % i)
         n.newnetif(switch, ["%s/%s" % (prefix.addr(i), prefix.prefixlen)])
         n.cmd(["sysctl", "net.ipv4.icmp_echo_ignore_broadcasts=0"])
-        n.hip_path = os.getcwd()
+        n.sethippath(os.getcwd())
         n.hitgen()
         nodes.append(n)
 
