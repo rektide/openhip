@@ -3750,7 +3750,6 @@ int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
 	__u32 spi;
 	int err = 0, direction;
 	struct sockaddr_storage src_hit_s, dst_hit_s;
-	struct sockaddr *src_old, *dst_old;
 	struct sockaddr *src_hit = SA(&src_hit_s), *dst_hit = SA(&dst_hit_s);
 	struct sockaddr *src_lsi, *dst_lsi;
 
@@ -3759,8 +3758,6 @@ int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
 	    spi = hip_a->spi_in;
 	    hit_to_sockaddr(src_hit, hip_a->peer_hi->hit);
 	    hit_to_sockaddr(dst_hit, hip_a->hi->hit);
-	    src_old = HIPA_DST(hip_a);
-	    dst_old = HIPA_SRC(hip_a);
 	    src_lsi = HIPA_DST_LSI(hip_a);
 	    dst_lsi = HIPA_SRC_LSI(hip_a);
 	} else { /* outgoing */
@@ -3768,13 +3765,10 @@ int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
 	    spi = hip_a->spi_out;
 	    hit_to_sockaddr(src_hit, hip_a->hi->hit);
 	    hit_to_sockaddr(dst_hit, hip_a->peer_hi->hit);
-	    src_old = HIPA_SRC(hip_a);
-	    dst_old = HIPA_DST(hip_a);
 	    src_lsi = HIPA_SRC_LSI(hip_a);
 	    dst_lsi = HIPA_DST_LSI(hip_a);
 	}
 
-	/* In Windows, SAs stored based on SPI, so must delete first */
 	if (hip_sadb_delete(spi) < 0) {
 		log_(WARN, "Error removing old outgoing SA: %s\n",
 		    strerror(errno));

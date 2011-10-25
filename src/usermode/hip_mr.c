@@ -872,7 +872,6 @@ unsigned char *check_hip_packet(int family, int inbound, struct if_data *ext_if,
 	hiphdr *hiph;
 	hip_mr_client *client;
 	__u32 new_spi;
-	int length;
 	unsigned char *buff = payload;
 	char ipstr[INET6_ADDRSTRLEN];
 
@@ -884,8 +883,11 @@ unsigned char *check_hip_packet(int family, int inbound, struct if_data *ext_if,
 		ip6h = (struct ip6_hdr *) payload;
 		hiph = (hiphdr *) (payload + sizeof(struct ip6_hdr));
 	}
-	length = (hiph->hdr_len+1) * 8;
-	/* TODO: validate this length against received length */
+	/* TODO: consider using hip_parse_hdr() here */
+	if ((hiph->hdr_len < 4) || ((hiph->hdr_len + 1) * 8 > data_len)) {
+		log_(WARN, "MR Packet error: hdr_len %u\n", hiph->hdr_len);
+		return(NULL);
+	}
 
 	/* 
 	 * check HITs in HIP header against client table
@@ -1273,8 +1275,8 @@ void *hip_mobile_router(void *arg)
 		return(NULL);
 	}
 
-	system("modprobe ip_queue");
-	system("modprobe ip6_queue");
+	err = system("modprobe ip_queue");
+	err = system("modprobe ip6_queue");
 
 	err = ipq_set_mode(h4, IPQ_COPY_PACKET, BUFSIZE);
 	if (err < 0) {
@@ -1291,14 +1293,14 @@ void *hip_mobile_router(void *arg)
 		goto hip_mobile_router_exit;
 	}
 
-	system("iptables -t mangle -A PREROUTING -p 50 -j QUEUE");
-	system("iptables -t mangle -A PREROUTING -p 139 -j QUEUE");
-	system("iptables -t mangle -A POSTROUTING -p 50 -j QUEUE");
-	system("iptables -t mangle -A POSTROUTING -p 139 -j QUEUE");
-	system("ip6tables -t mangle -A PREROUTING -p 50 -j QUEUE");
-	system("ip6tables -t mangle -A PREROUTING -p 139 -j QUEUE");
-	system("ip6tables -t mangle -A POSTROUTING -p 50 -j QUEUE");
-	system("ip6tables -t mangle -A POSTROUTING -p 139 -j QUEUE");
+	err = system("iptables -t mangle -A PREROUTING -p 50 -j QUEUE");
+	err = system("iptables -t mangle -A PREROUTING -p 139 -j QUEUE");
+	err = system("iptables -t mangle -A POSTROUTING -p 50 -j QUEUE");
+	err = system("iptables -t mangle -A POSTROUTING -p 139 -j QUEUE");
+	err = system("ip6tables -t mangle -A PREROUTING -p 50 -j QUEUE");
+	err = system("ip6tables -t mangle -A PREROUTING -p 139 -j QUEUE");
+	err = system("ip6tables -t mangle -A POSTROUTING -p 50 -j QUEUE");
+	err = system("ip6tables -t mangle -A POSTROUTING -p 139 -j QUEUE");
 
 	printf("Mobile router initialized.\n");
 	fflush(stdout);
@@ -1478,14 +1480,14 @@ void *hip_mobile_router(void *arg)
 	}
 
 	printf("hip_mobile_router() thread shutdown.\n");
-	system("iptables -t mangle -D PREROUTING -p 50 -j QUEUE");
-	system("iptables -t mangle -D PREROUTING -p 139 -j QUEUE");
-	system("iptables -t mangle -D POSTROUTING -p 50 -j QUEUE");
-	system("iptables -t mangle -D POSTROUTING -p 139 -j QUEUE");
-	system("ip6tables -t mangle -D PREROUTING -p 50 -j QUEUE");
-	system("ip6tables -t mangle -D PREROUTING -p 139 -j QUEUE");
-	system("ip6tables -t mangle -D POSTROUTING -p 50 -j QUEUE");
-	system("ip6tables -t mangle -D POSTROUTING -p 139 -j QUEUE");
+	err = system("iptables -t mangle -D PREROUTING -p 50 -j QUEUE");
+	err = system("iptables -t mangle -D PREROUTING -p 139 -j QUEUE");
+	err = system("iptables -t mangle -D POSTROUTING -p 50 -j QUEUE");
+	err = system("iptables -t mangle -D POSTROUTING -p 139 -j QUEUE");
+	err = system("ip6tables -t mangle -D PREROUTING -p 50 -j QUEUE");
+	err = system("ip6tables -t mangle -D PREROUTING -p 139 -j QUEUE");
+	err = system("ip6tables -t mangle -D POSTROUTING -p 50 -j QUEUE");
+	err = system("ip6tables -t mangle -D POSTROUTING -p 139 -j QUEUE");
 	close(raw_ip4_socket);
 	close(raw_ip6_socket);
 	fflush(stdout);
