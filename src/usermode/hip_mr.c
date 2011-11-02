@@ -1409,7 +1409,7 @@ void *hip_mobile_router(void *arg)
 		write_raw = 0;
 		protocol = (family == PF_INET) ? ip4h->ip_p : ip6h->ip6_nxt;
 #ifdef VERBOSE_MR_DEBUG
-		printf("Received %d byte %s packet proto %d inbound %s ",
+		printf("Received %lu byte %s packet proto %d inbound %s ",
 			m->data_len, (family==AF_INET) ? "IPv4" : "IPv6",
 			protocol, inbound ? "yes\n" : "no\n");
 #endif /* VERBOSE_MR_DEBUG */
@@ -1860,6 +1860,13 @@ int hip_mr_set_external_ifs()
 		for (l = my_addr_head; l; l=l->next) {
 			if (l->if_index != external_interfaces[neifs].ifindex)
 				continue;
+		        /* skip any ignored address from conf file */
+			if (HCNF.ignored_addr.ss_family &&
+			   (l->addr.ss_family == HCNF.ignored_addr.ss_family) &&
+			   (memcmp(SA2IP(&l->addr), SA2IP(&HCNF.ignored_addr), 
+			    SAIPLEN(&l->addr))==0)) {
+				continue;
+			}
 			if (TRUE == l->preferred) {
 				l_new_external = l;
 				break;
@@ -2006,6 +2013,13 @@ void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi)
 		 * non-local address on this interface */
 		if (l->if_index != external_interfaces[i].ifindex)
 			continue;
+		/* skip any ignored address from conf file */
+		if (HCNF.ignored_addr.ss_family &&
+		   (l->addr.ss_family == HCNF.ignored_addr.ss_family) &&
+		   (memcmp(SA2IP(&l->addr), SA2IP(&HCNF.ignored_addr), 
+		    SAIPLEN(&l->addr))==0)) {
+			continue;
+		}
 		/* skip local and multicast addresses */
 		if ((l->addr.ss_family == AF_INET6) &&
 		    (IN6_IS_ADDR_LINKLOCAL(SA2IP6(&l->addr)) ||

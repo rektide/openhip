@@ -854,6 +854,7 @@ struct hip_conf {
         char *master_interface;
         char *master_interface2;
 	struct sockaddr_storage preferred; /* preferred address */
+	struct sockaddr_storage ignored_addr; /* address to ignore */
 	char *preferred_iface;		/* preferred interface name */
 	struct name *outbound_ifaces;	/* if mobile router */
 	__u8 save_known_identities;	/* save known_host_id's on exit */

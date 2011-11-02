@@ -932,6 +932,15 @@ int read_conf_file(char *filename)
 				log_(WARN, "Invalid preferred address '%s'\n",
 				    data);
 			}
+		} else if (strcmp((char*)node->name, "ignored_addr")==0) {
+			addr = (struct sockaddr*)&HCNF.ignored_addr;
+			memset(addr, 0, sizeof(struct sockaddr_storage));
+			addr->sa_family = ((strchr(data, ':')==NULL) ? 
+						AF_INET : AF_INET6);
+			if (str_to_addr((__u8*)data, addr) <= 0) {
+				log_(WARN, "Invalid ignored address '%s'\n",
+				    data);
+			}
 		} else if (strcmp((char*)node->name, "preferred_interface")==0){
 			HCNF.preferred_iface = malloc(strlen(data) + 1);
 			if (!HCNF.preferred_iface)

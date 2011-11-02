@@ -395,6 +395,13 @@ int select_preferred_address()
 		memset(addr, 0, sizeof(struct sockaddr_storage));
 		addr->sa_family = AF_INET; 
 		str_to_addr(szAddr, addr);
+		/* check and skip any ignored address from conf file */
+		if (HCNF.ignored_addr.ss_family &&
+		    (addr->sa_family == HCNF.ignored_addr.ss_family) &&
+		    (memcmp(SA2IP(addr), SA2IP(&HCNF.ignored_addr), 
+			    SAIPLEN(addr))==0)) {
+			continue;
+		}
 		/* check for preferred address from conf file */
 		if (HCNF.preferred.ss_family &&
 		    (addr->sa_family == HCNF.preferred.ss_family) &&
@@ -464,6 +471,13 @@ int select_preferred_address()
 			if (l->if_index != ifindex1)
 				continue;
 #endif
+		    /* check and skip any ignored address from conf file */
+		    if (HCNF.ignored_addr.ss_family &&
+			(l->addr.ss_family == HCNF.ignored_addr.ss_family) &&
+			(memcmp(SA2IP(&l->addr), SA2IP(&HCNF.ignored_addr), 
+			    SAIPLEN(&l->addr))==0)) {
+				continue;
+		    }
 		    /* preferred address takes priority */
 		    if ((l->addr.ss_family==HCNF.preferred.ss_family) &&
 			(memcmp(SA2IP(&l->addr), SA2IP(&HCNF.preferred), 
@@ -506,6 +520,13 @@ int select_preferred_address()
 			if (l->if_index != ifindex1)
 				continue;
 #endif
+			/* check and skip any ignored address from conf file */
+			if (HCNF.ignored_addr.ss_family &&
+			  (l->addr.ss_family == HCNF.ignored_addr.ss_family) &&
+			  (memcmp(SA2IP(&l->addr), SA2IP(&HCNF.ignored_addr), 
+			    SAIPLEN(&l->addr))==0)) {
+				continue;
+		        }
 			ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
 			/* LSI or autoconf addr */
 			if ((IS_LSI32(ip)) || ((ip & 0xFFFF) == 0xFEA9))
