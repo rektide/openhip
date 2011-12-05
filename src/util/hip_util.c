@@ -2332,8 +2332,8 @@ __u16 checksum_magic(const hip_hit *i, const hip_hit *r)
 	while (sum>>16)
 		sum = (sum & 0xffff) + (sum >> 16);
 
-	log_(NORM, "hitMagic checksum over %d bytes: 0x%x\n",
-	    2*HIT_SIZE, (__u16)sum);
+	/*log_(NORM, "hitMagic checksum over %d bytes: 0x%x\n",
+	    2*HIT_SIZE, (__u16)sum);*/
 	
 	/* don't take the one's complement of the sum */
 	return((__u16)sum);
