@@ -283,6 +283,9 @@ int hip_sadb_add(__u32 mode, int direction,
 	entry->exptime.tv_sec = now.tv_sec + lifetime;
 	entry->exptime.tv_usec = now.tv_usec;
 	entry->bytes = 0;
+	entry->packets = 0;
+	entry->lost = 0;
+	entry->dropped = 0;
 	entry->usetime.tv_sec = 0;
 	entry->usetime.tv_usec = 0;
 	entry->sequence = 0;
@@ -404,6 +407,44 @@ int hip_sadb_delete(__u32 spi) {
 
 	hip_sadb_delete_entry(entry, TRUE);
 	return(0);
+}
+
+/*
+ * hip_sadb_add_del_addr()
+ *
+ * Add or remove another address to the sadb_entry for use with multihoming.
+ * The flags are:
+ * 	1 = add source address
+ * 	2 = add destination address
+ * 	3 = delete source address
+ * 	4 = delete destination address
+ */
+int hip_sadb_add_del_addr(__u32 spi, struct sockaddr *addr, int flags)
+{
+	hip_sadb_entry *e;
+	sockaddr_list **l;
+	int hash, err;
+	
+	if (flags < 0 || flags > 4)
+		return(-1); /* invalid flags */
+	e = hip_sadb_lookup_spi(spi);
+	if (!e)
+		return(-1); /* sadb entry not found */
+
+	hash = sadb_hashfn(spi);
+	pthread_mutex_lock(&hip_sadb_locks[hash]);
+	l = (flags == 1 || flags == 3) ? &e->src_addrs : &e->dst_addrs;
+	err = 0;
+	/* add source or destination address to entry */
+	if (flags == 1 || flags == 2) {
+		if (!add_address_to_list(l, addr, 0))
+			err = -1;
+	/* remove source or destination address from entry */
+	} else {
+		delete_address_from_list(l, addr, 0);
+	}
+	pthread_mutex_unlock(&hip_sadb_locks[hash]);
+	return(err);
 }
 
 /* 
@@ -857,6 +898,62 @@ void hip_sadb_expire(struct timeval *now)
 		if (spi > 0)
 			start_expire(spi);
 	}
+}
+
+
+/*
+ * hip_sadb_get_usage()
+ *
+ * Retrieve bytes and use time for the SADB entry matching the given SPI.
+ */
+int hip_sadb_get_usage(__u32 spi, __u64 *bytes, struct timeval *usetime)
+{
+	hip_sadb_entry *entry = hip_sadb_lookup_spi(spi);
+	if (!entry)
+		return(-1); /* not found */
+	pthread_mutex_lock(&entry->rw_lock);
+	*bytes = entry->bytes;
+	usetime->tv_sec = entry->usetime.tv_sec;
+	usetime->tv_usec = entry->usetime.tv_usec;
+	pthread_mutex_unlock(&entry->rw_lock);
+	return(0);
+}
+
+
+/*
+ * hip_sadb_get_lost()
+ *
+ * Retrieve number of packets lost for the SADB entry matching the given SPI.
+ */
+int hip_sadb_get_lost(__u32 spi, __u32 *lost)
+{
+	hip_sadb_entry *entry = hip_sadb_lookup_spi(spi);
+	if (!entry)
+		return(-1); /* not found */
+	pthread_mutex_lock(&entry->rw_lock);
+	*lost = entry->lost;
+	pthread_mutex_unlock(&entry->rw_lock);
+	return(0);
+}
+
+
+/*
+ * hip_sadb_inc_bytes()
+ *
+ * Increments bytes used, number of packets, and last used timestamp for an
+ * entry.
+ */
+void hip_sadb_inc_bytes(hip_sadb_entry *entry, __u64 bytes, struct timeval *now,
+	int lock)
+{
+	if (lock)
+		pthread_mutex_lock(&entry->rw_lock);
+	entry->bytes += bytes;
+	entry->packets++;
+	entry->usetime.tv_sec = now->tv_sec;
+	entry->usetime.tv_usec = now->tv_usec;
+	if (lock)
+		pthread_mutex_unlock(&entry->rw_lock);
 }
 
 

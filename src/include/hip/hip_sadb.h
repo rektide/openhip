@@ -73,7 +73,13 @@
 #define check_esp_seqno_overflow(e) e && (e->sequence_hi == 0xFFFFFFFF) && \
 					 (e->sequence >= ESP_SEQNO_MAX)
 
-/* HIP Security Association entry */
+/* 
+ * HIP Security Association entry 
+ *
+ * Note that this is different than the hip_assoc/hip_assoc_table[] used by
+ * the main hipd thread. The SADB is used primarily by the ESP input/output
+ * threads (the data plane).
+ */
 typedef struct _hip_sadb_entry 
 {
 	struct _hip_sadb_entry *next;
@@ -95,7 +101,10 @@ typedef struct _hip_sadb_entry
 	__u8 *e_key;
 	__u64 lifetime;			/* seconds until expiration */
 	struct timeval exptime;		/* expiration timestamp */
-	__u64 bytes;			/* bytes transmitted */
+	__u64 bytes;			/* bytes tx/rx */
+	__u32 packets;			/* number of packets tx/rx*/
+	__u32 lost;			/* number of packets lost */
+	__u32 dropped;			/* number of packets dropped */
 	struct timeval usetime;		/* last used timestamp */
 	__u32 sequence;			/* outgoing or highest received seq no*/
 	__u32 sequence_hi;		/* high-order bits of 64-bit ESN */
@@ -161,6 +170,7 @@ int hip_sadb_add(__u32 mode, int direction,
     __u8 *a_key, __u32 a_type, __u32 a_keylen,
     __u32 lifetime);
 int hip_sadb_delete(__u32 spi);
+int hip_sadb_add_del_addr(__u32 spi, struct sockaddr *addr, int flags);
 void hip_remove_expired_lsi_entries(struct timeval *now);
 void hip_add_lsi(struct sockaddr *addr, struct sockaddr *lsi4, 
 	struct sockaddr *lsi6);
@@ -171,6 +181,10 @@ hip_sadb_entry *hip_sadb_lookup_spi(__u32 spi);
 hip_sadb_entry *hip_sadb_lookup_addr(struct sockaddr *addr);
 hip_sadb_entry *hip_sadb_get_next(hip_sadb_entry *placemark);
 void hip_sadb_expire(struct timeval *now);
+int hip_sadb_get_usage(__u32 spi, __u64 *bytes, struct timeval *usetime);
+int hip_sadb_get_lost(__u32 spi, __u32 *lost);
+void hip_sadb_inc_bytes(hip_sadb_entry *entry, __u64 bytes, struct timeval *now,
+	int lock);
 
 int hip_select_family_by_proto(__u32 lsi, __u8 proto, __u8 *header,
         struct timeval *now);

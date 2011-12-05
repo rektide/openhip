@@ -141,7 +141,7 @@ void esp_receive_udp_hip_packet(char *buff, int len);
 __u32 get_next_seqno(hip_sadb_entry *entry);
 int esp_anti_replay_check_initial(hip_sadb_entry *entry, __u32 seqno,
 	__u32 *sequence_hi);
-void esp_update_anti_replay(hip_sadb_entry *entry, __u32 seqno, __u32 seqno_hi);
+__u64 esp_update_anti_replay(hip_sadb_entry *entry, __u32 seqno, __u32 seqno_hi);
 
 /* externals */
 extern __u32 get_preferred_lsi(struct sockaddr *lsi);
@@ -196,6 +196,7 @@ void *hip_esp_output(void *arg)
 	static hip_sadb_entry *entry;
 	struct sockaddr_storage ss_lsi;
 	struct sockaddr *lsi = (struct sockaddr*)&ss_lsi;
+	sockaddr_list *l;
 #ifndef HIP_VPLS
 	__u32 lsi_ip;
 #else
@@ -331,6 +332,8 @@ void *hip_esp_output(void *arg)
 					start_expire(entry->spi);
 				err = hip_esp_encrypt(raw_buff, raw_len,
 					&data[offset], &len, entry, &now);
+				if (err < 0)
+					entry->dropped++;
 				pthread_mutex_unlock(&entry->rw_lock);
 				if (err) {
 					if (!is_broadcast)
@@ -388,11 +391,20 @@ void *hip_esp_output(void *arg)
 					printf("hip_esp_output(): sendto() "
 					       "failed: %s\n", strerror(errno));
 				} else {
-					pthread_mutex_lock(&entry->rw_lock);
-					entry->bytes += sizeof(struct ip) + err;
-					entry->usetime.tv_sec = now.tv_sec;
-					entry->usetime.tv_usec = now.tv_usec;
-					pthread_mutex_unlock(&entry->rw_lock);
+					hip_sadb_inc_bytes(entry,
+						sizeof(struct ip) + err,
+						&now, 1);
+				}
+				/* multihoming: duplicate packets to multiple
+				 * destination addresses */
+				for (l = entry->dst_addrs->next; l;
+				     l = l->next) {
+					err = sendto(s, data, len, flags,
+						SA(&l->addr), SALEN(&l->addr));
+					if (err < 0) {
+					printf("hip_esp_output(): sendto() "
+					       "failed: %s\n", strerror(errno));
+					}
 				}
 				/* broadcasts are unicast to each association */
 				if (!is_broadcast)
@@ -443,7 +455,11 @@ void *hip_esp_output(void *arg)
 				start_expire(entry->spi);
 			err = hip_esp_encrypt(raw_buff, raw_len,
 					      data, &len, entry, &now);
+			if (err < 0)
+				entry->dropped++;
 			pthread_mutex_unlock(&entry->rw_lock);
+			if (err)
+				continue;
 			flags = 0;
 			if (entry->mode == 3)
 				s = s_esp_udp;
@@ -458,11 +474,9 @@ void *hip_esp_output(void *arg)
 				printf("hip_esp_output IPv6 sendto() failed:"
 					" %s\n",strerror(errno));
 			} else {
-				pthread_mutex_lock(&entry->rw_lock);
-				entry->bytes += sizeof(struct ip6_hdr) + err;
-				entry->usetime.tv_sec = now.tv_sec;
-				entry->usetime.tv_usec = now.tv_usec;
-				pthread_mutex_unlock(&entry->rw_lock);
+				hip_sadb_inc_bytes(entry,
+						   sizeof(struct ip6_hdr) + err,
+						   &now, 1);
 			}
 		/* 
 		 * ARP 
@@ -624,6 +638,8 @@ void *hip_esp_input(void *arg)
 			pthread_mutex_lock(&entry->rw_lock);
 			err = hip_esp_decrypt(buff, len, data, &offset, &len,
 						entry, iph, &now);
+			if (err < 0)
+				entry->dropped++;
 			pthread_mutex_unlock(&entry->rw_lock);
 			if (err)
 				continue;
@@ -685,6 +701,8 @@ void *hip_esp_input(void *arg)
 			pthread_mutex_lock(&entry->rw_lock);
 			err = hip_esp_decrypt(buff, len, data, &offset, &len,
 						entry, iph, &now);
+			if (err < 0)
+				entry->dropped++;
 			pthread_mutex_unlock(&entry->rw_lock);
 			/* these two locks acquired by hip_sadb_lookup_addr */
 			if (err)
@@ -724,6 +742,8 @@ void *hip_esp_input(void *arg)
 			pthread_mutex_lock(&entry->rw_lock);
 			err = hip_esp_decrypt(buff, len, data, &offset, &len,
 						entry, NULL, &now);
+			if (err < 0)
+				entry->dropped++;
 			pthread_mutex_unlock(&entry->rw_lock);
 			if (err)
 				continue;
@@ -1403,6 +1423,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 #endif /* HIP_VPLS */
 	int use_udp = FALSE;
 	__u32 new_seqno_hi = 0;
+	__u64 shift;
 	
 	if (!in || !out || !entry)
 		return(-1);
@@ -1489,7 +1510,17 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	}
 
 	/* update anti-replay window now that integrity has been verified */
-	esp_update_anti_replay(entry, ntohl(esp->seq_no), new_seqno_hi);
+	shift = esp_update_anti_replay(entry, ntohl(esp->seq_no), new_seqno_hi);
+	if (shift == 1) {
+		/* normal case - in-order packet has next sequence number */
+	} else if (shift == 0) {
+		if (entry->lost > 0) /* seqno within window, discount loss */
+			entry->lost--;
+	} else {
+		/* windows has shifted by shift packets */
+		entry->lost += (__u32)shift - 1;
+		/* TODO: track loss based on destination locator */
+	}
 	
 	/*
 	 *   Decryption
@@ -1638,10 +1669,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 
 	/* previously, this happened after write(), but there
 	 * is some problem with using the entry ptr then */
-	entry->bytes += *outlen - sizeof(struct eth_hdr);
-	entry->usetime.tv_sec = now->tv_sec;
-	entry->usetime.tv_usec = now->tv_usec;
-
+	hip_sadb_inc_bytes(entry, *outlen - sizeof(struct eth_hdr), now, 0);
 	return(0);
 }
 
@@ -2001,7 +2029,14 @@ int esp_anti_replay_check_initial(hip_sadb_entry *entry, __u32 seqno,
 	return 0; /* pass packet */
 }
 
-void esp_update_anti_replay(hip_sadb_entry *entry, __u32 seqno, __u32 seqno_hi) {
+
+/*
+ * Update the ESP anti-replay window using sequence number derived from
+ * initial checks. Under normal conditions, returns 1 as the next received
+ * packet is the next sequence number; return value > 1 indicates window
+ * shifting, and 0 indicates received packet within window.
+ */
+__u64 esp_update_anti_replay(hip_sadb_entry *entry, __u32 seqno, __u32 seqno_hi) {
 	__u64 esn = ((__u64)seqno_hi << 32) | seqno;
 	__u64 shift;
 	if (esn > entry->replay_win_max) {
@@ -2015,5 +2050,7 @@ void esp_update_anti_replay(hip_sadb_entry *entry, __u32 seqno, __u32 seqno_hi) 
 		/* update bit corresponding to esn in window */
 		shift = entry->replay_win_max - esn;
 		entry->replay_win_map |= 0x1 << shift;
+		return(0);
 	}
+	return(shift);
 }
