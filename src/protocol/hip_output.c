@@ -73,6 +73,7 @@
 int hip_check_bind(struct sockaddr *src, int num_attempts);
 int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug);
 int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single);
+int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
 int build_tlv_cert(__u8 *buff);
 int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type);
@@ -872,11 +873,12 @@ int hip_send_update_relay(__u8 *data, hip_assoc *hip_a_client)
  *
  */
 int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
-    struct sockaddr *dstaddr)
+		struct sockaddr *src, struct sockaddr *dstaddr)
 {
-	struct sockaddr *src, *dst;
+	struct sockaddr *dst;
 	hiphdr *hiph;
-	__u8   buff[sizeof(hiphdr)             + 2*sizeof(tlv_locator) +
+	__u8   buff[sizeof(hiphdr)             + 
+		    sizeof(tlv_locator)        + MAX_LOCATORS*sizeof(locator) +
 		    sizeof(tlv_esp_info)       +
 		    sizeof(tlv_seq)            + sizeof(tlv_ack) +
 		    sizeof(tlv_diffie_hellman) + DH_MAX_LEN +
@@ -886,20 +888,20 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 		    sizeof(tlv_via_rvs)        + MAX_SIG_SIZE + 2 ];
 	int location=0, retransmit=FALSE;
 
-	tlv_locator *loc;
-	locator *loc1;
 	tlv_esp_info *esp_info;
 	tlv_seq *seq;
 	tlv_ack *ack;
 	tlv_echo *echo;
-	__u32 *nonce, loc_spi;
+	__u32 *nonce;
 	sockaddr_list *l, *l2;
 	hip_assoc *hip_mr;
 
 	memset(buff, 0, sizeof(buff));
 
+	/* address verfication reply may need to be sent from a different src */
+	if (!src)
+		src = HIPA_SRC(hip_a);
 	/* for address verification, a new destination address will be given */
-	src = HIPA_SRC(hip_a);
 	dst = dstaddr ? dstaddr : HIPA_DST(hip_a);
 	if (dst->sa_family != src->sa_family) {
 		l2 = NULL;
@@ -969,33 +971,12 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 	}
 
 	/*
-	 * add LOCATOR parameter when supplied with readdressing info
+	 * Possibly add LOCATOR parameter when supplied with readdressing info,
+	 * or when unsent locators exist in hip_a->hi->addrs.
 	 */
-	if (newaddr) {
-		loc = (tlv_locator*) &buff[location];
-		loc->type = htons(PARAM_LOCATOR);
-		loc->length = htons(sizeof(tlv_locator) - 4);
-		loc1 = &loc->locator1[0];
-		loc1->traffic_type = LOCATOR_TRAFFIC_TYPE_BOTH;
-		loc1->locator_type = LOCATOR_TYPE_SPI_IPV6;
-		loc1->locator_length = 5; /* (32 + 128 bits) / 4 */
-		loc1->reserved = LOCATOR_PREFERRED; /* set the P-bit */
-		loc1->locator_lifetime = htonl(HCNF.loc_lifetime);
-		memset(loc1->locator, 0, sizeof(loc1->locator));
-		loc_spi = htonl(hip_a->rekey ? 	hip_a->rekey->new_spi :
-						hip_a->spi_in);
-		memcpy(loc1->locator, &loc_spi, 4);
-		if (newaddr->sa_family == AF_INET6) {
-			memcpy(&loc1->locator[4], SA2IP(newaddr),
-			    SAIPLEN(newaddr));
-		} else {/* IPv4-in-IPv6 address format */
-			memset(&loc1->locator[14], 0xFF, 2);
-			memcpy(&loc1->locator[16], SA2IP(newaddr),
-			    SAIPLEN(newaddr));
-		}
-		location += sizeof(tlv_locator);
-		location = eight_byte_align(location);
-	}
+	location += build_tlv_locators(&buff[location], &hip_a->hi->addrs,
+					hip_a->spi_in, newaddr != NULL);
+
 
 	if (hip_a->rekey && hip_a->rekey->need_ack) {	
 		/* SEQ */
@@ -1281,6 +1262,73 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
 		logaddr(dst));
 	hip_check_bind(src, HIP_UPDATE_BIND_CHECKS);
 	return(hip_send(buff, location, src, dst, hip_mr, retransmit));
+}
+
+/*
+ *
+ * function hip_send_update_locators()
+ * 
+ * in:		hip_a = HIP association containing valid source/destination
+ * 			addresses
+ * 		
+ * out:		Returns bytes sent when successful, -1 on error.
+ *
+ * Inform peer of our current address list (hip_a->hi->addrs).
+ *
+ */
+int hip_send_update_locators(hip_assoc *hip_a)
+{
+	hiphdr *hiph;
+	__u8   buff[sizeof(hiphdr) + sizeof(tlv_locator) - sizeof(locator) +
+		    MAX_LOCATORS*sizeof(locator) + sizeof(tlv_hmac) +
+		    sizeof(tlv_hip_sig) + MAX_SIG_SIZE + 2];
+	int locators_len, location=0;
+	struct sockaddr *src, *dst;
+
+	memset(buff, 0, sizeof(buff));
+
+	/* build the HIP header */
+	hiph = (hiphdr*) buff;
+	hiph->nxt_hdr = IPPROTO_NONE;
+	hiph->hdr_len = 0;
+	hiph->packet_type = UPDATE;
+	hiph->version = HIP_PROTO_VER;
+	hiph->res = HIP_RES_SHIM6_BITS;
+	hiph->control = 0;
+	hiph->checksum = 0;
+	memcpy(&hiph->hit_sndr, hip_a->hi->hit, sizeof(hip_hit));
+	memcpy(&hiph->hit_rcvr, hip_a->peer_hi->hit, sizeof(hip_hit));
+	location = sizeof(hiphdr);
+
+	/* build a locator parameter containing all of our addresses */
+        locators_len = build_tlv_locators(&buff[location], &hip_a->hi->addrs,
+					  hip_a->spi_in, 0);
+	if (locators_len == 0) {
+		return(0); /* no need to send this UPDATE packet */
+	}
+	location += locators_len;
+
+	/* HMAC */
+	hiph->hdr_len = (location/8) - 1; 
+	location += build_tlv_hmac(hip_a, buff, location, PARAM_HMAC);
+
+	/* HIP signature */
+	hiph->hdr_len = (location/8) - 1; 
+	location += build_tlv_signature(hip_a->hi, buff, location, FALSE);
+
+	src = HIPA_SRC(hip_a);
+	dst = HIPA_DST(hip_a);
+
+	hiph->hdr_len = (location/8) - 1;
+	hiph->checksum = 0;
+	if (!hip_a->udp)
+		hiph->checksum = checksum_packet(buff, src, dst);
+
+	/* send the packet */
+	log_(NORMT, "Sending UPDATE locators packet (%d bytes)...\n", location);
+	log_(NORM, "Sending UPDATE packet to dst : %s \n", logaddr(dst));
+	hip_check_bind(src, HIP_UPDATE_BIND_CHECKS);
+	return(hip_send(buff, location, src, dst, hip_a, FALSE));
 }
 
 
@@ -1924,6 +1972,79 @@ int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name)
 	}
 	/* Subtract off 4 for Type, Length in TLV */
 	hostid->length = htons((__u16)(len - 4));
+	return(eight_byte_align(len));
+}
+
+/*
+ * function build_tlv_locators()
+ *
+ * in:		data  = ptr to destination buffer
+ * 		addrs = list of addresses to include in the locator TLV
+ * 		spi   = SPI to use with LOCATOR_TYPE_SPI_IPV6 format
+ * 		force = when TRUE, add locators regardless of locator state
+ *
+ * out:		returns aligned length of buffer used
+ *
+ * All locators are included in the locator TLV (no incremental updates).
+ * One has the preferred bit set.
+ * This TLV will only be built if the force flag is TRUE or there are locators
+ * in the addr list in the UNVERIFIED state (they have not already been sent).
+ *
+ */
+int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force) {
+	int n=0;
+	int len = 0;
+	sockaddr_list *l;
+	tlv_locator *loc;
+	locator *lp;
+	__u32 loc_spi;
+
+	/* calculate length based on number of locators */
+	for (l = addrs; l; l = l->next) {
+		len += sizeof(locator);
+		if (l->status == UNVERIFIED)
+			n++; /* locator has not already been sent */
+	}
+
+	if (!force && (n < 2)) { /* no other locators besides preferred */
+		return(0);
+	}
+	memset(data, 0, len + sizeof(tlv_locator) - sizeof(locator));
+
+	/* build a locator parameter containing all of our addresses */
+	loc = (tlv_locator*) data;
+	loc->type = htons(PARAM_LOCATOR);
+	loc->length = htons(len);
+	lp = &loc->locator1[0];
+
+	for (l = addrs, n=0; l; l = l->next, lp++, n++) {
+		if (n > MAX_LOCATORS) /* an artificial limit (for buff size) */
+			break;
+		lp->traffic_type = LOCATOR_TRAFFIC_TYPE_BOTH;
+		lp->locator_type = LOCATOR_TYPE_SPI_IPV6;
+		lp->locator_length = 5; /* (32 + 128 bits) / 4 */
+		if (l == addrs) /* l->preferred */
+			lp->reserved = LOCATOR_PREFERRED; /* set the P-bit */
+		else
+			lp->reserved = 0;
+		lp->locator_lifetime = htonl(HCNF.loc_lifetime);
+
+		memset(lp->locator, 0, sizeof(lp->locator));
+		loc_spi = htonl(spi);
+		memcpy(lp->locator, &loc_spi, 4);
+		if (l->addr.ss_family == AF_INET6) {
+			memcpy(&lp->locator[4], SA2IP(&l->addr),
+				SAIPLEN(&l->addr));
+		} else {/* IPv4-in-IPv6 address format */
+			memset(&lp->locator[14], 0xFF, 2);
+			memcpy(&lp->locator[16], SA2IP(&l->addr),
+				SAIPLEN(&l->addr));
+		}
+		/* flag that this locator has been sent to peer */
+		l->status = ACTIVE;
+	}
+
+	len += sizeof(tlv_locator) - sizeof(locator);
 	return(eight_byte_align(len));
 }
 

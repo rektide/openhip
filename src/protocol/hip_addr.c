@@ -1252,7 +1252,7 @@ void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
 	}
 
 	/* inform peer of new preferred address */
-	if (hip_send_update(hip_a, newaddr, NULL) < 0)
+	if (hip_send_update(hip_a, newaddr, NULL, NULL) < 0)
 		log_(WARN, "Problem sending UPDATE(REA) for %s!\n",
 		    logaddr(newaddr));
 }
@@ -1310,7 +1310,7 @@ void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
 	}
 
 	/* inform peer of new preferred address */
-	if (hip_send_update(hip_a, newsrcaddr, NULL) < 0)
+	if (hip_send_update(hip_a, newsrcaddr, NULL, NULL) < 0)
 		log_(WARN, "Problem sending UPDATE(REA) for %s!\n",
 		    logaddr(newsrcaddr));
 }
@@ -1376,6 +1376,8 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 			/* this function checks if the address already exists */
 			l = add_address_to_list(&list, newaddr, if_index);
 			make_address_active(l);
+			/* flag that extra address has not been sent to peer */
+			l->status = UNVERIFIED;
 #ifdef HIP_VPLS
 		}
 #endif
@@ -1518,7 +1520,7 @@ int update_peer_list_address(const hip_hit peer_hit, struct sockaddr *old_addr, 
  */
 int add_other_addresses_to_hi(hi_node *hi, int mine)
 {
-	sockaddr_list *l, *tolist, *fromlist;
+	sockaddr_list *l, *tolist, *fromlist, *item;
 
 	if (hits_equal(hi->hit, zero_hit))
 		return(-1);
@@ -1533,7 +1535,7 @@ int add_other_addresses_to_hi(hi_node *hi, int mine)
 		if (peer_hi) {
 			fromlist = &peer_hi->addrs;
 		} else {
-			log_(WARN, "Unable to find Peer HIT ");
+			log_(WARN, "%s Unable to find Peer HIT ", __FUNCTION__);
 			print_hex(peer_hi->hit, HIT_SIZE);
 			return(-1);
 		}
@@ -1553,7 +1555,9 @@ int add_other_addresses_to_hi(hi_node *hi, int mine)
 			continue;
 		if (l->if_index != tolist->if_index)
 			continue;
-		add_address_to_list(&tolist, SA(&l->addr), l->if_index);
+		item = add_address_to_list(&tolist, SA(&l->addr), l->if_index);
+		if (mine && item) /* flag address has not been sent to peer */
+			item->status = UNVERIFIED;
 	}
 	return(0);
 }

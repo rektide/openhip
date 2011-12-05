@@ -1611,6 +1611,10 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
 	err = complete_base_exchange(hip_a);
 	if (!err) {
 		set_state(hip_a, ESTABLISHED);
+		if (hip_send_update_locators(hip_a) < 0) {
+			log_(WARN, "Failed to send UPDATE with locators after "
+				"receiving R2.\n");
+		}
 		hip_mr = search_registrations2(REGTYPE_MR, REG_GRANTED);
 		if (hip_mr && 
 		    !hits_equal(hip_mr->peer_hi->hit, hip_a->peer_hi->hit)) {
@@ -1993,7 +1997,8 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 	return(status);
 }
 
-int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
+int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
+		struct sockaddr *dst)
 {
 	int err;
 	struct rekey_info rk;
@@ -2046,8 +2051,9 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 	/*
 	 * If received an UPDATE in R2_SENT state, move to ESTABLISHED state
 	 */
-	if (hip_a->state == R2_SENT)
+	if (hip_a->state == R2_SENT) {
 		set_state(hip_a, ESTABLISHED);
+	}
 	
 	/* 
 	 * Only save the peer's rekeying state after the UPDATE
@@ -2094,8 +2100,11 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 	/* 
 	 * Generate a new UPDATE because of ACK?
 	 */
-	if (hip_a->peer_rekey && hip_a->peer_rekey->need_ack)
+	if (hip_a->peer_rekey && hip_a->peer_rekey->need_ack) {
+		log_(NORM, "Send new UPDATE to ack update ID %d.\n",
+			hip_a->peer_rekey->update_id);
 		need_to_send_update = TRUE;
+	}
 
 	/* 
 	 * Generate a new UPDATE because of REG_REQUEST?
@@ -2105,6 +2114,8 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 			if (reg->state == REG_SEND_RESP  ||
 			    reg->state == REG_SEND_CANCELLED  ||
 			    reg->state == REG_SEND_FAILED) {
+				log_(NORM, "Send new UPDATE due to registration"
+					"request (state=%d).\n", reg->state);
 				need_to_send_update = TRUE;
 				break;
 			}
@@ -2159,7 +2170,7 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src)
 	}
 
 	if (need_to_send_update) {
-		if ((err = hip_send_update(hip_a, NULL, addrcheck)) > 0) {
+		if ((err = hip_send_update(hip_a, NULL, dst, addrcheck)) > 0) {
 			log_(NORM, "Sent UPDATE (%d bytes)\n", err);
 		} else {
 			log_(WARN, "Failed to send UPDATE: %s.\n",
@@ -2389,8 +2400,8 @@ void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src)
 		    logaddr(src));
 	/* check that echoed nonce matches, and update address status */
 	} else if (nonce == l->nonce) {
-		log_(NORM, "Address check succeeded for %s.\n",
-		    logaddr(src));
+		log_(NORM, "Address check succeeded for %s (preferred=%s).\n",
+		    logaddr(src), l->preferred ? "yes" : "no");
 		make_address_active(l);
 		/* cleanup structures if they have no more use */
 		if ((!hip_a->rekey->need_ack) && (!hip_a->rekey->new_spi)) {
@@ -2405,6 +2416,9 @@ void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src)
 		clear_retransmissions(hip_a);
 		/* readdressing occurs later, when address list is
 		 * scanned for new ACTIVE addresses */
+	} else {
+		log_(WARN, "Address check failed for source %s with nonce 0x%x"
+			" (0x%x).\n", logaddr(src), nonce, l->nonce);
 	}
 }
 
@@ -3565,6 +3579,11 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
 		if (!l) {
 			log_(WARN, "Unable to add new address (%s) to " \
 				   "peer list.\n", logaddr(addr));
+			continue;
+		} else if (preferred && (l == peer_list)) {
+			/* not a new preferred address */
+			log_(NORM, "Preferred address %s for SPI=0x%x remains "
+				"the same.\n", logaddr(addr), spi);
 			continue;
 		}
 		l->status = UNVERIFIED;

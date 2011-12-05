@@ -100,9 +100,10 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 int hip_send_I2(hip_assoc *hip_a);
 int hip_send_R2(hip_assoc *hip_a);
 int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
-			struct sockaddr *dstaddr);
+			struct sockaddr *src, struct sockaddr *dstaddr);
 int hip_send_update_relay(__u8 *data, hip_assoc *hip_a_client);
 int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a);
+int hip_send_update_locators(hip_assoc *hip_a);
 int hip_send_close(hip_assoc *hip_a, int send_ack);
 int hip_send_notify(hip_assoc *hip_a, int code, __u8 *data, int data_len);
 int hip_send(__u8 *data, int len, struct sockaddr *src, struct sockaddr *dst,
@@ -123,7 +124,8 @@ int hip_handle_R1(__u8 *data, hip_assoc *hip_a, struct sockaddr *src);
 int hip_handle_I2(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
 			struct sockaddr *dst);
 int hip_handle_R2(__u8 *data, hip_assoc *hip_a);
-int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src);
+int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
+			struct sockaddr *dst);
 int hip_handle_close(__u8 *data, hip_assoc *hip_a);
 int hip_handle_notify(__u8 *buff, hip_assoc *hip_a);
 int hip_finish_rekey(hip_assoc *hip_a, int rebuild);

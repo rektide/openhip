@@ -125,14 +125,13 @@ retry_getspi:
 int check_last_used(hip_assoc *hip_a, int incoming, struct timeval *now)
 {
 	__u32 spi;
-	__u64 bytes=0;
-	hip_sadb_entry *entry;
+	__u64 bytes=0, *pbytes;
+	struct timeval usetime;
 
 	spi = incoming ? hip_a->spi_in : hip_a->spi_out;
-	if ((entry = hip_sadb_lookup_spi(spi))) {
-		bytes = entry->bytes;
-	} else {
-		log_(WARN, "SA with SPI 0x%x not found.\n", spi);
+	if (hip_sadb_get_usage(spi, &bytes, &usetime) < 0) {
+		log_(WARN, "%s: SA with SPI 0x%x not found in SADB.\n",
+		     __FUNCTION__, spi);
 		return(0);
 	}
 	
@@ -143,20 +142,12 @@ int check_last_used(hip_assoc *hip_a, int incoming, struct timeval *now)
 
 	/* update use_time if either direction has traffic
 	 */
-	if (incoming) {
-		if (bytes > hip_a->used_bytes_in) {
-			hip_a->used_bytes_in = bytes;
-			hip_a->use_time.tv_sec = now->tv_sec;
-			hip_a->use_time.tv_usec = now->tv_usec;
-		}
-	} else {
-		if (bytes > hip_a->used_bytes_out) {
-			hip_a->used_bytes_out = bytes;
-			hip_a->use_time.tv_sec = now->tv_sec;
-			hip_a->use_time.tv_usec = now->tv_usec;
-		}
+	pbytes = incoming ? &hip_a->used_bytes_in : &hip_a->used_bytes_out;
+	if (bytes > *pbytes) {
+		*pbytes = bytes;
+		hip_a->use_time.tv_sec = usetime.tv_sec;
+		hip_a->use_time.tv_usec = usetime.tv_usec;
 	}
-
 	return(1);
 }
 
@@ -579,7 +570,7 @@ void start_expire(__u32 spi)
 			"structure for rekey initiation.\n");
 		return;
 	}
-	if ((err = hip_send_update(hip_a, NULL, NULL)) > 0) {
+	if ((err = hip_send_update(hip_a, NULL, NULL, NULL)) > 0) {
 		log_(NORM, "Sent UPDATE (%d bytes)\n", err);
 	} else {
 		log_(NORM, "Failed to send UPDATE: %s.\n", strerror(errno));

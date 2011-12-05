@@ -1,6 +1,6 @@
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-06 the Boeing Company
+ * Copyright (C) 2002-11 the Boeing Company
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -959,7 +959,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
 		err = hip_handle_BOS((__u8 *)hiph, src);
 		break;
 	case UPDATE:
-		err = hip_handle_update((__u8 *)hiph, hip_a, src);
+		err = hip_handle_update((__u8 *)hiph, hip_a, src, dst);
 		break;
 	case NOTIFY:
 		err = hip_handle_notify((__u8 *)hiph, hip_a);
@@ -1170,6 +1170,10 @@ void hip_handle_state_timeouts(struct timeval *time1)
 				log_(NORMT, "HIP association %d moved ", i);
 				log_(NORM,  "from R2_SENT=>ESTABLISHED ");
 				log_(NORM,  "due to incoming ESP data.\n");
+				if (hip_send_update_locators(hip_a) < 0) {
+				    log_(WARN, "Failed to send UPDATE with loca"
+					    "tors following incoming data.\n");
+				}
 			/* any packet sent during UAL minutes? */
 			} else if (check_last_used(hip_a, 0, time1) > 0) {
 				/* data being sent, compare time */
@@ -1329,7 +1333,7 @@ void hip_handle_registrations(struct timeval *time1)
 			}
 		}
 		if (do_update)
-			hip_send_update(hip_a, NULL, NULL);
+			hip_send_update(hip_a, NULL, NULL, NULL);
 	}
 }
 
@@ -1375,7 +1379,7 @@ void hip_handle_locator_state_timeouts(hip_assoc *hip_a, struct timeval *time1)
 		hip_a->rekey->rk_time.tv_sec = time1->tv_sec;
 		RAND_bytes((__u8*)&nonce, sizeof(__u32));
 		l->nonce = nonce;
-		hip_send_update(hip_a, NULL, addrcheck);
+		hip_send_update(hip_a, NULL, NULL, addrcheck);
 	} /* end for */
 }
 
