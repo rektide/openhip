@@ -99,6 +99,8 @@ long g_read_usec;
 #define HMAC_SHA_96_BITS 96 /* 12 bytes */
 #define REPLAY_WIN_SIZE 64 /* 64 packets */
 
+#define MULTIHOMING_LOSS_THRESHOLD 5
+
 /* array of Ethernet addresses used by get_eth_addr() */
 #define MAX_ETH_ADDRS 255
 __u8 eth_addrs[6 * MAX_ETH_ADDRS]; /* must be initialized to random values */
@@ -138,6 +140,7 @@ __u64 get_eth_addr(int family, __u8 *addr);
 void esp_start_base_exchange(struct sockaddr *lsi);
 void esp_start_expire(__u32 spi);
 void esp_receive_udp_hip_packet(char *buff, int len);
+void esp_signal_loss(__u32 spi, __u32 loss, struct sockaddr *dst);
 __u32 get_next_seqno(hip_sadb_entry *entry);
 int esp_anti_replay_check_initial(hip_sadb_entry *entry, __u32 seqno,
 	__u32 *sequence_hi);
@@ -1422,8 +1425,9 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 	struct udphdr *udp=NULL;
 #endif /* HIP_VPLS */
 	int use_udp = FALSE;
-	__u32 new_seqno_hi = 0;
+	__u32 new_seqno_hi = 0, loss;
 	__u64 shift;
+	struct sockaddr_storage dst;
 	
 	if (!in || !out || !entry)
 		return(-1);
@@ -1517,9 +1521,19 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 		if (entry->lost > 0) /* seqno within window, discount loss */
 			entry->lost--;
 	} else {
-		/* windows has shifted by shift packets */
-		entry->lost += (__u32)shift - 1;
-		/* TODO: track loss based on destination locator */
+		/* window has shifted by loss number of packets */
+		loss = (__u32)shift - 1;
+		entry->lost += loss;
+		/* track loss based on IPv4 destination locator */
+		if (iph) {
+			dst.ss_family = AF_INET;
+			memcpy(SA2IP(&dst), &iph->ip_dst, SAIPLEN(&dst));
+			loss = hip_sadb_inc_loss(entry, loss, SA(&dst));
+			if (loss > MULTIHOMING_LOSS_THRESHOLD) {
+				esp_signal_loss(entry->spi, loss, SA(&dst));
+				hip_sadb_reset_loss(entry, SA(&dst));
+			}
+		}
 	}
 	
 	/*
@@ -1923,7 +1937,6 @@ void esp_start_base_exchange(struct sockaddr *lsi)
 	esp_send_to_hipd( (char*) msg, len, "esp_start_base_exchange()");
 }
 
-
 /* send an ESP_EXPIRE_SPI message, which results in a
  * call to start_expire() in hipd */
 void esp_start_expire(__u32 spi)
@@ -1945,6 +1958,33 @@ void esp_receive_udp_hip_packet(char *buff, int len)
 	memcpy(&msgbuff[sizeof(espmsg)], buff, len);
 	esp_send_to_hipd( msgbuff, len+sizeof(espmsg),
 		"esp_receive_udp_hip_packet()");
+}
+
+/* send an ESP_ADDR_LOSS message to signal that lost ESP packets were detected
+ */
+void esp_signal_loss(__u32 spi, __u32 loss, struct sockaddr *dst)
+{
+	const int len = sizeof(espmsg) + 2*sizeof(__u32) + \
+			sizeof(struct sockaddr_storage);
+	char msgbuff[len];
+	struct _loss_data {
+		__u32 spi;
+		__u32 loss;
+		struct sockaddr_storage dst;
+	} *ld;
+
+	memset(msgbuff, 0, len);
+	espmsg *msg = (espmsg*) &msgbuff[0];
+	msg->message_type = ESP_ADDR_LOSS;
+	msg->message_data = htonl(len - sizeof(espmsg));
+
+	ld = (struct _loss_data *) &msgbuff[sizeof(espmsg)];
+	ld->spi = htonl(spi);
+	ld->loss = htonl(loss);
+	ld->dst.ss_family = dst->sa_family;
+	memcpy(SA2IP(&ld->dst), SA2IP(dst), SAIPLEN(dst));
+	/* printf("%s spi=0x%x loss=%u\n", __FUNCTION__, spi, loss); */
+	esp_send_to_hipd( (char*) msg, len, "esp_signal_loss()");
 }
 
 /*
@@ -2054,3 +2094,4 @@ __u64 esp_update_anti_replay(hip_sadb_entry *entry, __u32 seqno, __u32 seqno_hi)
 	}
 	return(shift);
 }
+

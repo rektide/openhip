@@ -185,6 +185,9 @@ int hip_sadb_get_usage(__u32 spi, __u64 *bytes, struct timeval *usetime);
 int hip_sadb_get_lost(__u32 spi, __u32 *lost);
 void hip_sadb_inc_bytes(hip_sadb_entry *entry, __u64 bytes, struct timeval *now,
 	int lock);
+__u32 hip_sadb_inc_loss(hip_sadb_entry *entry, __u32 loss,
+	struct sockaddr *dst);
+void hip_sadb_reset_loss(hip_sadb_entry *entry, struct sockaddr *dst);
 
 int hip_select_family_by_proto(__u32 lsi, __u8 proto, __u8 *header,
         struct timeval *now);

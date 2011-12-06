@@ -138,6 +138,7 @@ typedef enum {
 	ESP_ACQUIRE_LSI=1,
 	ESP_EXPIRE_SPI,
 	ESP_UDP_CTL,
+	ESP_ADDR_LOSS,
 } ESP_MESSAGES;
 
 typedef struct _espmsg {
@@ -275,6 +276,13 @@ struct rekey_info {
 	struct timeval rk_time; /* creation time, so struct can be freed */
 };
 
+/* timers for tracking loss multihoming state */
+struct multihoming_info {
+	struct timeval mh_time;		/* time since we are in multi-h. state*/
+	struct timeval mh_last_loss;	/* time of last loss report */
+	struct sockaddr_storage mh_addr; /* address having reported loss */
+};
+
 /*
  * HIP Packet Entry
  */
@@ -330,6 +338,7 @@ typedef struct _hip_assoc {
 	struct rekey_info *rekey; /* new parameters to use after REKEY	*/
 	struct rekey_info *peer_rekey; /* peer's REKEY data from UPDATE */
 	struct _tlv_from *from_via; /* including FROM in I1 or VIA RVS in R1 */
+	struct multihoming_info *mh; /* state for loss multihoming */
 	/* Other crypto */
 	__u16 hip_transform;
 	__u16 esp_transform;

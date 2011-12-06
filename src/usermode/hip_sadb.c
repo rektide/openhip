@@ -958,6 +958,45 @@ void hip_sadb_inc_bytes(hip_sadb_entry *entry, __u64 bytes, struct timeval *now,
 
 
 /*
+ * hip_sadb_inc_lost()
+ *
+ * Increments lost packets based on desintation address. Use the addr->nonce
+ * variable to count lost packets. Per-address loss statistics are needed to
+ * properly implement multihoming decisions that manage individual addresses.
+ * Only IPv4 is currently supported because the
+ * IPv6 destination address is not available (need to implement IPV6_PKTINFO).
+ *
+ * Returns the current loss counter, or 0 if not found.
+ */
+__u32 hip_sadb_inc_loss(hip_sadb_entry *entry, __u32 loss, struct sockaddr *dst)
+{
+	sockaddr_list *l;
+	for (l = entry->dst_addrs; l; l = l->next) {
+		if (l->addr.ss_family == dst->sa_family &&
+		    (!(memcmp(SA2IP(&l->addr), SA2IP(dst),
+			      SAIPLEN(&l->addr))))) {
+			l->nonce += loss;
+			return(l->nonce);
+		}
+	}
+	return(0);
+}
+
+void hip_sadb_reset_loss(hip_sadb_entry *entry, struct sockaddr *dst)
+{
+	sockaddr_list *l;
+	for (l = entry->dst_addrs; l; l = l->next) {
+		if (l->addr.ss_family == dst->sa_family &&
+		    (!(memcmp(SA2IP(&l->addr), SA2IP(dst),
+			      SAIPLEN(&l->addr))))) {
+			l->nonce = 0;
+			return;
+		}
+	}
+	return;
+}
+
+/*
  * hip_select_family_by_proto()
  *
  * Given an upper-layer protocol number and header, return the

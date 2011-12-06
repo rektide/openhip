@@ -2733,7 +2733,7 @@ int hip_handle_close(__u8 *buff, hip_assoc *hip_a)
 	return(err);
 }
 
-int hip_parse_notify(__u8 *data, hip_assoc *hip_a, __u16 *code, __u8 *nd, __u16 *nd_len)
+int hip_parse_notify(__u8 *data, hip_assoc *hip_a, __u16 *code, __u8 **nd, __u16 *nd_len)
 {
 	hiphdr *hiph;
 	int location, len, data_len; 
@@ -2766,7 +2766,7 @@ int hip_parse_notify(__u8 *data, hip_assoc *hip_a, __u16 *code, __u8 *nd, __u16 
 					*nd_len = 0;
 					return(-1);
 				}
-				nd = notify->notify_data;
+				*nd = notify->notify_data;
 			}
 		} else if (type == PARAM_HIP_SIGNATURE) {
 			if (hip_a == NULL || hip_a->peer_hi == NULL) {
@@ -2811,7 +2811,7 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
 		return(-1);
 	}
 
-	if (hip_parse_notify(buff, hip_a, &code, data, &data_len) < 0) {
+	if (hip_parse_notify(buff, hip_a, &code, &data, &data_len) < 0) {
 		log_(WARN, "Error while processing NOTIFY, dropping.\n");
 		/* stay in the same state */
 		return(-1);
@@ -2872,6 +2872,10 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
 		break;
 	case NOTIFY_I2_ACKNOWLEDGEMENT:
 		log_(NORM, "I2 received but queued for later processing.\n");
+		break;
+	case NOTIFY_LOSS_DETECT:
+		log_(NORM, "loss detected.\n");
+		return(handle_notify_loss(data, data_len));
 		break;
 	default:
 		log_(NORM, "Unknown notify code: %d\n", code);

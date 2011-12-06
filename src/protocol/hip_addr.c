@@ -97,8 +97,6 @@ int nl_sequence_number = 0;
 /* Local functions */
 int read_netlink_response();
 void handle_local_address_change(int add,struct sockaddr *newaddr,int if_index);
-void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
-    int if_index);
 void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
     int if_index);
 void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
@@ -1141,6 +1139,8 @@ int hip_handle_netlink(char *data, int length)
 			     IN6_IS_ADDR_SITELOCAL(SA2IP6(addr)) ||
 			     IN6_IS_ADDR_MULTICAST(SA2IP6(addr))))
 				break;
+			if (IS_LSI(addr))
+				break;
 
 			log_(NORM, "Address %s: (%d)%s \n", (is_add) ? "added" :
 			    "deleted", ifa->ifa_index, logaddr(addr));
@@ -1543,18 +1543,27 @@ int add_other_addresses_to_hi(hi_node *hi, int mine)
 	tolist = &hi->addrs;
 
 	/* 
-	 * Add non-local addresses from the same interface as the preferred
-	 * address.
+	 * Add non-local addresses to the address list.
 	 */
 	for (l = fromlist; l; l = l->next) {
+		if (IS_LSI(&l->addr))
+			continue;
 		/* skip local and multicast addresses */
 		if ((l->addr.ss_family == AF_INET6) &&
 			(IN6_IS_ADDR_LINKLOCAL(SA2IP6(&l->addr)) ||
 			 IN6_IS_ADDR_SITELOCAL(SA2IP6(&l->addr)) ||
-			 IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr))))
+			 IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr)) ||
+			 IN6_IS_ADDR_LOOPBACK(SA2IP6(&l->addr)) ))
 			continue;
-		if (l->if_index != tolist->if_index)
+		if ((l->addr.ss_family == AF_INET) &&
+			(IN_LOOP(&l->addr)))
 			continue;
+		/* if (l->if_index != tolist->if_index)
+			continue;
+		*/
+		if (mine)
+			log_(NORM, "Adding address %s to association.\n",
+				logaddr(SA(&l->addr)));
 		item = add_address_to_list(&tolist, SA(&l->addr), l->if_index);
 		if (mine && item) /* flag address has not been sent to peer */
 			item->status = UNVERIFIED;

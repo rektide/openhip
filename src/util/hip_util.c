@@ -701,6 +701,47 @@ int get_addr_from_list(sockaddr_list *list, int family,
 }
 
 /*
+ * function get_other_addr_from_list()
+ *
+ * in:	list = sockaddr list to search
+ *      exclude = sockaddr in list to exclude from search
+ * out:	addr = pointer for storing address
+ * 
+ * Finds an address other than exclude in the given address list.
+ * Returns 0 if found another address and exclude,
+ *         1 if found another address but not exclude, and
+ *         -1 if no other address was found.
+ */
+int get_other_addr_from_list(sockaddr_list *list, struct sockaddr *exclude, 
+		struct sockaddr *addr)
+{
+	int r = 1;
+	sockaddr_list *l, *best=NULL;
+
+	for (l = list; l; l=l->next) {
+		if (exclude->sa_family != l->addr.ss_family)
+			continue;
+		if (!memcmp(SA2IP(exclude), SA2IP(&l->addr),
+			    SAIPLEN(&l->addr))) {
+			r = 0;
+			continue; /* skip exclude addr */
+		}
+		if (l->preferred) {
+			best = l;
+		} else if (!best) {
+			best = l;
+		}
+	}
+
+	if (best) {
+		memcpy(addr, &best->addr, SALEN(&best->addr));
+		return(r);
+	} else {
+		return(-1);
+	}
+}
+
+/*
  *
  * function find_host_identity()
  *
@@ -892,6 +933,8 @@ int free_hip_assoc(hip_assoc *hip_a)
 			DH_free(hip_a->peer_rekey->dh);
 		free(hip_a->peer_rekey);
 	}
+	if (hip_a->mh)
+		free(hip_a->mh);
 	unuse_dh_entry(hip_a->dh);
 	if (hip_a->peer_dh)
 		DH_free(hip_a->peer_dh);
@@ -980,6 +1023,7 @@ void replace_hip_assoc(hip_assoc *a_old, hip_assoc *a_new)
 	a_old->regs = a_new->regs;
 	a_old->rekey = a_new->rekey;
 	a_old->peer_rekey = a_new->peer_rekey;
+	a_old->mh = a_new->mh;
 	a_old->hip_transform = a_new->hip_transform;
 	a_old->esp_transform = a_new->esp_transform;
 	a_old->dh_group_id = a_new->dh_group_id;
@@ -2477,6 +2521,28 @@ hip_assoc* find_hip_association4(hip_hit hit)
 	return(NULL);
 }
 
+/*
+ * Return pointer to hip association for the given SPI (none if not found)
+ * dir =  0 to check both incoming/outgoing SPIs,
+ *        1 for incoming SPI, 
+ *        2 for outgoing SPI.
+ */
+hip_assoc* find_hip_association_by_spi(__u32 spi, int dir)
+{
+	int i;
+	hip_assoc* hip_a;
+
+	for (i=0; i < max_hip_assoc; i++) {
+		hip_a = &(hip_assoc_table[i]);
+		if (hip_a->state==0)
+			continue;
+		if ((dir == 0 || dir == 1) && hip_a->spi_in == spi)
+			return(hip_a);
+		else if ((dir == 0 || dir == 2) && hip_a->spi_out == spi)
+			return(hip_a);
+	}
+	return(NULL);
+}
 
 hip_assoc *search_registrations(hip_hit hit, __u8 type)
 {

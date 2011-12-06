@@ -1997,7 +1997,6 @@ int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force) {
 	sockaddr_list *l;
 	tlv_locator *loc;
 	locator *lp;
-	__u32 loc_spi;
 
 	/* calculate length based on number of locators */
 	for (l = addrs; l; l = l->next) {
@@ -2028,24 +2027,30 @@ int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force) {
 		else
 			lp->reserved = 0;
 		lp->locator_lifetime = htonl(HCNF.loc_lifetime);
-
-		memset(lp->locator, 0, sizeof(lp->locator));
-		loc_spi = htonl(spi);
-		memcpy(lp->locator, &loc_spi, 4);
-		if (l->addr.ss_family == AF_INET6) {
-			memcpy(&lp->locator[4], SA2IP(&l->addr),
-				SAIPLEN(&l->addr));
-		} else {/* IPv4-in-IPv6 address format */
-			memset(&lp->locator[14], 0xFF, 2);
-			memcpy(&lp->locator[16], SA2IP(&l->addr),
-				SAIPLEN(&l->addr));
-		}
+		build_spi_locator(lp->locator, htonl(spi), SA(&l->addr));
 		/* flag that this locator has been sent to peer */
 		l->status = ACTIVE;
 	}
 
 	len += sizeof(tlv_locator) - sizeof(locator);
 	return(eight_byte_align(len));
+}
+
+
+/* 32-bit SPI + 128-bit IPv6/IPv4-in-IPv6 address
+ */
+int build_spi_locator(__u8 *data, __u32 spi, struct sockaddr *addr)
+{
+	const int locator_size = 20; /* 32 + 128 bits */
+	memset(data, 0, locator_size);
+	memcpy(&data[0], &spi, 4);
+	if (addr->sa_family == AF_INET6) {
+		memcpy(&data[4], SA2IP(addr), SAIPLEN(addr));
+	} else {/* IPv4-in-IPv6 address format */
+		memset(&data[14], 0xFF, 2);
+		memcpy(&data[16], SA2IP(addr), SAIPLEN(addr));
+	}
+	return(locator_size);
 }
 
 

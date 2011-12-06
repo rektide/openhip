@@ -80,6 +80,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family);
 /* local functions */
 int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
 	struct sockaddr *src, struct sockaddr *dst);
+int multihoming_update(hip_assoc *hip_a, struct sockaddr *dst);
 
 /*
  *
@@ -257,6 +258,15 @@ void hip_handle_esp(char *data, int length)
 		    return;
 		}
 		receive_udp_hip_packet(&data[sizeof(espmsg)], len);
+		break;
+	    case ESP_ADDR_LOSS:
+		len = ntohl(msg->message_data);
+		if (len != 2*sizeof(__u32) + sizeof(struct sockaddr_storage)) {
+		    log_(WARN, "mismatched loss length received from ESP "
+			    "thread\n");
+		    return;
+		}
+		start_loss_multihoming(&data[sizeof(espmsg)], len);
 		break;
 	    default:
 		log_(WARN, "unknown data received from the ESP thread: %d\n",
@@ -545,17 +555,9 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
  */
 void start_expire(__u32 spi)
 {
-	int i, err;
-	hip_assoc* hip_a = NULL;
-
-	/* Find an ESTABLISHED HIP association using the SPI */
-	for (i=0; i < max_hip_assoc; i++) {
-		hip_a = &hip_assoc_table[i];
-		if ((hip_a->spi_in != spi) && (hip_a->spi_out != spi))
-			continue;
-		break;
-	}
-	if ((!hip_a) || (i >= max_hip_assoc))
+	int err;
+	hip_assoc* hip_a = find_hip_association_by_spi(spi, 0);
+	if (!hip_a)
 		return; /* not found */
 
 	if (hip_a->rekey) // XXX does this work for all cases?
@@ -564,7 +566,7 @@ void start_expire(__u32 spi)
 	/*
 	 * Initiate rekey
 	 */
-	log_(NORM, "Initiating rekey for association %d.\n", i);
+	log_(NORM, "Initiating rekey for association with SPI 0x%x.\n", spi);
 	if (build_rekey(hip_a) < 0) {
 		log_(WARN, "hip_handle_expire() had problem building rekey "
 			"structure for rekey initiation.\n");
@@ -623,3 +625,200 @@ void receive_udp_hip_packet(char *buff, int len)
 }
 
 
+/*
+ * packet loss was detected by the ESP thread for a given address;
+ * send NOTIFY to start multihoming traffic if possible
+ */
+void start_loss_multihoming(char *data, int len)
+{
+	hip_assoc* hip_a;
+	struct sockaddr_storage tmp;
+	struct _loss_data {
+		__u32 spi;
+		__u32 loss;
+		struct sockaddr_storage dst;
+	} *ld;
+	__u8 loss_locator[24]; /* 32-bit loss count, 32-bit SPI,
+			     128-bit IPv6/IPv4-in-IPv6 address */
+
+	ld = (struct _loss_data*) data;
+	/* log_(NORM, "%s spi=0x%x loss=%u addr=%s\n", __FUNCTION__, ld->spi,
+			ld->loss, logaddr(SA(&ld->dst))); */
+
+	/* find the association based on incoming SPI */
+	hip_a = find_hip_association_by_spi(ntohl(ld->spi), 1);
+	if (!hip_a)
+		return; /* not found */
+
+	/* determine if other addresses are avaialable */
+	if (get_other_addr_from_list(&hip_a->hi->addrs, SA(&ld->dst),
+				     SA(&tmp)) < 0)
+		return; /* no other addresses to use */
+
+	/* send a NOTIFY packet to peer, and remember this state 
+	 * we will want to send the notify out all interfaces due to the loss
+	 * condition
+	 */
+	if (multihoming_update(hip_a, SA(&ld->dst)))
+		return; /* NOTIFY has already been sent */
+	memcpy(loss_locator, &ld->loss, 4);
+	build_spi_locator(&loss_locator[4], ld->spi, SA(&ld->dst));
+	hip_send_notify(hip_a, NOTIFY_LOSS_DETECT, loss_locator,
+			sizeof(loss_locator));
+}
+
+/*
+ * NOTIFY packet has been received indicating the peer is experiencing loss
+ * for the given address. Begin multihoming using another address.
+ */
+int handle_notify_loss(__u8 *data, int data_len)
+{
+	__u32 loss, spi;
+	struct sockaddr_storage dst, dst2;
+	hip_assoc *hip_a;
+	int err;
+	
+	if (data_len != 24) {
+		log_(WARN, "Invalid data length in loss detect NOTIFY: %d\n",
+			data_len);
+		return(-1);
+	}
+	memcpy(&loss, data, sizeof(__u32));
+	loss = ntohl(loss);
+	memcpy(&spi, &data[4], sizeof(__u32));
+	spi = ntohl(spi);
+
+	if (IN6_IS_ADDR_V4MAPPED( (struct in6_addr*) &data[8] )) {
+		dst.ss_family = AF_INET;
+		memcpy(SA2IP(&dst), &data[20], SAIPLEN(&dst));
+	} else {
+		dst.ss_family = AF_INET6;
+		memcpy(SA2IP(&dst), &data[8], SAIPLEN(&dst));
+	}
+	log_(NORM, "Peer has indicated packet loss (%u) for SPI 0x%x on "
+		"address %s.\n", loss, spi, logaddr(SA(&dst)));
+
+	/* look for outgoing association */
+	hip_a = find_hip_association_by_spi(spi, 2);
+	if (!hip_a) {
+		log_(WARN, "Outgoing SA 0x%x specified in NOTIFY not found.\n",
+			spi);
+		return(-1);
+	}
+
+	/* determine if other addresses are available */
+	err = get_other_addr_from_list(&hip_a->peer_hi->addrs, SA(&dst),
+				       SA(&dst2));
+	if (err == 1) {
+		log_(WARN, "Address %s specified in NOTIFY not found for SPI "
+			"0x%x.\n", logaddr(SA(&dst)), spi);
+		return(-1);
+	} else if (err < 0) {
+		log_(NORM, "Peer has indicated packet loss for SPI 0x%x, but no"
+			" other address is available.\n", spi);
+		return(-1);
+	}
+
+	/* stop multihoming */
+	if (loss == 0) {
+		log_(NORM, "Stopping using address %s for multihoming.\n",
+			logaddr(SA(&dst2)));
+		hip_sadb_add_del_addr(spi, SA(&dst2), 4);
+		return(0);
+	}
+
+	log_(NORM, "Using address %s for multihoming.\n", logaddr(SA(&dst2)));
+	hip_sadb_add_del_addr(spi, SA(&dst2), 2);
+	return(0);
+}
+
+/*
+ * Save multihoming state when a loss report is received from the ESP thread.
+ * Record the time that we started multihoming (sent NOTIFY), time since last
+ * report was received, and desintation address experience the loss. Return 0
+ * if this is a new report (peer needs NOTIFY), otherwise return 1.
+ */
+int multihoming_update(hip_assoc *hip_a, struct sockaddr *dst)
+{
+	/* enter the loss state, record the start time and address */
+	if (!hip_a->mh) {
+		hip_a->mh = malloc(sizeof(struct multihoming_info));
+		if (!hip_a->mh)
+			return(-1); /* malloc error */
+		memset(hip_a->mh, 0, sizeof(struct multihoming_info));
+		gettimeofday(&hip_a->mh->mh_time, NULL);
+		hip_a->mh->mh_last_loss.tv_sec = hip_a->mh->mh_time.tv_sec;
+		hip_a->mh->mh_last_loss.tv_usec = hip_a->mh->mh_time.tv_usec;
+		memcpy(&hip_a->mh->mh_addr, dst, SALEN(dst));
+		return(0);
+	}
+	if (dst) {
+		/* address in loss report is different than the address that
+		 * we are currently multihoming for; don't update report time */
+		if (dst->sa_family == hip_a->mh->mh_addr.ss_family &&
+		    (memcmp(SA2IP(dst), SA2IP(&hip_a->mh->mh_addr),
+			    SAIPLEN(dst)))) {
+			log_(WARN, "Loss report for address %s", logaddr(dst));
+			log_(NORM, "but already multihoming for address %s.\n",
+				logaddr(SA(&hip_a->mh->mh_addr)));
+			return(1); /* don't update loss report time */
+		}
+	}
+	/* already in loss state; update last loss report time */
+	gettimeofday(&hip_a->mh->mh_last_loss, NULL);
+	return(1);
+}
+
+void multihoming_periodic(struct timeval *now)
+{
+	int i, if_index, err;
+	hip_assoc *hip_a;
+	__u8 loss_locator[24]; /* 32-bit loss count, 32-bit SPI,
+			     128-bit IPv6/IPv4-in-IPv6 address */
+	struct sockaddr_storage dst2;
+	sockaddr_list *l;
+
+	for (i = 0; i < max_hip_assoc; i++) {
+		hip_a = &hip_assoc_table[i];
+		if (!hip_a->mh || hip_a->state==0)
+			continue;
+		/* no loss report for 30 seconds, stop multihoming */
+		if (TDIFF(*now, hip_a->mh->mh_last_loss) > 30) {
+			log_(NORM, "Notifying peer of no loss for SPI 0x%x "
+			     "address %s.\n",
+			     hip_a->spi_in, logaddr(SA(&hip_a->mh->mh_addr)));
+			memset(loss_locator, 0, 4);
+			build_spi_locator(&loss_locator[4],
+					  htonl(hip_a->spi_in),
+					  SA(&hip_a->mh->mh_addr));
+			hip_send_notify(hip_a, NOTIFY_LOSS_DETECT,
+					loss_locator, sizeof(loss_locator));
+			memset(hip_a->mh, 0, sizeof(hip_a->mh));
+			free(hip_a->mh);
+			hip_a->mh = NULL;
+		/* loss report within the last 30 seconds, check total time
+		 * spent multihoming */
+		} else if (TDIFF(*now, hip_a->mh->mh_time) > 120) {
+			log_(NORM, "Continued loss for SPI 0x%x address %s, "
+			     "choosing new preferred locator.\n", hip_a->spi_in,
+			     logaddr(SA(&hip_a->mh->mh_addr)));
+			/* prevent reaching this point rapidly/repeatedly */
+			hip_a->mh->mh_time.tv_sec = now->tv_sec;
+			/* stop multihoming and switch to another address */
+			err = get_other_addr_from_list(&hip_a->peer_hi->addrs,
+					SA(&hip_a->mh->mh_addr), SA(&dst2));
+			if (err < 0) {
+				log_(WARN, "No other locator found for SPI "
+					"0x%x!\n", hip_a->spi_in);
+				continue;
+			}
+			if_index = 0;
+			for (l = &hip_a->peer_hi->addrs; l; l = l->next)
+				if (l->addr.ss_family == dst2.ss_family &&
+				   (!memcmp(SA2IP(&l->addr), SA2IP(&dst2),
+					    SAIPLEN(&dst2))))
+					if_index = l->if_index;
+			readdress_association(hip_a, SA(&dst2), if_index);
+		}
+	}
+}

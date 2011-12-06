@@ -258,6 +258,7 @@ typedef enum {
 #define NOTIFY_SERVER_BUSY_PLEASE_RETRY                  44
 #define NOTIFY_LOCATOR_TYPE_UNSUPPORTED                  46
 #define NOTIFY_I2_ACKNOWLEDGEMENT                        16384
+#define NOTIFY_LOSS_DETECT                               16385
 
 /*
  * Registration types

@@ -640,6 +640,7 @@ int main_loop(int argc, char **argv)
 			hip_retransmit_waiting_packets(&time1);
 			hip_handle_state_timeouts(&time1);
 			hip_handle_registrations(&time1);
+			hip_handle_multihoming_timeouts(&time1);
 #ifndef __WIN32__	/* cleanup zombie processes from fork() */
 			waitpid(0, &err, WNOHANG);
 #endif

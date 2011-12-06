@@ -112,6 +112,7 @@ int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len, struct sockaddr *src,
 			struct sockaddr *dst);
 int build_tlv_hostid_len(hi_node *hi, int use_hi_name);
 int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name);
+int build_spi_locator(__u8 *data, __u32 spi, struct sockaddr *addr);
 int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1);
 int build_rekey(hip_assoc *hip_a);
 
@@ -149,6 +150,9 @@ void hip_handle_esp(char *data, int length);
 void start_base_exchange(struct sockaddr *dst);
 void start_expire(__u32 spi);
 void receive_udp_hip_packet(char *buff, int len);
+void start_loss_multihoming(char *data, int len);
+int handle_notify_loss(__u8 *data, int data_len);
+void hip_handle_multihoming_timeouts(struct timeval *now);
 
 /* hip_keymat.c */
 int set_secret_key(unsigned char *key, hip_assoc *hip_a);
@@ -181,6 +185,8 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
 		   int di_length, hi_node **hi_p, int max_length);
 hi_node *get_preferred_hi(hi_node *node);
 int get_addr_from_list(sockaddr_list *list, int family,
+		struct sockaddr *addr);
+int get_other_addr_from_list(sockaddr_list *list, struct sockaddr *exclude,
 		struct sockaddr *addr);
 hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit);
 void replace_hip_assoc(hip_assoc *a_old, hip_assoc *a_new);
@@ -227,6 +233,7 @@ hip_assoc* find_hip_association(struct sockaddr *src, struct sockaddr *dst,
 hip_assoc* find_hip_association2(hiphdr* hiph);
 hip_assoc* find_hip_association3(struct sockaddr *src, struct sockaddr *dst); 
 hip_assoc* find_hip_association4(hip_hit hit);
+hip_assoc* find_hip_association_by_spi(__u32 spi, int dir);
 hip_assoc *search_registrations(hip_hit hit, __u8 type);
 hip_assoc *search_registrations2(__u8 type, int state);
 void cb(int p, int n, void *arg);
@@ -266,12 +273,14 @@ void print_hi_to_buff(uint8_t **bufp, int *buf_len, hi_node *hi, int mine);
 int save_identities_file(int);
 int read_conf_file(char *);
 
-/* hip_netlink.c */
+/* hip_addr.c */
 int hip_netlink_open();
 int get_my_addresses();
 int select_preferred_address();
 int is_my_address(struct sockaddr *addr);
 int hip_handle_netlink(char *data, int length);
+void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
+	    int if_index);
 int add_address_to_iface(struct sockaddr *addr, int plen, int if_index);
 int devname_to_index(char *dev, __u64 *mac);
 sockaddr_list *add_address_to_list(sockaddr_list **list, struct sockaddr *addr,
