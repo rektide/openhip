@@ -769,7 +769,7 @@ int multihoming_update(hip_assoc *hip_a, struct sockaddr *dst)
 	return(1);
 }
 
-void multihoming_periodic(struct timeval *now)
+void hip_handle_multihoming_timeouts(struct timeval *now)
 {
 	int i, if_index, err;
 	hip_assoc *hip_a;
