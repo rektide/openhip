@@ -975,7 +975,8 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 	 * or when unsent locators exist in hip_a->hi->addrs.
 	 */
 	location += build_tlv_locators(&buff[location], &hip_a->hi->addrs,
-					hip_a->spi_in, newaddr != NULL);
+			hip_a->rekey ? hip_a->rekey->new_spi : hip_a->spi_in,
+			newaddr != NULL);
 
 
 	if (hip_a->rekey && hip_a->rekey->need_ack) {	
