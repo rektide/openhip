@@ -3032,7 +3032,7 @@ void hip_exit(int signal)
 		log_(QOUT, "****** the HIP process has encountered a bug and "
 		    "needs to shutdown! ******\n");
 	} else {
-		if (!HCNF.use_smartcard)
+		if (!HCNF.use_smartcard && HCNF.save_my_identities)
 			save_identities_file(TRUE); /* store my HIs with R1 counters */
 		if ( HCNF.save_known_identities &&
 		    ((signal == SIGINT) || (signal == SIGTERM)) )
