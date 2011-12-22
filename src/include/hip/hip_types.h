@@ -868,6 +868,7 @@ struct hip_conf {
 	char *preferred_iface;		/* preferred interface name */
 	struct name *outbound_ifaces;	/* if mobile router */
 	__u8 save_known_identities;	/* save known_host_id's on exit */
+	__u8 save_my_identities;	/* save my_host_id's on exit */
 	__u8 reg_types[MAX_REGISTRATION_TYPES]; /* registration types offered */
 	__u8 num_reg_types;		/* number of registration types */
 	__u8 min_reg_lifetime;		/* offered min registration lifetime */

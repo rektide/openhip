@@ -974,6 +974,12 @@ int read_conf_file(char *filename)
 			else
 				HCNF.save_known_identities = FALSE;
 		} else if (strcmp((char*)node->name, 
+				"save_my_identities")==0){
+			if (strncmp(data, "yes", 3)==0)
+				HCNF.save_my_identities = TRUE;
+			else
+				HCNF.save_my_identities = FALSE;
+		} else if (strcmp((char*)node->name, 
 				"peer_certificate_required")==0){
 			if (strncmp(data, "yes", 3)==0)
 				HCNF.peer_certificate_required = TRUE;

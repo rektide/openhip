@@ -225,6 +225,7 @@ int main_loop(int argc, char **argv)
 	HCNF.preferred_iface = NULL;
 	HCNF.outbound_ifaces = NULL;
 	HCNF.save_known_identities = FALSE;
+	HCNF.save_my_identities = TRUE;
 	HCNF.peer_certificate_required = FALSE;
 	memset(HCNF.conf_filename, 0, sizeof(HCNF.conf_filename));
 	memset(HCNF.my_hi_filename, 0, sizeof(HCNF.my_hi_filename));
