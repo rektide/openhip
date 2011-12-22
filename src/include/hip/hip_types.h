@@ -823,6 +823,7 @@ struct hip_opt {
 #ifdef MOBILE_ROUTER
 	int mr;
 #endif
+	int mh;
 };
 
 #ifdef MOBILE_ROUTER

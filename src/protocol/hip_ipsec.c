@@ -266,7 +266,7 @@ void hip_handle_esp(char *data, int length)
 			    "thread\n");
 		    return;
 		}
-		start_loss_multihoming(&data[sizeof(espmsg)], len);
+		if (OPT.mh) start_loss_multihoming(&data[sizeof(espmsg)], len);
 		break;
 	    default:
 		log_(WARN, "unknown data received from the ESP thread: %d\n",

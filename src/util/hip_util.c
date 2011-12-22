@@ -2168,6 +2168,7 @@ void print_usage()
 #ifdef MOBILE_ROUTER
 	printf("  -mr\t mobile router mode\n");
 #endif /* MOBILE_ROUTER */
+	printf("  -mh\t turn on loss-based multihoming\n");
 	printf("With no options, simple output will be displayed.\n\n");
 }
 

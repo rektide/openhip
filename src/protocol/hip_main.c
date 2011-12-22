@@ -186,6 +186,7 @@ int main_loop(int argc, char **argv)
 #ifdef MOBILE_ROUTER
 	OPT.mr = FALSE;
 #endif
+	OPT.mh = FALSE;
 	
 	/*
 	 * Set default configuration
@@ -336,6 +337,12 @@ int main_loop(int argc, char **argv)
 				HCNF.reg_types[HCNF.num_reg_types] =REGTYPE_RVS;
 				HCNF.num_reg_types++;
 			}
+			argv++,argc--;
+			continue;
+		}
+		/* Turn on experimental multihoming for lost packets */
+		if (strcmp(*argv, "-mh") == 0) {
+			OPT.mh = TRUE;
 			argv++,argc--;
 			continue;
 		}
@@ -640,7 +647,7 @@ int main_loop(int argc, char **argv)
 			hip_retransmit_waiting_packets(&time1);
 			hip_handle_state_timeouts(&time1);
 			hip_handle_registrations(&time1);
-			hip_handle_multihoming_timeouts(&time1);
+			if (OPT.mh) hip_handle_multihoming_timeouts(&time1);
 #ifndef __WIN32__	/* cleanup zombie processes from fork() */
 			waitpid(0, &err, WNOHANG);
 #endif
