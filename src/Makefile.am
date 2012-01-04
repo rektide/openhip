@@ -18,6 +18,8 @@
 #
 #
 
+AUTOMAKE_OPTIONS=color-tests
+
 sbin_PROGRAMS = hitgen hip hipstatus
 
 # HIP protocol source files
@@ -72,7 +74,14 @@ hitgen_SOURCES = $(SRC_HITGEN)
 hip_SOURCES = 	$(SRC_PROTO) $(SRC_UTIL) $(SRC_MAIN_UMH) $(SRC_USERMODE)
 hipstatus_SOURCES = util/usermode-status.c
 
-TESTS = util/scripts/hiptest.py 
+AM_COLOR_TESTS=always
+scriptdir=util/scripts
+TESTS = $(scriptdir)/test-bex.sh $(scriptdir)/test-mobility.sh
+
+.PHONY : shell
+shell:
+	python $(scriptdir)/hiptest.py shell
+
 
 # this would be nice to use, but it overwrites the file upon 'make install'
 #dist_sysconf_DATA = ../conf/known_host_identities.xml

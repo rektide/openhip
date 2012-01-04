@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c)2011 the Boeing Company.
+# Copyright (c)2011-2012 the Boeing Company.
 #
 # author: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
 #
@@ -50,7 +50,83 @@ class HipSession(pycore.Session):
             if not isinstance(n, HipNode):
                 continue           
             dst = os.path.join(cfgbase, n.name, "known_host_identities.xml")
-            shutil.copy(knownhosts, dst) 
+            shutil.copy(knownhosts, dst)
+
+    def pingcheck(self, src, dst):
+        ''' Ping the LSI of the dst node from the src node.
+        '''
+        lsi = dst.checkforlsi()
+        if dst is None:
+            print "LSI for %s not found!" % dst.name
+            return False
+        status, res = src.cmdresult(['ping', '-c', '3', lsi])
+        if res.find(" 0% packet loss"):
+            return True
+        if status == 0:
+            return True
+        return False
+
+    def bex(self, init, resp, verbose=True):
+        ''' Run a base exchange between nodes 1 and 2, and check the result.
+        Assumes HIP is already running. Returns True for success/pass, False for
+        failure.
+        '''
+        if verbose:
+            print "triggering base exchange from %s to %s using ping..." % \
+                    (init.name, resp.name)
+        ok = self.pingcheck(init, resp)
+        if verbose:
+            print "ping returned",
+            if ok:
+                print "OK"
+            else:
+                print "FAIL"
+
+        for h in (init, resp):
+            if verbose:
+                print "log file for", h.name,
+            if h.checkhiplog('HIP exchange complete.'):
+                if verbose:
+                    print "indicates base exchange completed OK"
+            else:
+                ok = False
+                if verbose:
+                    print "does not list completed base exchange! FAIL"
+        return ok
+
+    def mob(self, init, resp, verbose=True):
+        ''' Change the IP address of a node and check the result.
+        Assumes HIP is already running and a base exchange has completed.
+        Returns True for success/pass, False for failure.
+        '''
+        addr = init.getpreferredaddr(family=socket.AF_INET)
+        if verbose:
+            print "readdressing", init.name, "from", addr, "to",
+        addr += "1"
+        if verbose:
+            print addr, "..."
+        init.cmd(['ifconfig', 'eth0', addr], wait=True)
+
+        ok = True
+        for h in (init, resp):
+            if verbose:
+                print "log file for", h.name,
+            if h.checkhiplog('Update completed (rekey)'):
+                if verbose:
+                    print "indicates readdress completed OK"
+            else:
+                ok = False
+                if verbose:
+                    print "does not list completed update exchange! FAIL"
+        ok2 = self.pingcheck(init, resp)
+        if verbose:
+            print "ping following readdress",
+            if ok2:
+                print "OK"
+            else:
+                print "FAIL"
+        return ok and ok2
+
 
 
 
@@ -142,11 +218,12 @@ class HipNode(pycore.nodes.LxcNode):
             (status, result) = self.cmdresult(["/sbin/ip", "addr", "show",
                                                "dev", "hip0"])
             if status == 0:
-                if re.search('    inet 1\.[\d]+\.[\d]+\.[\d]+', result):
-                    return True
+                r = re.search('    inet 1\.[\d]+\.[\d]+\.[\d]+', result)
+                lsi = r.group().split(' ')[-1]
+                return lsi
             retries -= 1
             time.sleep(0.25)
-        return False
+        return None
 
     def checkhiplog(self, search, retries=15):
         while retries > 0:
@@ -189,7 +266,9 @@ class HipNode(pycore.nodes.LxcNode):
 
 
 def main():
-    usagestr = "usage: %prog [-h] [options] [args]"
+    tests = ["bex","mobility","shell"]
+    usagestr = "usage: %prog [-h] [options] [tests]\n"
+    usagestr += "valid tests are: %s" % tests
     parser = optparse.OptionParser(usage = usagestr)
     parser.set_defaults(numnodes = 2)
 
@@ -210,7 +289,8 @@ def main():
         usage("invalid number of nodes: %s" % options.numnodes)
 
     for a in args:
-        sys.stderr.write("ignoring command line argument: '%s'\n" % a)
+        if a not in tests:
+            sys.stderr.write("ignoring command line argument: '%s'\n" % a)
 
     if os.geteuid() != 0:
         sys.stderr.write("\nRe-run this script with root privileges, e.g.:\n")
@@ -219,13 +299,15 @@ def main():
 
     start = datetime.datetime.now()
 
+    print "- - - - -  hiptest.py: %s  - - - - -" % args
+
     # IP subnet
     prefix = ipaddr.IPv4Prefix("10.83.0.0/16")
     session = HipSession(persistent=True)
     # emulated Ethernet switch
     switch = session.addobj(cls = pycore.nodes.SwitchNode)
-    print "creating %d nodes with addresses from %s" % \
-          (options.numnodes, prefix)
+    print "creating %d nodes with addresses from %s session %d" % \
+          (options.numnodes, prefix, session.sessionid)
     for i in xrange(1, options.numnodes + 1):
         n = session.addobj(cls = HipNode, name = "n%d" % i)
         n.newnetif(switch, ["%s/%s" % (prefix.addr(i), prefix.prefixlen)])
@@ -248,14 +330,32 @@ def main():
         if not n.checkforhip():
             problem = True
 
-    # start a shell on node 1
-    nodes[1].term("bash")
-    nodes[2].term("bash")
+    if "shell" in args:
+        print "spawning terminal shells for nodes 1 and 2"
+        nodes[1].term("bash")
+        nodes[2].term("bash")
+        print "leaving session %d running" % session.sessionid
+        print "run 'sudo core-cleanup.sh' to clean up this test environment"
+        sys.exit(0)
 
-    print "elapsed time: %s" % (datetime.datetime.now() - start)
-    print "run 'sudo core-cleanup.sh' to clean up this test environment"
+    if "bex" in args:
+        if not session.bex(nodes[1], nodes[2]):
+            problem = True
+    if "mobility" in args:
+        if not session.bex(nodes[1], nodes[2], verbose=False):
+            print "problem with base exchange for mobility test!"
+            problem = True
+        if not session.mob(nodes[1], nodes[2]):
+            problem = True
+
+    print "shutting down session %d" % session.sessionid
+    session.shutdown()
+    print "- - - - -  hiptest.py elapsed time: %s  - - - - -" % \
+            (datetime.datetime.now() - start)
     if problem:
         sys.exit(1)
+    else:
+        sys.exit(0)
 
 
 if __name__ == "__main__":
