@@ -76,7 +76,8 @@ hipstatus_SOURCES = util/usermode-status.c
 
 AM_COLOR_TESTS=always
 scriptdir=util/scripts
-TESTS = $(scriptdir)/test-bex.sh $(scriptdir)/test-mobility.sh
+TESTS = $(scriptdir)/test-bex.sh $(scriptdir)/test-mobility.sh \
+	$(scriptdir)/test-rekey.sh
 
 .PHONY : shell
 shell:

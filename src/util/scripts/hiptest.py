@@ -127,8 +127,31 @@ class HipSession(pycore.Session):
                 print "FAIL"
         return ok and ok2
 
-
-
+    def rekey(self, init, resp, verbose=True):
+        print "waiting for rekey..."
+        wait = 5.0
+        ok = False
+        while wait > 0.0:
+            if init.checkhiplog('Update completed (rekey)') and \
+                resp.checkhiplog('Update completed (rekey)'):
+                ok = True
+                break
+            time.sleep(1.0)
+            wait -= 1.0
+        if verbose:
+            print "log file indicates rekey", 
+            if ok:
+                print "completed on both hosts OK"
+            else:
+                print "incomplete FAIL"
+        ok2 = self.pingcheck(init, resp)
+        if verbose:
+            print "ping following rekey",
+            if ok2:
+                print "OK"
+            else:
+                print "FAIL"
+        return ok and ok2
 
 
 class HipNode(pycore.nodes.LxcNode):
@@ -149,6 +172,11 @@ class HipNode(pycore.nodes.LxcNode):
             sys.exit(1)
         tap = pycore.nodes.TunTap(node=self, name=name, localname=localname)
         tap.install()
+
+    def hipconfpath(self):
+        cfgbase = os.path.expanduser(HIP_CFG_CACHE)
+        cfgpath = os.path.join(cfgbase, self.name)
+        return os.path.join(cfgpath, "hip.conf")
 
     def hitgen(self):
         ''' Generate a HIP config for the given node. First check for cached
@@ -176,6 +204,37 @@ class HipNode(pycore.nodes.LxcNode):
         pub = os.path.join(cfgpath, "%s_host_identities.pub.xml" % self.name)
         if not os.path.exists(pub):
             self.cmd([os.path.join(self.hip_path, "hitgen"), "-publish"])
+
+    def hipconfval(self, key, value):
+        ''' Update the specified key in the hip.conf file with the given value.
+        Copy hip.conf to hip.conf.default first.
+        '''
+        hipconf = self.hipconfpath()
+        if not os.path.exists(hipconf):
+            mutecheck_call(["./hitgen", "-file", hipconf, "-conf"])
+        hipconfdef = hipconf + ".default"
+        # make backup copy of hip.conf if it doesn't exist yet
+        if not os.path.exists(hipconfdef):
+            shutil.copy2(hipconf, hipconfdef)
+        # modify the value
+        f = open(hipconf, 'r')
+        lines = f.readlines()
+        f.close()
+        f = open(hipconf, 'w')
+        for line in lines:
+            if line.startswith("  <%s>" % key):
+                line = "  <%s>%s</%s>\n" % (key, value, key)
+            f.write(line)
+        f.close()
+
+    def hipconfrestore(self):
+        ''' Restore hip.conf.default to hip.conf after hipconfval() was used.
+        '''
+        hipconf = self.hipconfpath()
+        hipconfdef = hipconf + ".default"
+        if os.path.exists(hipconfdef):
+            os.remove(hipconf)
+            shutil.move(hipconfdef, hipconf)
 
     def getpreferredaddr(self, family=socket.AF_INET):
         ''' Return the preferred address string.
@@ -266,7 +325,7 @@ class HipNode(pycore.nodes.LxcNode):
 
 
 def main():
-    tests = ["bex","mobility","shell"]
+    tests = ["bex","mobility","rekey","shell"]
     usagestr = "usage: %prog [-h] [options] [tests]\n"
     usagestr += "valid tests are: %s" % tests
     parser = optparse.OptionParser(usage = usagestr)
@@ -319,6 +378,12 @@ def main():
     # The known_host_identities.xml file is built after all of the host IDs
     # have been generated.
     session.buildknownhosts()
+
+    # make non-standard configuration file changes for tests here
+    if "rekey" in args:
+        nodes[1].hipconfval("sa_lifetime", "3")
+
+
     # HIP is started after the known_host_identities.xml is built.
     for n in nodes[1:]:
         n.starthip()
@@ -347,6 +412,13 @@ def main():
             problem = True
         if not session.mob(nodes[1], nodes[2]):
             problem = True
+    if "rekey" in args:
+        if not session.bex(nodes[1], nodes[2], verbose=False):
+            print "problem with base exchange for rekey test!"
+            problem = True
+        if not session.rekey(nodes[1], nodes[2]):
+            problem = True
+        nodes[1].hipconfrestore()
 
     print "shutting down session %d" % session.sessionid
     session.shutdown()
