@@ -1179,7 +1179,8 @@ void hip_handle_state_timeouts(struct timeval *time1)
 				log_(NORMT, "HIP association %d moved ", i);
 				log_(NORM,  "from R2_SENT=>ESTABLISHED ");
 				log_(NORM,  "due to incoming ESP data.\n");
-				if (hip_send_update_locators(hip_a) < 0) {
+				if (OPT.mh &&
+				    (hip_send_update_locators(hip_a) < 0)) {
 				    log_(WARN, "Failed to send UPDATE with loca"
 					    "tors following incoming data.\n");
 				}

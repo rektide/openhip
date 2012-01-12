@@ -1611,7 +1611,7 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
 	err = complete_base_exchange(hip_a);
 	if (!err) {
 		set_state(hip_a, ESTABLISHED);
-		if (hip_send_update_locators(hip_a) < 0) {
+		if (OPT.mh && (hip_send_update_locators(hip_a) < 0)) {
 			log_(WARN, "Failed to send UPDATE with locators after "
 				"receiving R2.\n");
 		}
