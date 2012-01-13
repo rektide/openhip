@@ -1,6 +1,6 @@
 /*
  * Host Identity Protocol
- * Copyright (C) 2009 the Boeing Company
+ * Copyright (C) 2009-2012 the Boeing Company
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

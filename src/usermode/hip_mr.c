@@ -1,6 +1,6 @@
 /*
  * Host Identity Protocol
- * Copyright (C) 2009 the Boeing Company
+ * Copyright (C) 2009-2012 the Boeing Company
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
  *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  *           Orlie Brewer <orlie.t.brewer@boeing.com>
  * 
- * \brief Mobile router SPINAT implemenation
+ * \brief Mobile router SPINAT implemenation using netfilter queue
  *
  */
 
@@ -35,16 +35,23 @@
 #include <errno.h>              /* errno */
 #include <openssl/rand.h>	/* RAND_bytes() */
 #include <sys/time.h>		/* gettimeofday() */
-#include <libipq.h>		/* ipq_create_handle() */
 #include <hip/hip_service.h>
 #include <hip/hip_types.h>
 #include <hip/hip_funcs.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_mr.h>
 #include <win32/checksum.h> 	/* ip_fast_csum() */
+#include <linux/types.h>
+#ifndef aligned_be64
+#define aligned_be64 u_int64_t __attribute__((aligned(8)))
+#endif
 #include <linux/netfilter.h>    /* NF_DROP */
 
 #include <linux/version.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+#include <linux/netfilter/nfnetlink.h>
+#include <linux/netfilter/nfnetlink_queue.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 25)
 #include <linux/netfilter_ipv4.h>    /* NF_IP_PRE_ROUTING, etc. */
 #define NF_INET_PRE_ROUTING  NF_IP_PRE_ROUTING
@@ -126,12 +133,24 @@ int init_hip_mr_client(hip_hit peer_hit, struct sockaddr *src);
 int free_hip_mr_client(hip_mr_client *hip_mr_c);
 /* int add_proxy_ticket(const __u8 *data); */
 int is_mobile_router();
+int hip_mobile_router_add_remove_rules(int queue_num, int del);
 
+int netfilter_queue_init(int queue_num);
+int netfilter_queue_bind(int nlfd, int n, int af);
+int netfilter_queue_unbind(int nlfd, int n, int af);
+int netfilter_queue_config_command(int nlfd, int queue_num, int cmd, int af);
+int netfilter_queue_config_param(int nlfd, int queue_num);
+int netfilter_queue_sendmsg(int nlfd, __u8 *data, int len);
+__u8* netfilter_queue_command_hdr(__u8 *buf, int queue_num, int type, int *len);
+int netfilter_get_packet(int nlfd, __u8 *buf, int *buf_len, __u8 *family,
+	__u32 *id, __u8 *hook, int *ifi);
+int netfilter_queue_set_verdict(int nlfd, int queue_num, __u32 id, 
+	__u32 verdict, int data_len, __u8 *data);
 
 /*
  * \fn addr_match_payload()
  *
- * \param payload	character pointer to ipqueue packet payload
+ * \param payload	character pointer to packet payload
  * \param family	address family of the packet contained in payload
  * \param src		source address to check for in the packet
  * \param dst		desitnation address to check for in the packet
@@ -173,7 +192,7 @@ int addr_match_payload(__u8 *payload, int family, struct sockaddr *src,
 /*
  * \fn rewrite_addrs()
  *
- * \param payload	character pointer to ipqueue packet payload
+ * \param payload	character pointer to packet payload
  * \param src		new source address to use in IP header
  * \param dst		new destination address to use in IP header
  *
@@ -1072,8 +1091,8 @@ unsigned char *do_inbound_esp_packet(int family, unsigned char *payload,
 			sizeof(struct ip) : sizeof(struct ip6_hdr)));
 
 #ifdef VERBOSE_MR_DEBUG
-	log_(NORM, "Found the public SPI 0x%x\n", ntohl(esph->spi));
-	log_(NORM, "Changing to 0x%x\n", spi_nat->private_spi);
+	log_(NORM, "Rewriting ESP SPI from 0x%x to 0x%x.\n",
+		spi_nat->private_spi, ntohl(esph->spi));
 #endif /* VERBOSE_MR_DEBUG */
 
 	esph->spi = htonl(spi_nat->private_spi);
@@ -1223,37 +1242,48 @@ unsigned char *check_esp_packet(int family, int inbound, struct if_data *ext_if,
  * \fn hip_mobile_router()
  *
  * \brief Mobile Router thread that receives incoming packets from the
- *        netfilter QUEUE target (using libipq) that are HIP or ESP protocol
+ *        netfilter QUEUE target that are HIP or ESP protocol
  *        packets, and performs SPINAT rewriting as necessary.
  */
 void *hip_mobile_router(void *arg)
 {
-	int i;
-	int family = PF_INET6;
-	int err, type, inbound, protocol;
-	int write_raw, raw_ip4_socket, raw_ip6_socket;
-	unsigned int verdict;
+	int i, len, ifi;
+	__u32 pkt_id, verdict;
+	__u8 family, hook;
+	int err, inbound, protocol;
+	int write_raw, raw_ip4_socket, raw_ip6_socket, nlfd;
 	unsigned char buf[BUFSIZE];
 	unsigned char *output_buffer;
 	size_t output_length;
-	char *dev_name;
-	struct ipq_handle *h4, *h6;
 	struct ip *ip4h = NULL;
 	struct ip6_hdr *ip6h = NULL;
-	ipq_packet_msg_t *m;
 	int highest_descriptor = 0;
 	struct timeval timeout;
 	fd_set read_fdset;
 	__u8 *cp;
 	struct sockaddr_storage dst;
 	struct if_data *ext_if;
+	int qn = 0;
 
-	printf("hip_mobile_router() thread started...\n");
+	printf("%s() thread started...\n", __FUNCTION__);
 
 	pthread_mutex_init(&hip_mr_client_mutex, NULL);
 	pthread_mutex_lock(&hip_mr_client_mutex);
 	memset(hip_mr_client_table, 0, sizeof(hip_mr_client_table));
 	pthread_mutex_unlock(&hip_mr_client_mutex);
+
+	nlfd = netfilter_queue_init(qn);
+	if (nlfd < 0) {
+		printf("*** %s failed to initialize netfilter queue\n",
+			__FUNCTION__);
+		return(NULL);
+	}
+
+	printf("%s() initialized netfilter queue %d.\n", __FUNCTION__, qn);
+	if (hip_mobile_router_add_remove_rules(qn, 0) < 0) {
+		printf("%s() error adding iptables firewall rules!\n",
+			__FUNCTION__);
+	}
 
 	/* Sockets used for change of address family */
 	raw_ip4_socket = socket(PF_INET, SOCK_RAW, IPPROTO_RAW);
@@ -1264,43 +1294,6 @@ void *hip_mobile_router(void *arg)
 			strerror(errno));
 		return(NULL);
 	}
-
-	/* IPQ handles to receive packets from netfilter QUEUE targets */
-	h4 = ipq_create_handle(0, PF_INET);
-	h6 = ipq_create_handle(0, PF_INET6);
-	if (!h4 || !h6) {
-		printf("*** hip_mobile_router() - ipq_create_handle(0, %s) "
-			"failed: %s\n",
-			h4 ? "PF_INET6" : "PF_INET", ipq_errstr());
-		return(NULL);
-	}
-
-	err = system("modprobe ip_queue");
-	err = system("modprobe ip6_queue");
-
-	err = ipq_set_mode(h4, IPQ_COPY_PACKET, BUFSIZE);
-	if (err < 0) {
-		printf("*** hip_mobile_router() - ipq_set_mode(IPV4) failed: "
-			"%s\n Are the correct kernel modules loaded "
-			"(modprobe ip_queue)?", ipq_errstr());
-		goto hip_mobile_router_exit;
-	}
-	err = ipq_set_mode(h6, IPQ_COPY_PACKET, BUFSIZE);
-	if (err < 0) {
-		printf("*** hip_mobile_router() - ipq_set_mode(IPV6) failed: "
-			"%s\n Are the correct kernel modules loaded "
-			"(modprobe ip6_queue)?", ipq_errstr());
-		goto hip_mobile_router_exit;
-	}
-
-	err = system("iptables -t mangle -A PREROUTING -p 50 -j QUEUE");
-	err = system("iptables -t mangle -A PREROUTING -p 139 -j QUEUE");
-	err = system("iptables -t mangle -A POSTROUTING -p 50 -j QUEUE");
-	err = system("iptables -t mangle -A POSTROUTING -p 139 -j QUEUE");
-	err = system("ip6tables -t mangle -A PREROUTING -p 50 -j QUEUE");
-	err = system("ip6tables -t mangle -A PREROUTING -p 139 -j QUEUE");
-	err = system("ip6tables -t mangle -A POSTROUTING -p 50 -j QUEUE");
-	err = system("ip6tables -t mangle -A POSTROUTING -p 139 -j QUEUE");
 
 	printf("Mobile router initialized.\n");
 	fflush(stdout);
@@ -1314,11 +1307,10 @@ void *hip_mobile_router(void *arg)
 		 * select() for socket activity
 		 */
 		FD_ZERO(&read_fdset);
-		FD_SET(h4->fd, &read_fdset);
-		FD_SET(h6->fd, &read_fdset);
+		FD_SET(nlfd, &read_fdset);
 		timeout.tv_sec = 0;
 		timeout.tv_usec = MR_TIMEOUT_US;
-		highest_descriptor = (h6->fd > h4->fd) ? h6->fd : h4->fd;
+		highest_descriptor = nlfd;
 
 		err = select(highest_descriptor + 1, &read_fdset,
 			     NULL, NULL, &timeout);
@@ -1330,73 +1322,61 @@ void *hip_mobile_router(void *arg)
 			continue;
 		} else if (err == 0) { /* idle cycle - select() timeout  */
 			continue;
-		} else if (FD_ISSET(h4->fd, &read_fdset)) {
-			family = AF_INET;
-		} else if (FD_ISSET(h6->fd, &read_fdset)) {
-			family = AF_INET6;
+		} else if (FD_ISSET(nlfd, &read_fdset)) {
+			len = BUFSIZE;
+			err = netfilter_get_packet(nlfd, buf, &len, &family,
+						   &pkt_id, &hook, &ifi);
+#ifdef VERBOSE_MR_DEBUG
+			/* printf("%s() received %s packet len = %d id=%d on "
+				"hook=%d ifidx=%d\n", __FUNCTION__,
+				family==AF_INET ? "IPv4" : "IPv6", len, pkt_id,
+				hook, ifi); */
+#endif /* VERBOSE_MR_DEBUG */
+			if (err < 0) {
+				printf("%s() error getting packet!\n",
+					__FUNCTION__);
+				continue;
+			}
+			/* fall through */
 		} else {
 			printf("hip_mobile_router(): unknown socket "
 				"activity\n");
 			continue;
 		}
 
-		/*
-		 * retrieve packets
-		 */
-		err = ipq_read( (family==AF_INET) ? h4 : h6, buf, BUFSIZE, 0);
-		if (err < 0) {
-			printf("hip_mobile_router() ipq_read(%s) error: %s\n",
-				(family==AF_INET) ? "IPV4" : "IPV6",
-				ipq_errstr());
-			continue;
-		} else if (err == 0) { /* Timed out */
-			continue;
-		}
-
-		type = ipq_message_type(buf);
-		if (NLMSG_ERROR == type) {
-			printf("hip_mobile_router(): received error message %d"
-				"\n", ipq_get_msgerr(buf));
-			continue;
-		} else if (IPQM_PACKET != type) {
-			printf("hip_mobile_router(): received unexpected type "
-				"%d\n", type);
-			continue;
-		}
-
-		m = ipq_get_packet(buf);
-		output_buffer = m->payload;
-		output_length = m->data_len;
+		output_buffer = buf;
+		output_length = len;
 
 		if (family == AF_INET) {
-			ip4h = (struct ip *)m->payload;
+			ip4h = (struct ip *)buf;
 		} else {
-			ip6h = (struct ip6_hdr *)m->payload;
+			ip6h = (struct ip6_hdr *)buf;
 		}
 
 		/* Determine if packet is from external side or not */
-
-		if (m->hook == NF_INET_PRE_ROUTING) {
-			dev_name = m->indev_name;
+		if (hook == NF_INET_PRE_ROUTING) {
 			inbound = TRUE;
-		} else if (m->hook == NF_INET_POST_ROUTING) {
-			dev_name = m->outdev_name;
+		} else if (hook == NF_INET_POST_ROUTING) {
 			inbound = FALSE;
 		} else {
-			ipq_set_verdict((family == PF_INET) ? h4 : h6,
-				m->packet_id, NF_ACCEPT, 0, NULL);
+			/* packet is from some other hook we don't care about */
+			/* printf("%s() passing packet from other hook...\n",
+				__FUNCTION__); */
+			netfilter_queue_set_verdict(nlfd, qn, pkt_id,
+						    NF_ACCEPT, 0, NULL);
 			continue;
 		}
 
 		/* Find the external interface */
-
 		for (i = 0; i < neifs; i++) {
-			if (strcmp(dev_name, external_interfaces[i].name) == 0)
+			if (ifi == external_interfaces[i].ifindex)
 				break;
 		}
 		if (i >= neifs) {
-			ipq_set_verdict((family == PF_INET) ? h4 : h6,
-				m->packet_id, NF_ACCEPT, 0, NULL);
+			/* printf("%s() packet %d not on external interface, "
+				"pass through.\n", __FUNCTION__, pkt_id); */
+			netfilter_queue_set_verdict(nlfd, qn, pkt_id,
+						    NF_ACCEPT, 0, NULL);
 			continue;
 		}
 
@@ -1409,19 +1389,18 @@ void *hip_mobile_router(void *arg)
 		write_raw = 0;
 		protocol = (family == PF_INET) ? ip4h->ip_p : ip6h->ip6_nxt;
 #ifdef VERBOSE_MR_DEBUG
-		printf("Received %lu byte %s packet proto %d inbound %s ",
-			m->data_len, (family==AF_INET) ? "IPv4" : "IPv6",
-			protocol, inbound ? "yes\n" : "no\n");
+		printf("%s() received %d byte %s packet proto %d inbound %s\n",
+			__FUNCTION__, len, (family==AF_INET) ? "IPv4" : "IPv6",
+			protocol, inbound ? "yes" : "no");
 #endif /* VERBOSE_MR_DEBUG */
 		if (protocol == H_PROTO_HIP) {
 			output_buffer = check_hip_packet(family, inbound,
-				ext_if, m->payload, m->data_len,
-				&output_length);
+					    ext_if, buf, len, &output_length);
 			verdict = NF_ACCEPT;
 		} else if (protocol == IPPROTO_ESP) {
 			output_buffer = check_esp_packet(family, inbound, 
-				ext_if, m->payload);
-			if (output_buffer == m->payload) {
+					    ext_if, buf);
+			if (output_buffer == buf) {
 				verdict = NF_ACCEPT;
 			} else {
 				verdict = NF_DROP;
@@ -1439,13 +1418,11 @@ void *hip_mobile_router(void *arg)
 		 * Drop packets if their address family is translated or they
 		 * are not allowed. Accept packets as-is or with changes.
 		 */
-		err = ipq_set_verdict((family == PF_INET) ? h4 : h6,
-			m->packet_id, verdict, output_length, output_buffer);
+		err = netfilter_queue_set_verdict(nlfd, qn, pkt_id, verdict,
+						output_length, output_buffer);
 		if (err < 0) {
-			printf("hip_mobile_router() - ipq_set_verdict(%s) "
-				"failed: %s\n", 
-				family == PF_INET ? "IPV4" : "IPV6",
-				ipq_errstr());
+			printf("%s - netfilter_queue_set_verdict(%d) "
+				"failed\n", __FUNCTION__, verdict);
 		}
 
 		/* 
@@ -1475,25 +1452,21 @@ void *hip_mobile_router(void *arg)
 			printf("hip_mobile_router() raw sendto() error: %s\n",
 				strerror(errno));
 
-		if (output_buffer && (output_buffer != m->payload))
+		if (output_buffer && (output_buffer != buf))
 			free(output_buffer);
 	}
 
 	printf("hip_mobile_router() thread shutdown.\n");
-	err = system("iptables -t mangle -D PREROUTING -p 50 -j QUEUE");
-	err = system("iptables -t mangle -D PREROUTING -p 139 -j QUEUE");
-	err = system("iptables -t mangle -D POSTROUTING -p 50 -j QUEUE");
-	err = system("iptables -t mangle -D POSTROUTING -p 139 -j QUEUE");
-	err = system("ip6tables -t mangle -D PREROUTING -p 50 -j QUEUE");
-	err = system("ip6tables -t mangle -D PREROUTING -p 139 -j QUEUE");
-	err = system("ip6tables -t mangle -D POSTROUTING -p 50 -j QUEUE");
-	err = system("ip6tables -t mangle -D POSTROUTING -p 139 -j QUEUE");
+
+	if (hip_mobile_router_add_remove_rules(qn, 1) < 0) {
+		printf("%s() error removing iptables firewall rules!\n",
+			__FUNCTION__);
+	}
+
+	close(nlfd);
 	close(raw_ip4_socket);
 	close(raw_ip6_socket);
 	fflush(stdout);
-hip_mobile_router_exit:
-	ipq_destroy_handle(h4);
-	ipq_destroy_handle(h6);
 	pthread_exit((void *) 0);
 	return(NULL);
 }
@@ -2235,3 +2208,488 @@ int is_mobile_router()
 	return(OPT.mr);
 }
 
+
+/*
+ * \fn hip_mobile_router_add_remove_rules()
+ *
+ * \param queue_num	queue number
+ * \param del		0 for add, 1 for delete
+ *
+ * \return 	Returns -1 if any of the system() calls return an error. 
+ *
+ * \brief  Add or remove iptables firewalls rules that send HIP (139) and
+ *   ESP (50) packets to the netfilter queue.
+ */
+int hip_mobile_router_add_remove_rules(int queue_num, int del)
+{
+	const char adddel = del ? 'D' : 'A';
+	const char pre[] = "PREROUTING";
+	const char post[] = "POSTROUTING";
+	const char *ipt, *hook = pre;
+	int proto, i, j, err = 0;
+	char cmd[255];
+
+	for (i = 0, j = 0; i < 8; i++, j++) {
+		proto = i % 2 ? 50 : 139;
+		/* first 4 rules are for IPv4, then IPv6 */
+		ipt = i > 3 ? "ip6tables" : "iptables"; 
+		if (j > 1) { /* switch between pre/post routing hooks */
+			j = 0;
+			hook = (hook == pre) ? post : pre; /* toggle */
+		}
+
+		snprintf(cmd, sizeof(cmd), 
+			"%s -t mangle -%c %s -p %d -j NFQUEUE --queue-num %d",
+			ipt, adddel, hook, proto, queue_num);
+		if (system(cmd) < 0)
+			err--;
+	}
+	return(err);
+}
+
+
+/*
+ * \fn netfilter_queue_init()
+ *
+ * \param queue_num	queue number
+ *
+ * \brief Initialize a netlink netfilter socket at bind to the specified 
+ * 	  queue number. Returns the new socket number.
+ */
+int netfilter_queue_init(int queue_num)
+{
+	int nlfd;
+	struct sockaddr_nl nladdr;
+	socklen_t nladdr_len;
+
+	/* set up a netlink netfilter socket */
+	nlfd = socket(AF_NETLINK, SOCK_RAW, NETLINK_NETFILTER);
+	if (nlfd < 0) {
+		printf("*** %s error opening Netlink socket: "
+			"%s\n", __FUNCTION__, strerror(errno));
+		return(-1);
+	}
+
+	memset(&nladdr, 0, sizeof(nladdr));
+	nladdr.nl_family = AF_NETLINK;
+	nladdr.nl_groups = 0;
+	nladdr_len = sizeof(nladdr);
+
+	if (getsockname(nlfd, SA(&nladdr), &nladdr_len) < 0) {
+		printf("*** %s getsockname error: %s\n",
+			__FUNCTION__, strerror(errno));
+		return(-1);
+	}
+	/* initial bind with port/pid zero */
+	if (bind(nlfd, SA(&nladdr), sizeof(nladdr)) < 0) {
+		printf("*** %s error with init Netlink socket bind: "
+			"%s\n", __FUNCTION__, strerror(errno));
+		return(-1);
+	}
+	/* get netlink port/pid assigned by the kernel */
+	nladdr_len = sizeof(nladdr);
+	if (getsockname(nlfd, SA(&nladdr), &nladdr_len) < 0) {
+		printf("*** %s getsockname error: %s\n",
+			__FUNCTION__, strerror(errno));
+		return(-1);
+	}
+	if (bind(nlfd, SA(&nladdr), sizeof(nladdr)) < 0) {
+		printf("*** %s error binding Netlink socket: "
+			"%s\n", __FUNCTION__, strerror(errno));
+		return(-1);
+	}
+
+	/* disconnect any existing queue */	
+	if (netfilter_queue_unbind(nlfd, queue_num, AF_INET) < 0) {
+		printf("*** %s error un-binding Netlink queue\n",
+			__FUNCTION__);
+		return(-1);
+	}
+	/* bind to address family */
+	if (netfilter_queue_bind(nlfd, queue_num, AF_INET) < 0) {
+		printf("*** %s error binding Netlink queue\n", __FUNCTION__);
+		return(-1);
+	}
+	/* bind to queue number */
+	if (netfilter_queue_bind(nlfd, queue_num, 0) < 0) {
+		printf("*** %s error binding Netlink queue\n", __FUNCTION__);
+		return(-1);
+	}
+	/* configure the queue */
+	if (netfilter_queue_config_param(nlfd, queue_num) < 0) {
+		printf("*** %s error setting queue mode\n", __FUNCTION__);
+		return(-1);
+	}
+	return(nlfd);
+}
+
+/*
+ * \fn netfilter_queue_bind()
+ *
+ * \param nlfd		netlink socket
+ * \param n		queue number
+ * \param af		address family
+ *
+ * \brief  Send a BIND or PF_BIND netfilter command message.
+ */
+int netfilter_queue_bind(int nlfd, int n, int af)
+{
+	int c = NFQNL_CFG_CMD_BIND;
+	if (af > 0)
+		c = NFQNL_CFG_CMD_PF_BIND;
+	return(netfilter_queue_config_command(nlfd, n, c, af));
+}
+
+/*
+ * \fn netfilter_queue_unbind()
+ *
+ * \param nlfd		netlink socket
+ * \param n		queue number
+ * \param af		address family
+ *
+ * \brief  Send an UNBIND or PF_UNBIND netfilter command message.
+ */
+int netfilter_queue_unbind(int nlfd, int n, int af)
+{
+	int c = NFQNL_CFG_CMD_UNBIND;
+	if (af > 0)
+		c = NFQNL_CFG_CMD_PF_UNBIND;
+	return(netfilter_queue_config_command(nlfd, n, c, af));
+}
+
+/*
+ * \fn netfilter_queue_config_command()
+ *
+ * \param nlfd		netlink socket
+ * \param queue_num	queue number
+ * \param cmd		configuration command type
+ * \param af		address family
+ *
+ * \brief  Build and send a netfilter queue configuration command, which is
+ *         used for bind and unbind commands.
+ */
+int netfilter_queue_config_command(int nlfd, int queue_num, int cmd, int af)
+{
+	__u8 buf[512];
+	int len;
+	struct nfqnl_msg_config_cmd *c;
+
+	len = NLMSG_ALIGN(sizeof(struct nfqnl_msg_config_cmd));
+        c = (struct nfqnl_msg_config_cmd *) 
+	    netfilter_queue_command_hdr(buf, queue_num, NFQA_CFG_CMD, &len);
+	c->command = cmd;
+	c->pf = htons(af);
+	
+	return(netfilter_queue_sendmsg(nlfd, buf, len));
+}
+
+
+/*
+ * \fn netfilter_queue_config_param()
+ *
+ * \param nlfd		netlink socket
+ * \param queue_num	queue number
+ *
+ * \brief  Build and send a netfilter queue configuration parameters message.
+ * This sets the given queue number to packet copy mode.
+ */
+int netfilter_queue_config_param(int nlfd, int queue_num)
+{
+	__u8 buf[512];
+	int len;
+	struct nfqnl_msg_config_params *p;
+
+	len = NLMSG_ALIGN(sizeof(struct nfqnl_msg_config_params));
+        p = (struct nfqnl_msg_config_params *) 
+	    netfilter_queue_command_hdr(buf, queue_num, NFQA_CFG_PARAMS, &len);
+	p->copy_range = 0xFFFF;
+	p->copy_mode = NFQNL_COPY_PACKET;
+	
+	return(netfilter_queue_sendmsg(nlfd, buf, len));
+}
+
+/*
+ * \fn netfilter_queue_command_hdr()
+ *
+ * \param buf		destination buffer
+ * \param queue_num	queue number
+ * \param type		netfilter attribute type
+ * \param len		(in) attribute data length, (out) message length
+ *
+ * \brief Build a netfilter queue config message into buf; return a pointer to
+ *	  the attribute data.
+ */
+__u8* netfilter_queue_command_hdr(__u8 *buf, int queue_num, int type, int *len)
+{
+	int msglen;
+	struct nlmsghdr *n;
+	struct nfgenmsg *g;
+	struct nfattr *attr;
+
+	msglen = sizeof(struct nlmsghdr) + sizeof(struct nfgenmsg) + 
+		sizeof(struct nfattr) + *len;
+	memset(buf, 0, msglen);
+
+	n = (struct nlmsghdr*) buf;
+	n->nlmsg_len = NLMSG_ALIGN(msglen);
+	n->nlmsg_type = (NETLINK_FIREWALL << 8) | NFQNL_MSG_CONFIG;
+	n->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
+	n->nlmsg_pid = 0;
+	n->nlmsg_seq = 0;
+	
+	g = (struct nfgenmsg *) ++n;
+	g->nfgen_family = 0;
+	g->version = 0;
+	g->res_id = htons(queue_num);
+
+	attr = (struct nfattr *) ++g;
+	attr->nfa_type = type;
+	attr->nfa_len = sizeof(struct nfattr) + *len;
+
+	*len = msglen;
+	return (__u8*) ++attr;
+}
+
+#define PRINT_NLMSGHDR(n) { \
+	printf("nlmsg len=%d type=%d flags=%d seq=%d pid=%d\n", \
+		n->nlmsg_len, n->nlmsg_type, n->nlmsg_flags, \
+		n->nlmsg_seq, n->nlmsg_pid); }
+
+
+/*
+ * \fn netfilter_queue_sendmsg()
+ *
+ * \param nlfd		netlink socket
+ * \param data		ptr of data to send (struct nlmsghdr)
+ * \param len		length of data to send
+ *
+ * \brief  Send data on the netlink socket and receive the kernel's reply.
+ */
+int netfilter_queue_sendmsg(int nlfd, __u8 *data, int len)
+{
+	struct sockaddr_nl nladdr;
+	struct nlmsghdr *resp;
+	int recv_len, expected_type;
+	char buf[512];
+	struct iovec iov = { buf, sizeof(buf) };
+	struct msghdr msg = {
+		(void*)&nladdr, sizeof(nladdr),
+		&iov, 1, NULL, 0 ,0
+	};
+#if 0
+	int i;
+	printf("---- hex\n");
+	for (i=0; i<len; i++) {
+		printf("%02x ", data[i] & 0xFF);
+		if (i > 0 && (i % 16) == 0) printf("\n");
+	}
+	printf("\n---- end hex\n");
+#endif
+	expected_type = ((struct nlmsghdr*) data)->nlmsg_type & 0xFF;
+
+	memset(&nladdr, 0, sizeof(nladdr));
+	nladdr.nl_family = AF_NETLINK;
+	if (sendto(nlfd, (void*)data, len, 0, SA(&nladdr),
+		sizeof(nladdr)) < 0) {
+		printf("netfilter_queue_sendmsg(): sendto error: %s\n",
+			strerror(errno));
+		return(-1);
+	}
+
+	if ((recv_len = recvmsg(nlfd, &msg, 0)) < 0) {
+		printf("netfilter_queue_set(): recvmsg error: %s\n",
+			strerror(errno));
+		return(-1);
+	}
+	resp = (struct nlmsghdr*) buf;
+	while (NLMSG_OK(resp, recv_len)) {
+		if (resp->nlmsg_type != expected_type) {
+			return(-1);
+		}
+		resp = NLMSG_NEXT(resp, recv_len);
+	}
+	return(0);
+}
+
+/*
+ * \fn netfilter_get_packet()
+ *
+ * \param nlfd		netlink socket
+ * \param buf		destination packet buffer
+ * \param buf_len	(in) size of buffer, (out) length of packet stored
+ * \param family	ptr to store packet address family
+ * \param id		ptr to store packet id (used with verdict)
+ * \param hook		ptr to store netfilter hook number
+ * \param ifi		ptr to store received interface index
+ *
+ * \brief  Receive packet from the kernel's netlink netfilter queue.
+ */
+int netfilter_get_packet(int nlfd, __u8 *buf, int *buf_len, __u8 *family,
+	__u32 *id, __u8 *hook, int *ifi)
+{
+	struct sockaddr_nl nladdr_from;
+	socklen_t nladdr_len;
+	struct nlmsghdr *n;
+	struct nfgenmsg *nfmsg;
+	struct nfattr *attr;
+	struct nfqnl_msg_packet_hdr *pkt;
+	int len, err = -1;
+	__u32 *p32;
+
+	nladdr_len = sizeof(nladdr_from);
+	len = recvfrom(nlfd, buf, *buf_len, 0,
+			SA(&nladdr_from), &nladdr_len);
+	if (len < 0) {
+		printf("*** %s recvfrom error: %s\n",
+			__FUNCTION__, strerror(errno));
+		return(-1);
+	}
+
+	n = (struct nlmsghdr *) buf;
+
+	/* PRINT_NLMSGHDR(n) */
+	if (n->nlmsg_len != len) {
+		printf("*** %s length mismatch %d != %d\n",
+			__FUNCTION__, n->nlmsg_len, len);
+		return(-1);
+	}
+	if ((n->nlmsg_type & 0xFF) != NFQNL_MSG_PACKET) {
+		printf("ignoring netlink packet type %d\n", n->nlmsg_type);
+		return(-1);
+	}
+	nfmsg = (struct nfgenmsg*) NLMSG_DATA(n);
+	*family = nfmsg->nfgen_family;
+	/* printf("family=%d ver=%d queuenum=%d\n", nfmsg->nfgen_family,
+		nfmsg->version, ntohs(nfmsg->res_id)); */
+
+	attr = (struct nfattr*) NFM_NFA(nfmsg);
+	len = NFM_PAYLOAD(n);
+	while (NFA_OK(attr, len)) {
+		/* printf(" attr: %d len=%d (remain %d)\n",
+			NFA_TYPE(attr), attr->nfa_len, len); */
+		switch (NFA_TYPE(attr)) {
+		case NFQA_PACKET_HDR:
+			pkt = (struct nfqnl_msg_packet_hdr *) NFA_DATA(attr);
+			*id = ntohl(pkt->packet_id);
+			*hook = pkt->hook;
+			/* printf("packet_id = %d, hwproto = %d, hook = %d\n",
+				*id, pkt->hw_protocol, pkt->hook); */
+			break;
+		case NFQA_IFINDEX_INDEV:
+		case NFQA_IFINDEX_OUTDEV:
+			p32 = (__u32*) NFA_DATA(attr);
+			*ifi = ntohl(*p32);
+			break;
+		case NFQA_HWADDR:
+			break;
+		case NFQA_PAYLOAD:
+			if (*buf_len < attr->nfa_len) {
+				printf("%s packet too large: %d < %d\n",
+					__FUNCTION__, *buf_len, attr->nfa_len);
+				return(-1);
+			}
+			*buf_len = NFA_PAYLOAD(attr);
+			memcpy(buf, NFA_DATA(attr), *buf_len);
+			err = 0;
+			break;
+		}
+		attr = NFA_NEXT(attr, len);
+	}
+	if (err < 0) {
+		printf("*** %s did not receive packet payload data!\n",
+			__FUNCTION__);
+	}
+	return(err);
+}
+
+/*
+ * \fn netfilter_queue_set_verdict()
+ *
+ * \param nlfd		netlink socket
+ * \param queue_num	queue number
+ * \param id		packet id
+ * \param verict	accept, drop, or steal packet
+ * \param data_len	length of optional modified packet data
+ * \param data		optional modified packet data
+ *
+ * \brief  Tell the kernel to accept or drop a queued packet via netlink.
+ */
+int netfilter_queue_set_verdict(int nlfd, int queue_num, __u32 id, 
+	__u32 verdict, int data_len, __u8 *data)
+{
+	struct iovec iov[2];
+	int msglen, nv;
+	struct nlmsghdr *n;
+	struct nfgenmsg *g;
+	struct nfattr *attr;
+	struct nfqnl_msg_verdict_hdr *v;
+	__u8 buf[512];
+	struct sockaddr_nl nladdr;
+	struct msghdr msg;
+
+	/* printf("%s() id=%d verdict=%d (data_len=%d)\n", __FUNCTION__,
+		id, verdict, data_len); */
+
+	msglen = sizeof(struct nlmsghdr) + sizeof(struct nfgenmsg) +
+	    	sizeof(struct nfattr) + sizeof(struct nfqnl_msg_verdict_hdr);
+	if (data_len > 0) {
+		msglen += sizeof(struct nfattr) + data_len;
+	}
+	memset(buf, 0, sizeof(buf));
+
+	n = (struct nlmsghdr*) buf;
+	n->nlmsg_len = NLMSG_ALIGN(msglen);
+	n->nlmsg_type = (NETLINK_FIREWALL << 8) | NFQNL_MSG_VERDICT;
+	n->nlmsg_flags = NLM_F_REQUEST;
+	n->nlmsg_pid = 0;
+	n->nlmsg_seq = 0;
+	
+	g = (struct nfgenmsg *) ++n;
+	g->nfgen_family = 0;
+	g->version = 0;
+	g->res_id = htons(queue_num);
+
+	attr = (struct nfattr *) ++g;
+	attr->nfa_type = NFQA_VERDICT_HDR;
+	attr->nfa_len = sizeof(struct nfattr) + 
+			sizeof(struct nfqnl_msg_verdict_hdr);
+
+	v = (struct nfqnl_msg_verdict_hdr *) ++attr;
+	v->verdict = htonl(verdict);
+	v->id = htonl(id);
+
+	memset(iov, 0, sizeof(iov));
+	iov[0].iov_base = buf;
+
+	/* IO vector used to avoid extra data copy for modified packets */
+	if (data_len > 0) {
+		attr = (struct nfattr *) ++v;
+		attr->nfa_type = NFQA_PAYLOAD;
+		attr->nfa_len = sizeof(struct nfattr) + data_len;
+		iov[0].iov_len = msglen - data_len;
+		iov[1].iov_base = data;
+		iov[1].iov_len = data_len;
+		nv = 2;
+	} else {
+		iov[0].iov_len = msglen;
+		nv = 1;
+	}
+
+	memset(&nladdr, 0, sizeof(nladdr));
+	nladdr.nl_family = AF_NETLINK;
+
+	msg.msg_name = (void *)&nladdr;
+	msg.msg_namelen = sizeof(nladdr);
+	msg.msg_iov = iov;
+	msg.msg_iovlen = nv;
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
+
+	if (sendmsg(nlfd, &msg, 0) < 0) {
+		printf("%s(): sendmsg error: %s\n",
+			__FUNCTION__, strerror(errno));
+		return(-1);
+	}
+	return(0);
+}
