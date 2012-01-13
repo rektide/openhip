@@ -150,17 +150,9 @@ fi
 #
 # HIP mobile router server extensions 
 ################################################################################
-# check to make sure libipq is present if we are going to compile
-# mobile router support
 want_mobile_router=false
 if test "x$enable_mobile_router" = "xyes"; then
-	AC_CHECK_LIB([ipq], [ipq_create_handle])
-	if test "x$ac_cv_lib_ipq_ipq_create_handle" = "xyes"; then
-		CFLAGS="$CFLAGS -DMOBILE_ROUTER"
-		want_mobile_router=true
-	else
-		AC_MSG_ERROR([mobile router server extensions requested but libipq not found! Aborting.])
-	fi
+	want_mobile_router=true
 fi
 
 #
