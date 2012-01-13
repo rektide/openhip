@@ -1379,9 +1379,8 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 
 	if (entry->spinat) {
 #ifdef VERBOSE_MR_DEBUG
-		printf("Entry has spinat of 0x%x\n", entry->spinat);
-		printf("Changing 0x%x to 0x%x\n", ntohl(esp->spi),
-			entry->spinat);
+		printf("Rewriting outgoing ESP SPI from 0x%x to 0x%x.\n",
+			ntohl(esp->spi), entry->spinat);
 #endif /* VERBOSE_MR_DEBUG */
 		esp->spi = htonl(entry->spinat);
 	}
