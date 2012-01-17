@@ -18,7 +18,6 @@
  * 
  * User-mode HIP ESP implementation.
  *
- * tunreader portions Copyright (C) 2004 UC Berkeley
  */
 #include <stdio.h>		/* printf() */
 #ifdef __WIN32__
@@ -56,12 +55,7 @@
 #include <hip/hip_usermode.h>
 #include <hip/hip_sadb.h>
 #include <hip/hip_globals.h>
-
-#if defined(__BIG_ENDIAN__) || defined( __MACOSX__)
-#include <mac/checksum_mac.h>
-#else
 #include <win32/checksum.h>
-#endif
 
 #ifdef HIP_VPLS
 #include <utime.h>
