@@ -72,6 +72,7 @@ extern void del_divert_rule(int);
 #endif
 /* from hip_main.c */
 #ifdef __WIN32__
+#define __FUNCTION__ "debug"
 void hip_handle_packet(__u8* buff, int length, struct sockaddr *src);
 #else
 void hip_handle_packet(struct msghdr *msg, int length, __u16 family);
@@ -253,7 +254,7 @@ void hip_handle_esp(char *data, int length)
 		break;
 	    case ESP_UDP_CTL:
 		len = ntohl(msg->message_data);
-		if (len != (length - sizeof(espmsg))) {
+		if (len != (length - (int)sizeof(espmsg))) {
 		    log_(WARN, "mismatched length received from ESP thread\n");
 		    return;
 		}

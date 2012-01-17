@@ -1916,14 +1916,14 @@ void esp_start_base_exchange(struct sockaddr *lsi)
 {
 	struct sockaddr_storage dst;
 	const int len = sizeof(espmsg) + sizeof(struct sockaddr_storage);
-	char msgbuff[len];
+	char msgbuff[sizeof(espmsg) + sizeof(struct sockaddr_storage)];
+	espmsg *msg = (espmsg*) &msgbuff[0];
 	
         /* lsi is in host byte order, convert to network for ACQUIRE message */
 	memcpy(&dst, lsi, sizeof(struct sockaddr_storage));
 	if (dst.ss_family == AF_INET) {
 	    LSI4(&dst) = htonl(LSI4(lsi));
 	}
-	espmsg *msg = (espmsg*) &msgbuff[0];
 	msg->message_type = ESP_ACQUIRE_LSI;
 	msg->message_data = htonl(sizeof(struct sockaddr_storage));
 	memcpy(&msgbuff[sizeof(espmsg)], &dst, sizeof(struct sockaddr_storage));
@@ -1959,15 +1959,16 @@ void esp_signal_loss(__u32 spi, __u32 loss, struct sockaddr *dst)
 {
 	const int len = sizeof(espmsg) + 2*sizeof(__u32) + \
 			sizeof(struct sockaddr_storage);
-	char msgbuff[len];
+	char msgbuff[sizeof(espmsg) + 2*sizeof(__u32) + \
+			sizeof(struct sockaddr_storage)];
 	struct _loss_data {
 		__u32 spi;
 		__u32 loss;
 		struct sockaddr_storage dst;
 	} *ld;
+	espmsg *msg = (espmsg*) &msgbuff[0];
 
 	memset(msgbuff, 0, len);
-	espmsg *msg = (espmsg*) &msgbuff[0];
 	msg->message_type = ESP_ADDR_LOSS;
 	msg->message_data = htonl(len - sizeof(espmsg));
 

@@ -1994,7 +1994,7 @@ int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name)
  */
 int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force) {
 	int n=0;
-	int len = 0;
+	__u16 len = 0;
 	sockaddr_list *l;
 	tlv_locator *loc;
 	locator *lp;

@@ -53,7 +53,6 @@ OBJS =	$(SRC)\$(SRCPROTO)\hip_addr.obj \
 	$(SRC)\$(SRCUM)\hip_sadb.obj \
 	$(SRC)\$(SRCUM)\hip_status2.obj \
 	$(SRC)\$(SRCUM)\hip_umh_main.obj \
-	$(SRC)\$(SRCUM)\libipsec_stub.obj \
 	$(SRC)\$(SRCUTIL)\hip_util.obj \
 	$(SRC)\$(SRCUTIL)\hip_xml.obj \
 	$(SRC)\$(SRCW32)\socketpair.obj \

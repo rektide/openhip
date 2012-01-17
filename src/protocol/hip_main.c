@@ -83,6 +83,9 @@
 #ifdef __MACOSX__
 extern void del_divert_rule(int);
 #endif
+#ifdef __WIN32__
+extern int socketpair(int, int, int, int sv[2]);
+#endif
 
 #ifndef __MACOSX__
 #ifndef __WIN32__
