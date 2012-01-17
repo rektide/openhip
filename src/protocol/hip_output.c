@@ -2009,6 +2009,9 @@ int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force) {
 	if (!force && (n < 2)) { /* no other locators besides preferred */
 		return(0);
 	}
+	if (!force && !OPT.mh) { /* multihoming turned off, don't send all */
+		return(0);
+	}
 	memset(data, 0, len + sizeof(tlv_locator) - sizeof(locator));
 
 	/* build a locator parameter containing all of our addresses */
