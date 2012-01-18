@@ -78,12 +78,15 @@ SERVICE_STATUS_HANDLE g_srv_status_handle;
 char SERVICE_NAME[255] = "HIP";
 char DISPLAY_NAME[255] = "HIP";
 
-/*
- * macros come from OpenVPN 2.0_beta11 file tap-win32/common.h
- * not compatible with OpenVPN 1.60
- */
-#include <win32/openvpn-common.h>
+#define ADAPTER_KEY "SYSTEM\\CurrentControlSet\\Control\\Class\\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+
+#define NETWORK_CONNECTIONS_KEY "SYSTEM\\CurrentControlSet\\Control\\Network\\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+
 #define REG_INTERFACES_KEY "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces"
+
+#define TAP_IOCTL_SET_MEDIA_STATUS CTL_CODE (FILE_DEVICE_UNKNOWN, 6, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+#define TAP_COMPONENT_ID "tap0801"
 
 /*
  * Local function declarations
@@ -448,7 +451,7 @@ HANDLE init_tap()
 		return NULL;
 	}
 
-	/* find the adapter with TAPSUFFIX */
+	/* find the adapter with .tap suffix */
 	for (enum_index = 0; ; enum_index++) {
 		len = sizeof(devid);
 		if(RegEnumKeyEx(key, enum_index, devid, &len, 
@@ -461,7 +464,7 @@ HANDLE init_tap()
 
 		retry_attempts = 0;	
 init_tap_create_file_retry:
-		sprintf(devname, USERMODEDEVICEDIR "%s" TAPSUFFIX, devid);
+		sprintf(devname, "\\\\.\\Global\\%s.tap", devid);
 		hTAP32 = CreateFile(devname, GENERIC_WRITE | GENERIC_READ,
 			    0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_SYSTEM, 0);
 
@@ -749,7 +752,7 @@ int setup_tap()
 		return(-1);
 	}
 
-	/* find the adapter with TAPSUFFIX */
+	/* find the adapter with .tap suffix */
 	for (enum_index = 0; ; enum_index++) {
 		len = sizeof(devid);
 		if(RegEnumKeyEx(key, enum_index, devid, &len, 
@@ -771,7 +774,7 @@ int setup_tap()
 			return(-1);
 		}
 	
-		sprintf(devname, USERMODEDEVICEDIR "%s" TAPSUFFIX, devid);
+		sprintf(devname, "\\\\.\\Global\\%s.tap", devid);
 		hTAP32 = CreateFile(devname, GENERIC_WRITE | GENERIC_READ,
 			    0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_SYSTEM, 0);
 		
