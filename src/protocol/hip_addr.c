@@ -71,7 +71,7 @@
 #include <windows.h>		/* Windows registry access */
 #define __FUNCTION__ "debug"
 #define REG_INTERFACES_KEY "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces"
-#include <win32/rtnetlink.h>
+#include <win32/netlink.h>
 #endif
 #endif
 

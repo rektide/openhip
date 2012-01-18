@@ -37,7 +37,7 @@
 #include <hip/hip_service.h>
 #include <hip/hip_types.h>
 #include <hip/hip_sadb.h>		/* access to SADB */
-#include <win32/rtnetlink.h>		/* from <linux/rtnetlink.h> */
+#include <win32/netlink.h>
 
 /*
  * Globals
@@ -313,34 +313,6 @@ int netlink_send_addr(int add_del, DWORD addr, DWORD ifindex)
 	
 	return(0);
 }
-
-#ifdef ADAPTER_INFO
-	PIP_ADAPTER_INFO pAdapterInfo;
-	PIP_ADAPTER_INFO a = NULL;
-	ULONG outBufLen;
-	DWORD ret;
-
-	pAdapterInfo = (IP_ADAPTER_INFO*) malloc( sizeof(IP_ADAPTER_INFO) );
-	outBufLen = sizeof(IP_ADAPTER_INFO);
-
-	/* Determine size of buffer */
-	if (GetAdaptersInfo(pAdapterInfo, &outBufLen) == ERROR_BUFFER_OVERFLOW){
-		free(pAdapterInfo);
-		pAdapterInfo = (IP_ADAPTER_INFO*) malloc(outBufLen);
-	}
-
-	/* */
-	if ((ret = GetAdaptersInfo( pAdapterInfo, &outBufLen)) == NO_ERROR) {
-		for (a = pAdapterInfo; a; a = a->Next ) {
-			printf("Adapter: %s ", a->AdapterName);
-			printf("IP: %s\n", a->IpAddressList.IpAddress.String);
-		}
-	} else {
-		printf("Error reading adapter info.\n");
-	}
-
-	free(pAdapterInfo);
-#endif
 
 int sendIpAddrTable(PMIB_IPADDRTABLE pTable)
 {

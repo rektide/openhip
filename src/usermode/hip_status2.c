@@ -35,7 +35,6 @@
 #include <hip/hip_sadb.h>		/* access to SADB */
 #include <hip/hip_status.h>
 #include <hip/hip_funcs.h>	/* pthread_mutex_lock() */
-#include <win32/rtnetlink.h>		/* from <linux/rtnetlink.h> */
 
 #ifdef HIP_VPLS
 #include <utime.h>
