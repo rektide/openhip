@@ -1,5 +1,7 @@
 #! /bin/bash
 
+USE_SYSLOG=y
+
 if [ -e /var/run/hip.pid ]; then
 	logger -s "killing any running hip processes"
 	killall hip || true
@@ -29,7 +31,14 @@ elif [ -e /tmp/private_hosts ]; then
 fi
 
 logger -s "Starting HIP daemon"
-#mv /var/log/hip/hip.log /var/log/hip/hip.log-`date +"%Y%m%d%H%M%S"`
+
 /usr/local/etc/hip/bridge_down.sh
-/usr/local/sbin/hip -v 2>&1 > /var/log/hip.log &
+
+if [ $USE_SYSLOG = "y" ]; then
+    /usr/local/sbin/hip -v 2>&1 | (tee /dev/null | logger -t hiplog) &
+else
+    mv /var/log/hip/hip.log /var/log/hip/hip.log-`date +"%Y%m%d%H%M%S"`
+    /usr/local/sbin/hip -v > /var/log/hip.log 2>&1 &
+fi
+
 ifconfig hip0 mtu 1500
