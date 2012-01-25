@@ -622,7 +622,11 @@ void unbuffer_packets(hip_lsi_entry *entry)
 		/* read first byte to determine if IPv4/IPv6, and get length */
 		iph = (struct ip*) &data[14];
 		ip6h = (struct ip6_hdr*) &data[14];
-		if (iph->ip_v == 4) {/* IPv4 packet */
+		if ((data[12] == 0x08) && (data[13] == 0x06)) {
+			len = sizeof(struct arp_hdr) +
+			      sizeof(struct arp_req_data) + 14;
+			sprintf(ipstr, "ARP");
+		} else if (iph->ip_v == 4) {/* IPv4 packet */
 			len = ntohs(iph->ip_len) + 14;
 			sprintf(ipstr, "IPv4");
 		} else if ((ip6h->ip6_vfc & 0xF0) == 0x60) {/* IPv6 packet */

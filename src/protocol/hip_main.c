@@ -245,6 +245,9 @@ int main_loop(int argc, char **argv)
 	memset(HCNF.conf_filename, 0, sizeof(HCNF.conf_filename));
 	memset(HCNF.my_hi_filename, 0, sizeof(HCNF.my_hi_filename));
 	memset(HCNF.known_hi_filename, 0, sizeof(HCNF.known_hi_filename));
+#ifdef HIP_VPLS
+	HCNF.endbox_hello_time = 0;
+#endif
 
 	/*
 	 * check program arguments

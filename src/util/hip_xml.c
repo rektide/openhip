@@ -813,10 +813,12 @@ int read_conf_file(char *filename)
 			sscanf(data, "%d", &tmp);
 			HCNF.dh_group = (__u8)tmp;
 #ifdef HIP_VPLS
-               } else if (strcmp((char *)node->name, "master_interface")==0) {
-                       HCNF.master_interface = strdup(data);
-               } else if (strcmp((char *)node->name, "master_interface2")==0) {
-                       HCNF.master_interface2 = strdup(data);
+		} else if (strcmp((char *)node->name, "master_interface")==0) {
+			HCNF.master_interface = strdup(data);
+		} else if (strcmp((char *)node->name, "master_interface2")==0) {
+			HCNF.master_interface2 = strdup(data);
+		} else if (strcmp((char *)node->name, "endbox_hello_time")==0) {
+			sscanf(data, "%d", &HCNF.endbox_hello_time);
 #endif
 		} else if (strcmp((char *)node->name, "dh_lifetime")==0) {
 			sscanf(data, "%d", &HCNF.dh_lifetime);
