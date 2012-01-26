@@ -1283,7 +1283,7 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 {
 	unsigned char *p, *phit = NULL;
 	char name[NS_MAXDNAME], fn[25] = "receive_hip_dns_response";
-	int i, qn_len, hi_len = 0, name_len = 0;
+	int i, qn_len, name_len = 0;
 	struct dns_hdr *r;
 	struct dns_ans_hdr *dnsans;
 	__u8  hit_len, pk_alg;
@@ -1356,7 +1356,7 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 			phit = p;
 			p += hit_len;
 			log_(NORM, "HIP DNS RR: ");
-			hi_len = key_data_to_hi(p, pk_alg, pk_len, DIT_NONE, 0,
+			key_data_to_hi(p, pk_alg, pk_len, DIT_NONE, 0,
 						&hi, len - (p - buff));
 		}
 

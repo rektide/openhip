@@ -744,9 +744,6 @@ restore_saved_peer_hi:
 int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src)
 {
 	int err=0;
-	hiphdr *hiph;
-
-	hiph = (hiphdr*) buff;
 
 	/* R1 only accepted in these states */
 	if ((hip_a->state != I1_SENT) && (hip_a->state != I2_SENT) &&
