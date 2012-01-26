@@ -252,13 +252,13 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 #ifdef HIP_VPLS
 int output_HI(xmlNodePtr root_node, hi_options *opts)
 {
-	int err, rc;
+	int err;
 	char tmp[22], hit_hex[INET6_ADDRSTRLEN], lsi_str[INET_ADDRSTRLEN];
 	unsigned char *hitp;
 	struct sockaddr_storage hit;
 	struct sockaddr_in lsi;
 	xmlNodePtr hi;
-	unsigned long e;
+	/* unsigned long e; */
 	hi_node hostid;
 	extern ENGINE *engine_init(char *);
 	extern SSL_CTX *ssl_ctx_init(ENGINE *e, const char *pin);
@@ -320,7 +320,7 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 	sprintf(buff, "%d:%d", slot, id);
         parms.cert_id = buff;
 	parms.cert = NULL;
-	rc=ENGINE_ctrl_cmd(engine, "LOAD_CERT_CTRL", 0, &parms, NULL, 1);
+	ENGINE_ctrl_cmd(engine, "LOAD_CERT_CTRL", 0, &parms, NULL, 1);
         if(parms.cert)
 	  printf("get cert - %s\n", buff);
 
@@ -354,8 +354,8 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 		}
 	}
 	else if(rsa) {
-		e = HIP_RSA_DFT_EXP;
-		/* rsa = RSA_generate_key(opts->bitsize, e, cb, stdout);
+		/* = HIP_RSA_DFT_EXP;
+		rsa = RSA_generate_key(opts->bitsize, e, cb, stdout);
 		if (!rsa) {
 			fprintf(stderr, "RSA_generate_key() failed.\n");
 			exit(1);

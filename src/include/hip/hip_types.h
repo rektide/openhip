@@ -887,6 +887,7 @@ struct hip_conf {
 	char *cfg_serv_basedn;          /* e.g. ldap base dn */
 	char *cfg_serv_login_id;        /* e.g. ldap binddn */
 	char *cfg_serv_login_pwd;	/* e.g. ldap bindpw */
+	__u32 endbox_hello_time;        /* frequency of endbox hellos on overlay */
 #endif /* HIP_VPLS */
 	char conf_filename[255];
 	char my_hi_filename[255];

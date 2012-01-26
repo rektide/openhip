@@ -70,7 +70,6 @@
 
 #ifdef HIP_VPLS
 int touchHeartbeat;
-static int get_more_legacy_macs;
 #endif
 
 #ifdef __WIN32__
@@ -197,6 +196,7 @@ void *hip_esp_output(void *arg)
 #ifndef HIP_VPLS
 	__u32 lsi_ip;
 #else
+	struct arp_hdr *arph;
 	time_t last_time, now_time;
 	int packet_count = 0;
 #endif
@@ -226,7 +226,6 @@ void *hip_esp_output(void *arg)
 	last_time = time(NULL);
 	printf("hip_esp_output() thread (tid %u pid %d) started...\n",
 	       (unsigned)pthread_self(), getpid());
-	get_more_legacy_macs = build_host_mac_map();
 #else
 	printf("hip_esp_output() thread started...\n");
 #endif
@@ -245,8 +244,7 @@ void *hip_esp_output(void *arg)
 #ifdef HIP_VPLS
 		endbox_periodic_heartbeat(&now_time, &last_time, &packet_count,
 			"output", touchHeartbeat);
-		if (get_more_legacy_macs)
-			get_more_legacy_macs = build_host_mac_map();
+		endbox_check_hello_time(&now_time);
 #endif
 
 		if ((err = select(readsp[1]+1, &fd, NULL, NULL, &timeout))< 0) {
@@ -479,6 +477,7 @@ void *hip_esp_output(void *arg)
 		 * ARP 
 		 */
 		} else if ((raw_buff[12] == 0x08) && (raw_buff[13] == 0x06)) {
+#ifndef HIP_VPLS
 			/*
 			printf("Raw buffer before handle_arp:\n");
 			hex_print("\n\t", raw_buff, 60, 0);
@@ -496,8 +495,99 @@ void *hip_esp_output(void *arg)
 			if (write(tapfd, data, len) < 0) {
 				printf("hip_esp_output write() failed.\n");
 			}
+#endif /* __WIN32__ */
+#else /* HIP_VPLS */
+			/* Is the ARP for one of our legacy nodes? */
+			arph = (struct arp_hdr*) &raw_buff[14];
+			if (endbox_arp_packet_check(arph, lsi, &packet_count)<0)
+				continue;
+			/* Why send an acquire during ARP? */
+			/* Trying to do layer two */
+			if (!(entry = hip_sadb_lookup_addr(lsi))) {
+				if (buffer_packet(lsi, raw_buff, len)==TRUE)
+					esp_start_base_exchange(lsi);
+			} else { /* Need to send packet */
+				raw_len = len;
+				pthread_mutex_lock(&entry->rw_lock);
+#ifdef RAW_IP_OUT
+				offset = sizeof(struct ip);
+#else
+				offset = 0;
 #endif
+				err = hip_esp_encrypt(raw_buff, raw_len,
+					&data[offset], &len, entry, &now);
+				pthread_mutex_unlock(&entry->rw_lock);
+				if (err) {
+					break;
+				}
+				flags = 0;
+#ifdef RAW_IP_OUT
+				/* Build IPv4 header and send out raw socket.
+				 * Use this to override OS source address
+				 * selection problems.
+				 */
+				add_ipv4_header(data,
+					ntohl(LSI4(&entry->src_addrs->addr)), 
+					ntohl(LSI4(&entry->dst_addrs->addr)), 
+					(struct ip*)
+					&raw_buff[sizeof(struct eth_hdr)],
+					sizeof(struct ip) + len,
+					IPPROTO_ESP);
+				err = sendto(s_raw, data, 
+					sizeof(struct ip) + len, flags,
+					SA(&entry->dst_addrs->addr),
+					SALEN(&entry->dst_addrs->addr));
+#else
+#ifdef __MACOSX__ 
+/*I need to build an IP header and write it to a different address!*/
+			/* TODO: use offset above, and LSI4 macro instead
+			 *       of calls to inet_addr()
+			 */
+			memmove(&data[20],&data,len);
+			saddr = inet_addr(logaddr(SA(&entry->src_addrs->addr)));
+			daddr = inet_addr(logaddr(SA(&entry->dst_addrs->addr)));
+                        
+			add_outgoing_esp_header(data, saddr,daddr,len);
+                        
+			err = sendto(s_esp,data, len + sizeof(struct ip),
+				     flags, 0, 0);
+			if (err < 0)
+                                perror("sendto()");
+#else /* __MACOSX__ */
+				if (entry->mode == 3)
+					s = s_esp_udp;
+				else if (entry->dst_addrs->addr.ss_family ==
+						AF_INET)
+					s = s_esp;
+				else
+					s = s_esp6;
+				err = sendto(s, data, len, flags,
+						SA(&entry->dst_addrs->addr),
+						SALEN(&entry->dst_addrs->addr));
+#endif /* __MACOSX__ */
+#endif /* RAW_IP_OUT */
+				if (err < 0) {
+					printf("hip_esp_output(): sendto() "
+					       "failed: %s\n", strerror(errno));
+				} else {
+					pthread_mutex_lock(&entry->rw_lock);
+					entry->bytes += sizeof(struct ip) + err;
+					entry->usetime.tv_sec = now.tv_sec;
+					entry->usetime.tv_usec = now.tv_usec;
+					pthread_mutex_unlock(&entry->rw_lock);
+				}
+			}
+#endif /* HIP_VPLS */
 			continue;
+		/* 
+		 * Endbox hellos (uses protocol IEEE Std 802 - Local
+		 * Experimental Ethertype 1). 
+		 */
+#ifdef HIP_VPLS
+		} else if ((raw_buff[12] == 0x88) && (raw_buff[13] == 0xB5)) {
+			if (HCNF.endbox_hello_time > 0)
+				endbox_hello_check(raw_buff);
+#endif
 		} else {
 			/* debug other eth headers here */
 			/*int i;
@@ -818,9 +908,10 @@ void *tunreader(void *arg)
 	fd_set read_fdset;
 	
 #ifdef HIP_VPLS
-	time_t last_time, now_time;
+	time_t last_time, last_hello_time, now_time;
 
 	last_time = time(NULL);
+	last_hello_time = time(NULL);
 	printf("tunreader() thread (tid %d pid %d) started (%d)...\n",
 	        (unsigned)pthread_self(), getpid(), tapfd);
 #else
@@ -839,6 +930,11 @@ void *tunreader(void *arg)
 			printf("tunreader() heartbeat\n");
 			last_time = now_time;
 			utime("/usr/local/etc/hip/heartbeat_tunreader", NULL);
+		}
+		if ((HCNF.endbox_hello_time > 0) &&
+		    (now_time - last_hello_time > HCNF.endbox_hello_time)) {
+			last_hello_time = now_time;
+			endbox_send_hello();
 		}
 #endif
 		if ((err = select((tapfd+1), &read_fdset, 
@@ -999,9 +1095,6 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 	struct arp_req_data *arp_req, *arp_rply;
 	__u64 src=0, dst=0;
 	__u32 ip_dst;
-#ifdef HIP_VPLS
-	__u32 ip_sender;
-#endif /* HIP_VPLS */
 
 	/* only handle ARP requests (opcode 1) here */
 	arp_req_hdr = (struct arp_hdr*) &in[14];
@@ -1018,14 +1111,6 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 		/* skip sender MAC, sender IP, target MAC */
 		arp_req = (struct arp_req_data*)(arp_req_hdr + 1);
 		ip_dst = arp_req->dst_ip;
-#ifdef HIP_VPLS
-		ip_sender = arp_req->src_ip;
-		// log_(NORM, "##################### Raw src ip: %0X\n", ip_sender);
-		// log_(NORM, "##################### Raw dst ip: %0X\n", ip_dst);
-		/* do not proxy legacy node if both are behind the bridge */
-		if(!ack_request(ip_sender, ip_dst))
-			return -1;
-#endif
 	} else {
 		return(-1);
 	}
@@ -1034,37 +1119,8 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 		return(1);
 
 
-#ifdef HIP_VPLS
-	struct sockaddr_storage legacy_host_ss, eb_ss;
-	struct sockaddr *legacy_host_p = (struct sockaddr*)&legacy_host_ss;
-	struct sockaddr *eb_p = (struct sockaddr*)&eb_ss;
-	legacy_host_p->sa_family = AF_INET;
-	LSI4(legacy_host_p) = ip_dst;
-	// log_(NORM, "HIP_VPLS dst ip: %0X\n", ip_dst);
-	eb_p->sa_family = AF_INET;
-	if(!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)){
-		if (IS_LSI32(ip_dst)) {
-			__u32 ip_src = ip_sender;
-			if (ip_src == g_tap_lsi)
-				src = g_tap_mac;
-			else
-				return (1);
-		} else {
-			if (find_mac3(eth->src))
-				src = (__u64)g_tap_lsi << 16;
-			else
-				return (1);
-		}
-	}
-	/* XXX jeffa: the above code sets src but then it is also set below,
-	 *            seems incorrect
-	 */
-	/* convert 32-bit lsi (1.a.b.c) to 48-bit MAC address (00-00-1-a-b-c) */
-	src = (__u64)g_tap_lsi << 16;
-#else
 	/* repl with random MAC addr based on requested IP addr */
 	src = get_eth_addr(AF_INET, (__u8*)&ip_dst);
-#endif
 	// log_(NORM, "Source MAC for reply: %08X\n", src);
 	memcpy(&dst, eth->src, 6);
 	// log_(NORM, "Dest MAC for reply: %08X\n", dst);
@@ -1131,35 +1187,37 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 	int family, use_udp = FALSE;
 
 
+#ifndef HIP_VPLS
 	if ((in[12] == 0x86) && (in[13] == 0xdd))
 		family = AF_INET6;
 	else
 		family = AF_INET;
+#else
+		family = AF_UNSPEC;
+#endif
 
 	switch (family) {
 	case AF_INET:
 		iph = (struct ip*) &in[sizeof(struct eth_hdr)];
-#ifndef HIP_VPLS
 		/* BEET mode uses transport mode encapsulation. IP header is
 		 * not included. */
 		hdr_len = sizeof(struct eth_hdr) + sizeof(struct ip);
 		/* rewrite upper-layer checksum, so it is based on HITs */
-		checksum_fix = rewrite_checksum((__u8*)iph, entry->hit_magic);
-#else
-		/* HIP_VPLS uses tunnel mode encapsulation. IP header is
-		 * included. */
-		hdr_len = sizeof(struct eth_hdr);
-#endif /* HIP_VPLS */
+#ifndef HIP_VPLS
+		checksum_fix = 
+#endif
+		rewrite_checksum((__u8*)iph, entry->hit_magic);
 		break;
 	case AF_INET6:
 		ip6h = (struct ip6_hdr*) &in[sizeof(struct eth_hdr)];
-#ifndef HIP_VPLS
 		hdr_len = sizeof(struct eth_hdr) + sizeof(struct ip6_hdr);
-#else
-		hdr_len = sizeof(struct eth_hdr);
-#endif /* HIP_VPLS */
 		/* assume HITs are used as v6 src/dst, no checksum rewrite */
 		break;
+#ifdef HIP_VPLS
+	case AF_UNSPEC:
+		hdr_len = 0;
+		break;
+#endif
 	}
 
 	/* elen is length of data to encrypt
@@ -1246,6 +1304,10 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
 	padinfo = (struct ip_esp_padinfo*) &in[location + padlen];
 	padinfo->pad_length = padlen;
 	padinfo->next_hdr = (family == AF_INET) ? iph->ip_p : ip6h->ip6_nxt;
+#ifdef HIP_VPLS
+	if (family == AF_UNSPEC)
+		padinfo->next_hdr = 0;
+#endif
 	/* padinfo is encrypted too */
 	elen += padlen + 2;
 	
@@ -1670,7 +1732,6 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 		*outlen = sizeof(struct eth_hdr) + sizeof(struct ip6_hdr)+ elen;
 	}
 #else /* HIP_VPLS */
-	endbox_esp_decrypt(out, offset);
 	*outlen = sizeof(struct eth_hdr) + elen;
 #endif /* HIP_VPLS */
 

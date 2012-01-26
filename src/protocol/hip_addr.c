@@ -1216,7 +1216,6 @@ void handle_local_address_change(int add, struct sockaddr *newaddr,int if_index)
 void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr, 
     int if_index)
 {
-	int err=0;
 	struct sockaddr *oldaddr = HIPA_SRC(hip_a);
 
 	log_(NORMT, "Readdressing association with %s (%s) from ",
@@ -1233,10 +1232,6 @@ void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
 
 	rebuild_sa(hip_a, newaddr, 0, FALSE, FALSE);
 	rebuild_sa(hip_a, newaddr, 0, TRUE, FALSE);
-	if (err < 0) {
-		log_(WARN, "readdress_association() had problem sending "
-			"readdress message\n");
-	}
 	
 	/* replace the old preferred address */
 	memcpy(&hip_a->hi->addrs.addr, newaddr, SALEN(newaddr));
@@ -1267,7 +1262,6 @@ void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
 void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr, 
     struct sockaddr *newdstaddr, int if_index)
 {
-	int err=0;
 	struct sockaddr *oldaddr = HIPA_SRC(hip_a);
 
 	log_(NORMT, "Readdressing association with %s (%s) from ",
@@ -1284,10 +1278,6 @@ void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
 
 	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, FALSE);
 	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, TRUE);
-	if (err < 0) {
-		log_(WARN, "readdress_association_x2() had problem sending "
-			"readdress message\n");
-	}
 	
 	/* replace the old preferred address */
 	memcpy(&hip_a->hi->addrs.addr, newsrcaddr, SALEN(newsrcaddr));

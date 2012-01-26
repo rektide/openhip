@@ -152,6 +152,7 @@ fi
 ################################################################################
 want_mobile_router=false
 if test "x$enable_mobile_router" = "xyes"; then
+	CFLAGS="$CFLAGS -DMOBILE_ROUTER"
 	want_mobile_router=true
 fi
 
