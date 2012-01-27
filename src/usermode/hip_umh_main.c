@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2002-06 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -16,7 +16,7 @@
  *
  *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  *           Tom Henderson <thomas.r.henderson@boeing.com>
- * 
+ *
  * User-mode preparation for main_loop() and other functions that are common
  * to both Linux and win32 user-mode versions.
  *
@@ -61,7 +61,7 @@ void *hipd_main(void *args)
 	int argc, err;
 
 	/* Convert the single void *args containing a string of program
-	 * arguments into the standard argc with argv array. 
+	 * arguments into the standard argc with argv array.
 	 * Must be NULL-terminated, with arguments separated by a space. */
 	memset(argv, 0, sizeof(argv));
 	argc = 1;
@@ -76,27 +76,28 @@ void *hipd_main(void *args)
 		while(*strargs != '\0') {
 			if (*strargs == ' ') {
 				*strargs = '\0'; /* split into substrings by
-						    adding NULL */
+				                  *  adding NULL */
 				strargs++; /* point to next item */
 				argv[argc] = strargs;
 				argc++;
-				if (argc==10) /* stop at end of array */
+				if (argc == 10) { /* stop at end of array */
 					break;
+				}
 			}
 			strargs++;
 		}
 	}
 	err = main_loop(argc, argv);
-	if (err == -EINTR) { 
+	if (err == -EINTR) {
 		/* wait for signal handler shutdown,
 		 * otherwise program will hang */
-		while (g_state==0)
+		while (g_state == 0)
 #ifdef __WIN32__
-			Sleep(1000);
+		{ Sleep(1000); }
 	}
 	return;
 #else
-			sleep(1);
+		{ sleep(1); }
 	}
 	pthread_exit((void *) 0);
 	return(NULL);
@@ -114,18 +115,19 @@ int init_esp_input(int family, int type, int proto, int port, char *msg)
 	struct sockaddr_storage local_s;
 	struct sockaddr *local = SA(&local_s);
 
-	if ((family != AF_INET) && (family != AF_INET6))
+	if ((family != AF_INET) && (family != AF_INET6)) {
 		return(-1);
+	}
 	if ((s = socket(family, type, proto)) < 0) {
 		printf("%s socket() error: (%d) %s\n",
-			msg, errno, strerror(errno));
+		       msg, errno, strerror(errno));
 		return(-1);
 	}
 
 	memset(local, 0, sizeof(struct sockaddr_storage));
 	local->sa_family = family;
 	if (family == AF_INET) {
-		((struct sockaddr_in*)local)->sin_port =htons((__u16)port);
+		((struct sockaddr_in*)local)->sin_port = htons((__u16)port);
 		((struct sockaddr_in*)local)->sin_addr.s_addr = INADDR_ANY;
 	} else {
 		str_to_addr((__u8*)"0::0", local);
@@ -133,10 +135,10 @@ int init_esp_input(int family, int type, int proto, int port, char *msg)
 	}
 	if ((err = bind(s, local, SALEN(local))) < 0) {
 		printf("%s bind() error: (%d) %s\n",
-			msg, errno, strerror(errno));
+		       msg, errno, strerror(errno));
 		return(-1);
 	}
-	
+
 	return(s);
 }
 

@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2009-2012 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -65,9 +65,9 @@ typedef struct _hip_mr_client {
 } hip_mr_client;
 
 struct ip_esp_hdr {
-        __u32 spi;
-        __u32 seq_no;
-        __u8 enc_data[0];
+	__u32 spi;
+	__u32 seq_no;
+	__u8 enc_data[0];
 };
 
 #endif /* _HIP_MR_H_*/

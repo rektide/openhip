@@ -59,9 +59,9 @@ struct rtgenmsg {
 	__u8 rtgen_family;
 };
 
-#define NLMSG_ALIGNTO	4
-#define NLMSG_ALIGN(len) ( ((len)+NLMSG_ALIGNTO-1) & ~(NLMSG_ALIGNTO-1) )
-#define NLMSG_LENGTH(len) ((len)+NLMSG_ALIGN(sizeof(struct nlmsghdr)))
+#define NLMSG_ALIGNTO   4
+#define NLMSG_ALIGN(len) (((len) + NLMSG_ALIGNTO - 1) & ~(NLMSG_ALIGNTO - 1))
+#define NLMSG_LENGTH(len) ((len) + NLMSG_ALIGN(sizeof(struct nlmsghdr)))
 #define NLMSG_DATA(nlh)  ((void*)(((char*)nlh) + NLMSG_LENGTH(0)))
 
 #define RTM_NEWLINK 0x10
@@ -75,28 +75,33 @@ struct rtgenmsg {
 #define IFA_MAX 6
 #define IFA_F_PERMANENT 0x80
 
-#define RTA_ALIGNTO	4
-#define RTA_ALIGN(len) ( ((len)+RTA_ALIGNTO-1) & ~(RTA_ALIGNTO-1) )
-#define RTA_OK(rta,len) ((len) > 0 && (rta)->rta_len >= sizeof(struct rtattr) && \
-			 (rta)->rta_len <= (len))
-#define RTA_NEXT(rta,attrlen)	((attrlen) -= RTA_ALIGN((rta)->rta_len), \
-	 (struct rtattr*)(((char*)(rta)) + RTA_ALIGN((rta)->rta_len)))
-#define RTA_LENGTH(len)	(RTA_ALIGN(sizeof(struct rtattr)) + (len))
+#define RTA_ALIGNTO     4
+#define RTA_ALIGN(len) (((len) + RTA_ALIGNTO - 1) & ~(RTA_ALIGNTO - 1))
+#define RTA_OK(rta,len) ((len) > 0 && (rta)->rta_len >= \
+                         sizeof(struct rtattr) && \
+                         (rta)->rta_len <= (len))
+#define RTA_NEXT(rta,attrlen)   ((attrlen) -= RTA_ALIGN((rta)->rta_len), \
+                                 (struct rtattr*)(((char*)(rta)) + \
+                                                  RTA_ALIGN((rta)->rta_len)))
+#define RTA_LENGTH(len) (RTA_ALIGN(sizeof(struct rtattr)) + (len))
 #define RTA_DATA(rta)   ((void*)(((char*)(rta)) + RTA_LENGTH(0)))
 #define RTA_PAYLOAD(rta) ((int)((rta)->rta_len) - RTA_LENGTH(0))
 
-#define IFA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ifaddrmsg))))
+#define IFA_RTA(r)  ((struct rtattr*)(((char*)(r)) + \
+                                      NLMSG_ALIGN(sizeof(struct ifaddrmsg))))
 
 #define NLMSG_NOOP 0x1
 #define NLMSG_ERROR 0x2
 #define NLMSG_DONE 0x3
 
-#define NLMSG_ALIGNTO	4
-#define NLMSG_ALIGN(len) ( ((len)+NLMSG_ALIGNTO-1) & ~(NLMSG_ALIGNTO-1) )
+#define NLMSG_ALIGNTO   4
+#define NLMSG_ALIGN(len) (((len) + NLMSG_ALIGNTO - 1) & ~(NLMSG_ALIGNTO - 1))
 #define NLMSG_NEXT(nlh,len)  ((len) -= NLMSG_ALIGN((nlh)->nlmsg_len), \
-	  (struct nlmsghdr*)(((char*)(nlh)) + NLMSG_ALIGN((nlh)->nlmsg_len)))
+                              (struct nlmsghdr*)(((char*)(nlh)) + \
+                                                 NLMSG_ALIGN((nlh)->nlmsg_len)))
 #define NLMSG_OK(nlh,len) ((len) > 0 && \
-    (nlh)->nlmsg_len >= sizeof(struct nlmsghdr) && (nlh)->nlmsg_len <= (len))
+                           (nlh)->nlmsg_len >= sizeof(struct nlmsghdr) && \
+                           (nlh)->nlmsg_len <= (len))
 
 #define NLM_F_ROOT 0x100
 #define NLM_F_MATCH 0x200

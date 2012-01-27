@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2002-09 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,19 +15,19 @@
  *  hip_input.c
  *
  *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
- *  		Tom Henderson, <thomas.r.henderson@boeing.com>
+ *              Tom Henderson, <thomas.r.henderson@boeing.com>
  *
  */
 
-#include <stdio.h>       	/* stderr, etc                  */
-#include <stdlib.h>		/* rand()			*/
-#include <errno.h>       	/* strerror(), errno            */
-#include <string.h>      	/* memset()                     */
-#include <time.h>		/* time()			*/
-#include <ctype.h>		/* tolower()                    */
-#include <sys/types.h>		/* getpid() support, etc        */
+#include <stdio.h>              /* stderr, etc                  */
+#include <stdlib.h>             /* rand()			*/
+#include <errno.h>              /* strerror(), errno            */
+#include <string.h>             /* memset()                     */
+#include <time.h>               /* time()			*/
+#include <ctype.h>              /* tolower()                    */
+#include <sys/types.h>          /* getpid() support, etc        */
 #ifdef __WIN32__
-#include <process.h>		/* _beginthread()		*/
+#include <process.h>            /* _beginthread()		*/
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <win32/types.h>
@@ -39,21 +39,21 @@
 #else
 #include <asm/types.h>
 #endif /* __MACOSX__ */
-#include <netinet/ip.h>  	/* struct iphdr                 */
-#include <sys/time.h>		/* gettimeofday()               */
-#include <pthread.h>		/* for RVS lifetime thread	*/
-#include <unistd.h>		/* sleep()			*/
+#include <netinet/ip.h>         /* struct iphdr                 */
+#include <sys/time.h>           /* gettimeofday()               */
+#include <pthread.h>            /* for RVS lifetime thread	*/
+#include <unistd.h>             /* sleep()			*/
 #endif /* __WIN32__ */
 #include <openssl/crypto.h>     /* OpenSSL's crypto library     */
-#include <openssl/bn.h>		/* Big Numbers                  */
-#include <openssl/des.h>	/* 3DES support			*/
-#include <openssl/blowfish.h>	/* BLOWFISH support		*/
-#include <openssl/aes.h>	/* AES support			*/
-#include <openssl/dsa.h>	/* DSA support                  */
-#include <openssl/asn1.h>	/* DSAparams_dup()              */
-#include <openssl/dh.h>		/* Diffie-Hellman contexts      */
-#include <openssl/sha.h>	/* SHA1 algorithms 		*/
-#include <openssl/rand.h>	/* RAND_bytes()                 */
+#include <openssl/bn.h>         /* Big Numbers                  */
+#include <openssl/des.h>        /* 3DES support			*/
+#include <openssl/blowfish.h>   /* BLOWFISH support		*/
+#include <openssl/aes.h>        /* AES support			*/
+#include <openssl/dsa.h>        /* DSA support                  */
+#include <openssl/asn1.h>       /* DSAparams_dup()              */
+#include <openssl/dh.h>         /* Diffie-Hellman contexts      */
+#include <openssl/sha.h>        /* SHA1 algorithms              */
+#include <openssl/rand.h>       /* RAND_bytes()                 */
 #include <hip/hip_types.h>
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
@@ -67,14 +67,14 @@
  * Local function declarations
  */
 int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
-			hip_hit *hitr);
+                 hip_hit *hitr);
 int hip_parse_R1(const __u8 *data, hip_assoc *hip_a);
 int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
-			struct sockaddr *src, struct sockaddr *dst);
+                 struct sockaddr *src, struct sockaddr *dst);
 int hip_parse_R2(__u8 *data, hip_assoc *hip_a);
 int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce);
 int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
-			__u8 *key, int type);
+                  __u8 *key, int type);
 hi_node *check_if_my_hit(hip_hit *hit);
 int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp);
 int handle_cert(hip_assoc *hip_a, const __u8 *data);
@@ -82,8 +82,8 @@ int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh);
 int handle_acks(hip_assoc *hip_a, tlv_ack *ack);
 int handle_esp_info(tlv_esp_info *ei, __u32 spi_out, struct rekey_info *rk);
 int handle_locators(hip_assoc *hip_a, locator **locators,
-			int num, struct sockaddr *src,
-			__u32 new_spi);
+                    int num, struct sockaddr *src,
+                    __u32 new_spi);
 void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src);
 int handle_update_rekey(hip_assoc *hip_a);
 int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck);
@@ -104,26 +104,26 @@ int handle_reg_failed(hip_assoc *hip_a, const __u8 *data);
 int add_reg_info(struct reg_entry *regs, __u8 type, int state, __u8 lifetime);
 int delete_reg_info(struct reg_entry *regs, __u8 type);
 int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
-			__u8* address);
+                 __u8* address);
 
 /*
  *
  * function hip_parse_hdr()
  *
  * in:		data = raw socket bytes
- * 		len  = length of data
- * 		src, dst = pointer for storing addresses for IPv4,
- * 		           or supplying them for IPv6, in network byte order
- * 		family = address family, AF_INET or AF_INET6
- * 		
+ *              len  = length of data
+ *              src, dst = pointer for storing addresses for IPv4,
+ *                         or supplying them for IPv6, in network byte order
+ *              family = address family, AF_INET or AF_INET6
+ *
  * - parse raw socket data to get a HIP packet
  * - sanity check the HIP header
  * - checksum the packet
  * - return addresses (for IPv4) and a pointer to the HIP header
  *
  */
-int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src, 
-		   struct sockaddr *dst, __u16 family, hiphdr **hdr)
+int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
+                  struct sockaddr *dst, __u16 family, hiphdr **hdr)
 {
 	hiphdr* hiph;
 	__u16 checksum;
@@ -139,17 +139,18 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
 		*hdr = hiph;
 		memset(&addr, 0, sizeof(struct sockaddr_in));
 		addr.sin_family = AF_INET;
-		addr.sin_addr.s_addr = iph->ip_src.s_addr; 
+		addr.sin_addr.s_addr = iph->ip_src.s_addr;
 		if (iph->ip_p == IPPROTO_UDP) {
 			udph = (udphdr*)&data[sizeof(struct ip)];
 			addr.sin_port = udph->src_port;
 		}
 		memcpy(src, &addr, sizeof(struct sockaddr_in));
 		addr.sin_addr.s_addr = iph->ip_dst.s_addr;
-		if (udph)
+		if (udph) {
 			addr.sin_port = udph->dst_port;
+		}
 		memcpy(dst, &addr, sizeof(struct sockaddr_in));
-	/* IPv6 - source and destination addresses already supplied */
+		/* IPv6 - source and destination addresses already supplied */
 	} else if (family == AF_INET6) {
 		iph = NULL;
 		hiph = (hiphdr*) &data[0];
@@ -158,9 +159,9 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
 	} else {
 		return(-1);
 	}
-	
-	if ((hiph->nxt_hdr != 0) && 
-	    (hiph->nxt_hdr != IPPROTO_NONE)) { 
+
+	if ((hiph->nxt_hdr != 0) &&
+	    (hiph->nxt_hdr != IPPROTO_NONE)) {
 		log_(WARN, "Packet warning: nxt_hdr %u, ", hiph->nxt_hdr);
 		log_(NORM, "trailing data will be ignored!\n");
 	}
@@ -172,14 +173,14 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
 		log_(WARN, "Packet error: type %u\n", hiph->packet_type);
 		return(-2);
 	}
-	if (hiph->version != HIP_PROTO_VER) { 
-		log_(WARN, "Packet error: version %u res %u\n", 
-		    hiph->version, hiph->res);
+	if (hiph->version != HIP_PROTO_VER) {
+		log_(WARN, "Packet error: version %u res %u\n",
+		     hiph->version, hiph->res);
 		return(-2);
 	}
 	if (hiph->res != HIP_RES_SHIM6_BITS) {
-		log_(WARN, "Packet warning: version %u res %u, ", 
-		    hiph->version, hiph->res);
+		log_(WARN, "Packet warning: version %u res %u, ",
+		     hiph->version, hiph->res);
 		log_(NORM, "unknown reserved bits set in HIP header!\n");
 	}
 
@@ -188,25 +189,25 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
 		/* TODO: check (hiph->control & CTL_ANON) against global
 		 *       policy for allowing ANONYMOUS HIs */
 		log_(WARN, "Ignoring control bits 0x%x in the HIP header.\n",
-			hiph->control);
+		     hiph->control);
 	}
 
 	/* HIP encapsulated in UDP, skip checksum verification */
-	if (iph && iph->ip_p == IPPROTO_UDP) {
+	if (iph && (iph->ip_p == IPPROTO_UDP)) {
 		/* assume RAW socket has already enforced the UDP checksum */
 		if (hiph->checksum != 0) { /* checksum MUST be zero */
 			log_(WARN, "HIP header encapsulated in UDP contains a "
-			    "non-zero checksum 0x%x\n", hiph->checksum);
+			     "non-zero checksum 0x%x\n", hiph->checksum);
 			return(-4);
 		}
 		return(0);
 	}
 
-	checksum = checksum_packet((__u8*)hiph, src, dst); 
+	checksum = checksum_packet((__u8*)hiph, src, dst);
 	if (checksum != 0) {
 		hip_packet_type(hiph->packet_type, typestr);
 		log_(WARN, "HIP %s packet has bad checksum: sum=0x%x, should"
-			" be 0.\n", typestr, checksum);
+		     " be 0.\n", typestr, checksum);
 		return(-3);
 	}
 	return(0);
@@ -217,107 +218,111 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
  * function hip_parse_I1()
  *
  * in:		hip_a = pointer to any pre-existing association with RVS for
- * 			verifying the RVS_HMAC parameter
- * 		data = pointer to hip header in received data
- * 		hiti = pointer to Initiator's HIT to extract
- * 		hitr = pointer to Responder's HIT to extract
- * 		
+ *                      verifying the RVS_HMAC parameter
+ *              data = pointer to hip header in received data
+ *              hiti = pointer to Initiator's HIT to extract
+ *              hitr = pointer to Responder's HIT to extract
+ *
  * out:		returns 0 if successful, -1 otherwise
  *
- * parse HIP Initiator packet-- has already passed initial just 
+ * parse HIP Initiator packet-- has already passed initial just
  *
  */
-int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti, 
-		hip_hit *hitr)
+int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
+                 hip_hit *hitr)
 {
-	int location = 0, data_len = 0, rec_num=0;
+	int location = 0, data_len = 0, rec_num = 0;
 	int last_type, type, length, len;
 	tlv_head *tlv;
 	tlv_from *from;
-	unsigned char *rvs_hmac;	
+	unsigned char *rvs_hmac;
 
 	hiphdr *hiph = (hiphdr*) data;
 	memcpy(hiti, hiph->hit_sndr, sizeof(hip_hit)); /* Initiator's HIT */
 	memcpy(hitr, hiph->hit_rcvr, sizeof(hip_hit)); /* Responder's HIT */
-        data_len = location + ((hiph->hdr_len+1) * 8);
-        location += sizeof(hiphdr);
-        last_type = 0;
+	data_len = location + ((hiph->hdr_len + 1) * 8);
+	location += sizeof(hiphdr);
+	last_type = 0;
 
-	if (hits_equal(*hiti, zero_hit))
+	if (hits_equal(*hiti, zero_hit)) {
 		return(-1);
-        
+	}
+
 	while (location < data_len) {
-                tlv = (tlv_head*) &data[location];
-                type = ntohs(tlv->type);
-                length = ntohs(tlv->length);
-                rec_num++;
-                log_(NORM, " I1 TLV type = %d length = %d \n", type, length);
-                if (last_type > type) {
-                        log_(WARN, "Out of order TLV parameter, (%d > %d) ",
-                            last_type, type);
-                        log_(NORM, "malformed packet.\n");
-                        return(-1);
-                } else 
-                        last_type = type;
-                
-                if (type == PARAM_FROM) {
+		tlv = (tlv_head*) &data[location];
+		type = ntohs(tlv->type);
+		length = ntohs(tlv->length);
+		rec_num++;
+		log_(NORM, " I1 TLV type = %d length = %d \n", type, length);
+		if (last_type > type) {
+			log_(WARN, "Out of order TLV parameter, (%d > %d) ",
+			     last_type, type);
+			log_(NORM, "malformed packet.\n");
+			return(-1);
+		} else {
+			last_type = type;
+		}
+
+		if (type == PARAM_FROM) {
 			from = (tlv_from*) &data[location];
 			if (!hip_a) {
 				log_(WARN, "I1 contains FROM but there " \
-					   "is no association.\n");
+				     "is no association.\n");
 				return(-1);
 			}
 			if (length > (sizeof(tlv_from) - 4)) {
 				log_(NORM, "Ignoring extra address data.\n");
 			}
 			add_from_via(hip_a, PARAM_FROM, NULL, from->address);
-		} else if (type == PARAM_RVS_HMAC){
+		} else if (type == PARAM_RVS_HMAC) {
 			if (!hip_a) {
 				log_(WARN, "I1 contains RVS_HMAC but there " \
-					   "is no association.\n");
+				     "is no association.\n");
 				return(-1);
 			}
 			rvs_hmac = ((tlv_hmac*)tlv)->hmac;
-                        /* reset the length and checksum for the HMAC */
-       	                len = eight_byte_align(location);
-               	        hiph->checksum = 0;
-                       	hiph->hdr_len = (len/8) - 1;
-                        log_(NORM, "RVS_HMAC verify over %d bytes. ",len);
-       	                log_(NORM, "hdr length=%d \n", hiph->hdr_len);
-               	        if (validate_hmac(data, len, rvs_hmac, length,
-                               	get_key(hip_a, HIP_INTEGRITY, TRUE),
-                                hip_a->hip_transform)) {
-       	                        log_(WARN, "Invalid RVS_HMAC.\n");
+			/* reset the length and checksum for the HMAC */
+			len = eight_byte_align(location);
+			hiph->checksum = 0;
+			hiph->hdr_len = (len / 8) - 1;
+			log_(NORM, "RVS_HMAC verify over %d bytes. ",len);
+			log_(NORM, "hdr length=%d \n", hiph->hdr_len);
+			if (validate_hmac(data, len, rvs_hmac, length,
+			                  get_key(hip_a, HIP_INTEGRITY, TRUE),
+			                  hip_a->hip_transform)) {
+				log_(WARN, "Invalid RVS_HMAC.\n");
 				if (hip_a->from_via) {
 					free(hip_a->from_via);
 					hip_a->from_via = NULL;
 				}
-               	                if (!OPT.permissive)
-                       	                return(-1);
-                        } else {
-       	                        log_(NORM, "RVS_HMAC verified OK.\n");
-               	        }
+				if (!OPT.permissive) {
+					return(-1);
+				}
+			} else {
+				log_(NORM, "RVS_HMAC verified OK.\n");
+			}
 		} else {
-                	if (check_tlv_unknown_critical(type, length) < 0)
-                        	return(-1);
-                }
-                location += tlv_length_to_parameter_length(length);
+			if (check_tlv_unknown_critical(type, length) < 0) {
+				return(-1);
+			}
+		}
+		location += tlv_length_to_parameter_length(length);
 	}
 	return(0);
 }
 
-/* 
- * Parse received I1. Look for HIT in local table.  If in table, 
+/*
+ * Parse received I1. Look for HIT in local table.  If in table,
  * or if opportunistic, accept it if we have not reached MAX_CONNECTIONS.
  */
 int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
-		struct sockaddr *dst)
+                  struct sockaddr *dst)
 {
 	hip_hit hiti, hitr;
 	struct sockaddr_storage addr;
 	hi_node* my_host_id = NULL;
 	hi_node* peer_host_id = NULL;
-	int err=0;
+	int err = 0;
 	int state = UNASSOCIATED;
 	hiphdr *hiph;
 	__u8 *addrp;
@@ -331,28 +336,30 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 
 	/* send R1 in any state, except E_FAILED */
 	if (state < E_FAILED) {
-		/* Find hip_assoc between RVS and Responder for RVS_HMAC 
+		/* Find hip_assoc between RVS and Responder for RVS_HMAC
 		 * verification if this is a relayed I1 */
 		hip_a_rvs = find_hip_association3(src, dst);
 		if (hip_parse_I1(hip_a_rvs, buff, &hiti, &hitr) < 0) {
 			log_(WARN, "Error while processing I1, dropping.\n");
 			return(-1);
 		}
-		/* 
-		 * Is this my HIT?  If so, get corresponding HI.  
+		/*
+		 * Is this my HIT?  If so, get corresponding HI.
 		 * If not and this is an RVS, check for the hit in the reg_table
 		 */
 		my_host_id = check_if_my_hit(&hitr);
-		if (!my_host_id  && OPT.rvs) {   
+		if (!my_host_id  && OPT.rvs) {
 			hip_a_client = search_registrations(hitr, REGTYPE_RVS);
 			if (!hip_a_client) {
 				log_ (NORMT, "Received I1 with a receiver "
-					     "HIT that does not have a current"
-					     "registration with this RVS.\n");
+				      "HIT that does not have a current"
+				      "registration with this RVS.\n");
 				return(-1);
 			}
-			if (add_from_via(hip_a_client, PARAM_FROM, src, NULL)<0)
+			if (add_from_via(hip_a_client, PARAM_FROM, src,
+			                 NULL) < 0) {
 				return(-1);
+			}
 			/* relay the I1 packet, and don't send any R1  */
 			hip_send_I1(&hiph->hit_sndr, hip_a_client);
 			return(0);
@@ -364,16 +371,16 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 			log_(NORM, "  Receiver HIT = %s\n", logaddr(SA(&addr)));
 			return(-1);
 		}
-		
+
 		/* Find peer HIT */
 		peer_host_id = find_host_identity(peer_hi_head, hiti);
 #ifdef HIP_VPLS
 		if (!peer_host_id && hipcfg_allowed_peers(hiti, hitr)) {
 			log_(NORMT,"Accepted an allowed peer "
-			    "Endbox HIT in I1\n");
+			     "Endbox HIT in I1\n");
 			/* Read in initiator's HIT to table */
 			add_peer_hit(hiti, src);
-		} else 
+		} else
 #endif
 		if (!peer_host_id) {
 			/* could be opportunistic */
@@ -391,9 +398,9 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 			}
 		}
 #ifdef HIP_VPLS
-		if(!hipcfg_allowed_peers(hiti, hitr)){
+		if(!hipcfg_allowed_peers(hiti, hitr)) {
 			log_(NORMT,"ACL denied for HIP peer\n");
-			return -1;
+			return(-1);
 		}
 #endif
 	} else {
@@ -413,11 +420,11 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 	 * Relayed I1 from RVS, send to address in FROM parameter and fill
 	 * in address for VIA_RVS parameter.
 	 */
-	if (hip_a_rvs && hip_a_rvs->from_via) { 
+	if (hip_a_rvs && hip_a_rvs->from_via) {
 		/* get address from FROM parameter */
 		memset(&addr, 0, sizeof(addr));
-		if (IN6_IS_ADDR_V4MAPPED( (struct in6_addr*) 
-					  hip_a_rvs->from_via->address)) {
+		if (IN6_IS_ADDR_V4MAPPED((struct in6_addr*)
+		                         hip_a_rvs->from_via->address)) {
 			addr.ss_family = AF_INET;
 			addrp = &hip_a_rvs->from_via->address[12];
 		} else {
@@ -426,16 +433,18 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 		}
 		memcpy(SA2IP(&addr), addrp, SAIPLEN(&addr));
 		src = SA(&addr);
-		if (HIPA_DST(hip_a_rvs)->sa_family == AF_INET)
+		if (HIPA_DST(hip_a_rvs)->sa_family == AF_INET) {
 			((struct sockaddr_in *)src)->sin_port =
-			  ((struct sockaddr_in *)HIPA_DST(hip_a_rvs))->sin_port;
+			        ((struct sockaddr_in *)HIPA_DST(hip_a_rvs))->
+			        sin_port;
+		}
 		log_(NORM, "Relayed I1 from RVS %s, ",
-			logaddr(HIPA_DST(hip_a_rvs))); 
+		     logaddr(HIPA_DST(hip_a_rvs)));
 		log_(NORM, "using %s as new destination address.\n",
-			logaddr(src));
+		     logaddr(src));
 		/* store RVS address for VIA_RVS parameter */
-		add_from_via(hip_a_rvs, PARAM_VIA_RVS, 
-				HIPA_DST(hip_a_rvs), NULL);
+		add_from_via(hip_a_rvs, PARAM_VIA_RVS,
+		             HIPA_DST(hip_a_rvs), NULL);
 	}
 
 	/*
@@ -455,9 +464,9 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
  * function hip_parse_R1()
  *
  * in:		data = raw socket bytes
- * 		hip_a = contains storage for cookie, peer_hi, dh, transforms,
- * 			opaque data, etc.
- * 		
+ *              hip_a = contains storage for cookie, peer_hi, dh, transforms,
+ *                      opaque data, etc.
+ *
  * out:		returns 0 if successful, -1 otherwise
  *
  * parse HIP Responder packet
@@ -470,13 +479,13 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 	int location, data_len;
 	int len, type, length;
 	unsigned char *dh_secret_key;
-	int last_type=0, status=-1, sig_verified=FALSE;
-	__u8 g_id=0;
+	int last_type = 0, status = -1, sig_verified = FALSE;
+	__u8 g_id = 0;
 	__u16 *p;
-	tlv_puzzle *tlv_pz=NULL;
+	tlv_puzzle *tlv_pz = NULL;
 	dh_cache_entry *dh_entry;
 	hi_node saved_peer_hi;
-	hipcookie cookie_tmp = {0, 0, 0, 0};
+	hipcookie cookie_tmp = { 0, 0, 0, 0 };
 	__u64 gen;
 	__u8 valid_cert = FALSE;
 	tlv_via_rvs *via;
@@ -484,7 +493,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 
 	location = 0;
 	hiph = (hiphdr*) &data[location];
-	data_len = location + ((hiph->hdr_len+1) * 8);
+	data_len = location + ((hiph->hdr_len + 1) * 8);
 	location += sizeof(hiphdr);
 	memset(&saved_peer_hi, 0, sizeof(saved_peer_hi));
 
@@ -492,10 +501,11 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 		tlv = (tlv_head*) &data[location];
 		type = ntohs(tlv->type);
 		length = ntohs(tlv->length);
-		if (check_tlv_type_length(type, length, last_type, "R1") < 0)
+		if (check_tlv_type_length(type, length, last_type, "R1") < 0) {
 			return(-1);
-		else
+		} else {
 			last_type = type;
+		}
 
 		/* First retrieve the HOST_ID and SIGNATURE before accepting
 		 * the rest of the R1 packet */
@@ -508,8 +518,8 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 			tlv_pz->cookie.lifetime = cookie_tmp.lifetime;
 		} else if (!sig_verified && (type == PARAM_HOST_ID)) {
 			if (hip_a->peer_hi) { /* save HI in case of error */
-				memcpy(&saved_peer_hi, hip_a->peer_hi, 
-					sizeof(saved_peer_hi));
+				memcpy(&saved_peer_hi, hip_a->peer_hi,
+				       sizeof(saved_peer_hi));
 			}
 			if (handle_hi(&hip_a->peer_hi, &data[location]) < 0) {
 				log_(WARN, "Error with HI from R1.\n");
@@ -517,33 +527,35 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 			}
 			if (!validate_hit(hiph->hit_sndr, hip_a->peer_hi)) {
 				log_(WARN, "HI in R1 does not match the "
-					"sender's HIT\n");
+				     "sender's HIT\n");
 				hip_send_notify(hip_a, NOTIFY_INVALID_HIT,
-						NULL, 0);
-				if (!OPT.permissive)
+				                NULL, 0);
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			} else {
 				log_(NORM, "HI in R1 validates the sender's "
-					"HIT.\n");
+				     "HIT.\n");
 			}
 		} else if (!sig_verified && (type == PARAM_HIP_SIGNATURE_2)) {
-			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+			if ((hip_a == NULL) || (hip_a->peer_hi == NULL)) {
 				log_(WARN, "Received signature parameter "
-					"without any Host Identity context for "
-					"verification.\n");
+				     "without any Host Identity context for "
+				     "verification.\n");
 				return(-1);
 			}
 			len = eight_byte_align(location);
 			memset(hiph->hit_rcvr, 0, sizeof(hip_hit));
 			/* cookie has already been zeroed */
 			hiph->checksum = 0;
-			hiph->hdr_len = (len/8) - 1;
+			hiph->hdr_len = (len / 8) - 1;
 			if (validate_signature(data, len, tlv,
-				hip_a->peer_hi->dsa, hip_a->peer_hi->rsa) < 0) {
+			                       hip_a->peer_hi->dsa,
+			                       hip_a->peer_hi->rsa) < 0) {
 				log_(WARN, "Invalid signature.\n");
 				hip_send_notify(hip_a,
-						NOTIFY_AUTHENTICATION_FAILED,
-						NULL, 0);
+				                NOTIFY_AUTHENTICATION_FAILED,
+				                NULL, 0);
 				if (!OPT.permissive) {
 					/* restore HI as if nothing happened */
 					goto restore_saved_peer_hi;
@@ -554,13 +566,14 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 			status = 0;
 			last_type = 0;
 			location = sizeof(hiphdr);
-			continue;			
+			continue;
 		}
-		if (!sig_verified) {/* skip all parameters until sig verified */
+		if (!sig_verified) { /* skip all parameters until sig verified
+			              **/
 			location += tlv_length_to_parameter_length(length);
 			continue;
 		}
-		
+
 		if (type == PARAM_R1_COUNTER) {
 			gen = ntoh64(((tlv_r1_counter*)tlv)->r1_gen_counter);
 			if (hip_a->state == I2_SENT) {
@@ -568,13 +581,13 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 				if ((saved_peer_hi.r1_gen_count > 0) &&
 				    (saved_peer_hi.r1_gen_count <= gen)) {
 					log_(WARN, "R1 generation counter too "
-					    "small, dropping packet.\n");
+					     "small, dropping packet.\n");
 					/* restore HI as if nothing happened */
 					goto restore_saved_peer_hi;
 				}
 				/* generation counter OK, discard old state */
-				log_(NORM, "R1 generation counter " 
-				    "accepted, removing old state.\n");
+				log_(NORM, "R1 generation counter "
+				     "accepted, removing old state.\n");
 				if (hip_a->peer_dh) {
 					DH_free(hip_a->peer_dh);
 					hip_a->peer_dh = NULL;
@@ -584,11 +597,15 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 					hip_a->dh_secret = NULL;
 				}
 				if (saved_peer_hi.rsa &&
-				    (saved_peer_hi.rsa != hip_a->peer_hi->rsa))
+				    (saved_peer_hi.rsa !=
+				     hip_a->peer_hi->rsa)) {
 					hip_rsa_free(saved_peer_hi.rsa);
+				}
 				if (saved_peer_hi.dsa &&
-				    (saved_peer_hi.dsa != hip_a->peer_hi->dsa))
+				    (saved_peer_hi.dsa !=
+				     hip_a->peer_hi->dsa)) {
 					hip_dsa_free(saved_peer_hi.dsa);
+				}
 				memset(hip_a->keymat, 0, KEYMAT_SIZE);
 				hip_a->keymat_index = 0;
 			} else { /* state I1_SENT or CLOSED */
@@ -599,20 +616,21 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 			log_(NORM, "Got the R1 cookie: ");
 			print_cookie(&hip_a->cookie_r);
 		} else if (type == PARAM_DIFFIE_HELLMAN) {
-			if (handle_dh(hip_a, &data[location], &g_id, NULL) < 0){
-				hip_send_notify(hip_a, 
-					NOTIFY_NO_DH_PROPOSAL_CHOSEN, 
-					NULL, 0);
+			if (handle_dh(hip_a, &data[location], &g_id,
+			              NULL) < 0) {
+				hip_send_notify(hip_a,
+				                NOTIFY_NO_DH_PROPOSAL_CHOSEN,
+				                NULL, 0);
 				return(-1);
 			}
-			
-			/* group ID chosen by responder 
+
+			/* group ID chosen by responder
 			 * get a DH entry from cache or generate a new one */
 			dh_entry = get_dh_entry(g_id, FALSE);
 			dh_entry->ref_count++;
 			hip_a->dh_group_id = g_id;
 			hip_a->dh = dh_entry->dh;
-			
+
 			/* compute key from our dh and peer's pub_key and
 			 * store in dh_secret_key */
 			dh_secret_key = malloc(DH_size(hip_a->dh));
@@ -622,8 +640,8 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 			}
 			memset(dh_secret_key, 0, DH_size(hip_a->dh));
 			len = DH_compute_key(dh_secret_key,
-					     hip_a->peer_dh->pub_key,
-					     hip_a->dh);
+			                     hip_a->peer_dh->pub_key,
+			                     hip_a->dh);
 			logdh(hip_a->dh);
 			if (len != DH_size(hip_a->dh)) {
 				log_(NORM, "Warning: secret key len = %d,",len);
@@ -632,12 +650,12 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 			set_secret_key(dh_secret_key, hip_a);
 			/* Do not free(dh_secret_key), which is now
 			 * dh->dh_secret  */
-		} else if (type == PARAM_HIP_TRANSFORM) { 
+		} else if (type == PARAM_HIP_TRANSFORM) {
 			p = &((tlv_hip_transform*)tlv)->transform_id;
 			if ((handle_transforms(hip_a, p, length, FALSE)) < 0) {
 				hip_send_notify(hip_a,
-					NOTIFY_NO_HIP_PROPOSAL_CHOSEN,
-					NULL, 0);
+				                NOTIFY_NO_HIP_PROPOSAL_CHOSEN,
+				                NULL, 0);
 				return(-1);
 			}
 		} else if (type == PARAM_ESP_TRANSFORM) {
@@ -645,103 +663,115 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 			if (((tlv_esp_transform*)tlv)->reserved && 0x01) {
 				log_(NORM, "64-bit ESP sequence numbers reques");
 				log_(NORM, "ted but unsupported by kernel!\n");
-				if (OPT.permissive)
+				if (OPT.permissive) {
 					return(-1);
+				}
 			}
 			p = &((tlv_esp_transform*)tlv)->suite_id;
-			if ((handle_transforms(hip_a, p, length-2, TRUE)) < 0) {
+			if ((handle_transforms(hip_a, p, length - 2,
+			                       TRUE)) < 0) {
 				hip_send_notify(hip_a,
-					NOTIFY_NO_ESP_PROPOSAL_CHOSEN,
-					NULL, 0);
+				                NOTIFY_NO_ESP_PROPOSAL_CHOSEN,
+				                NULL, 0);
 				return(-1);
 			}
 		} else if ((type == PARAM_ECHO_REQUEST) ||
-			   (type == PARAM_ECHO_REQUEST_NOSIG)) {
+		           (type == PARAM_ECHO_REQUEST_NOSIG)) {
 			/* prevent excessive memory consumption */
 			if (length > MAX_OPAQUE_SIZE) {
 				log_(WARN,"ECHO_REQUEST in R1 is too large.\n");
-				if (!OPT.permissive)
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			} else {
-				hip_a->opaque = (struct opaque_entry*) 
-					malloc(sizeof(struct opaque_entry));
+				hip_a->opaque = (struct opaque_entry*)
+				                malloc(sizeof(struct
+				                              opaque_entry));
 				if (hip_a->opaque == NULL) {
 					log_(NORM,"Malloc err: ECHO_REQUEST\n");
 					return(-1);
 				}
 				hip_a->opaque->opaque_len = (__u16)length;
-				memcpy(hip_a->opaque->opaque_data, 
-					((tlv_echo*)tlv)->opaque_data, length);
-				hip_a->opaque->opaque_nosig = 
-					(type == PARAM_ECHO_REQUEST_NOSIG);
+				memcpy(hip_a->opaque->opaque_data,
+				       ((tlv_echo*)tlv)->opaque_data, length);
+				hip_a->opaque->opaque_nosig =
+				        (type == PARAM_ECHO_REQUEST_NOSIG);
 			}
-		} else if (type == PARAM_REG_INFO) {	/* R1 packet */
-			log_(NORM, "Peer is a registrar providing registration "
-				"info in its R1 packet.\n");
+		} else if (type == PARAM_REG_INFO) {    /* R1 packet */
+			log_(NORM,
+			     "Peer is a registrar providing registration "
+			     "info in its R1 packet.\n");
 			if (handle_reg_info(hip_a, &data[location]) < 0) {
 				log_(WARN, "Problem with registration info.\n");
 			}
 		} else if (type == PARAM_VIA_RVS) {
 			via = (tlv_via_rvs *) &data[location];
 			if (IN6_IS_ADDR_V4MAPPED(
-					(struct in6_addr*)via->address)) {
+			            (struct in6_addr*)via->address)) {
 				rvs_addr.ss_family = AF_INET;
 				memcpy(SA2IP(&rvs_addr), &via->address[12],
-						SAIPLEN(&rvs_addr));
+				       SAIPLEN(&rvs_addr));
 			} else {
 				rvs_addr.ss_family = AF_INET;
 				memcpy(SA2IP(&rvs_addr), via->address,
-						SAIPLEN(&rvs_addr));
+				       SAIPLEN(&rvs_addr));
 			}
-			log_(NORM, "R1 packet relayed by the Rendezvous Server "
-				"address %s.\n", logaddr(SA(&rvs_addr)));
+			log_(NORM,
+			     "R1 packet relayed by the Rendezvous Server "
+			     "address %s.\n",
+			     logaddr(SA(&rvs_addr)));
 			/* we could check if the VIA RVS address is the same one
 			 * that we used for the relay */
-		} else if ((type == PARAM_HOST_ID) || 
-			   (type == PARAM_HIP_SIGNATURE_2)) {
+		} else if ((type == PARAM_HOST_ID) ||
+		           (type == PARAM_HIP_SIGNATURE_2)) {
 			/* these parameters already processed */
 		} else if (type == PARAM_CERT) {
 			if (HCNF.peer_certificate_required &&
-			    handle_cert(hip_a, &data[location]) < 0){
+			    (handle_cert(hip_a, &data[location]) < 0)) {
 				hip_send_notify(hip_a,
-					NOTIFY_AUTHENTICATION_FAILED, 
-					NULL, 0);
+				                NOTIFY_AUTHENTICATION_FAILED,
+				                NULL, 0);
 				return(-1);
 			}
 			valid_cert = TRUE;
-		    /* validate certificate */
+			/* validate certificate */
 		} else if (type == PARAM_LOCATOR) {
 			;
 		} else {
-			if (check_tlv_unknown_critical(type, length) < 0)
+			if (check_tlv_unknown_critical(type, length) < 0) {
 				return(-1);
+			}
 		}
 		location += tlv_length_to_parameter_length(length);
 	}
-	if(HCNF.peer_certificate_required && !valid_cert){
-	   hip_send_notify(hip_a, NOTIFY_AUTHENTICATION_FAILED, NULL, 0);
-	   return -1;
+	if(HCNF.peer_certificate_required && !valid_cert) {
+		hip_send_notify(hip_a, NOTIFY_AUTHENTICATION_FAILED, NULL, 0);
+		return(-1);
 	}
 
 	return(status);
 restore_saved_peer_hi:
-	if (hip_a->peer_hi->dsa && (hip_a->peer_hi->dsa != saved_peer_hi.dsa))
+	if (hip_a->peer_hi->dsa &&
+	    (hip_a->peer_hi->dsa != saved_peer_hi.dsa)) {
 		hip_dsa_free(hip_a->peer_hi->dsa);
-	if (hip_a->peer_hi->rsa && (hip_a->peer_hi->rsa != saved_peer_hi.rsa))
+	}
+	if (hip_a->peer_hi->rsa &&
+	    (hip_a->peer_hi->rsa != saved_peer_hi.rsa)) {
 		hip_rsa_free(hip_a->peer_hi->rsa);
+	}
 	memcpy(hip_a->peer_hi, &saved_peer_hi, sizeof(saved_peer_hi));
 	return(-1);
 }
 
 int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src)
 {
-	int err=0;
+	int err = 0;
 
 	/* R1 only accepted in these states */
 	if ((hip_a->state != I1_SENT) && (hip_a->state != I2_SENT) &&
 	    (hip_a->state != CLOSING) && (hip_a->state != CLOSED)) {
 		log_(NORMT,"HIP_R1 packet not accepted in state=%d.\n",
-		    hip_a->state);
+		     hip_a->state);
 		return(-1);
 	}
 	/* Assert hip_a->peer_hi was created in HIP_ACQUIRE */
@@ -761,8 +791,9 @@ int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src)
 		return(-1);
 	}
 	/* Set ip, hit, size, hi_t of peer_hi */
-	if (hip_a->dh == NULL)
+	if (hip_a->dh == NULL) {
 		log_(WARN, "Error: after parsing R1, DH is null.\n");
+	}
 	/* Need to send an SPI to peer */
 	hip_a->spi_in = get_next_spi();
 	/* Fill in the destination address for when an RVS was used, */
@@ -798,39 +829,39 @@ int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src)
  *
  * in:		data = raw socket bytes
  *              hip_a is pointer to HIP connection instance
- * 		cookie = pointer to store extracted cookie
- * 		
+ *              cookie = pointer to store extracted cookie
+ *
  * out:		Returns -1 if failure, packet length otherwise.
  *
  * parse HIP Second Initiator packet
  *
  */
 int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
-		struct sockaddr *src, struct sockaddr *dst)
+                 struct sockaddr *src, struct sockaddr *dst)
 {
 	hiphdr *hiph;
 	int location, data_len;
-	int i, j, len, key_len, iv_len, last_type=0, err=0;
+	int i, j, len, key_len, iv_len, last_type = 0, err = 0;
 	int type, length;
-	hip_assoc *hip_a=NULL, *hip_a_existing;
+	hip_assoc *hip_a = NULL, *hip_a_existing;
 	__u16 proposed_keymat_index = 0;
-	__u32 proposed_spi_out=0;
+	__u32 proposed_spi_out = 0;
 	tlv_head *tlv;
 	tlv_esp_info *esp_info;
 	unsigned char *hmac;
 	hipcookie cookie;
-	__u64 solution=0, r1count=0;
+	__u64 solution = 0, r1count = 0;
 	__u16 *p;
-	__u8 g_id=0;
+	__u8 g_id = 0;
 	unsigned char *dh_secret_key;
-	dh_cache_entry *dh_entry=NULL;
-	unsigned char *key, *enc_data=NULL, *unenc_data=NULL;
+	dh_cache_entry *dh_entry = NULL;
+	unsigned char *key, *enc_data = NULL, *unenc_data = NULL;
 	des_key_schedule ks1, ks2, ks3;
 	BF_KEY bfkey;
 	AES_KEY aes_key;
 	u_int8_t secret_key1[8], secret_key2[8], secret_key3[8];
 	unsigned char cbc_iv[16];
-	int got_dh=0, comp_keys=0, status;
+	int got_dh = 0, comp_keys = 0, status;
 	__u8 valid_cert = FALSE;
 
 	hip_a_existing = *hip_ar;
@@ -838,7 +869,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 	/* Find hip header */
 	location = 0;
 	hiph = (hiphdr*) &data[location];
-	data_len = location + ((hiph->hdr_len+1) * 8);
+	data_len = location + ((hiph->hdr_len + 1) * 8);
 	location += sizeof(hiphdr);
 
 	status = -1;
@@ -848,38 +879,40 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 		type = ntohs(tlv->type);
 		length = ntohs(tlv->length);
 		/* check if hip_a has been initalized*/
-		if(type > PARAM_SOLUTION && !hip_a){
-			log_(NORM, "I2 packet does not contain puzzle solution.\n");
+		if((type > PARAM_SOLUTION) && !hip_a) {
+			log_(NORM,
+			     "I2 packet does not contain puzzle solution.\n");
 			return(-1);
 		}
-		if (check_tlv_type_length(type, length, last_type, "I2") < 0)
+		if (check_tlv_type_length(type, length, last_type, "I2") < 0) {
 			return(-1);
-		else
+		} else {
 			last_type = type;
+		}
 
 		if (type == PARAM_ESP_INFO) {
 			esp_info = (tlv_esp_info*)tlv;
 			proposed_keymat_index = ntohs(esp_info->keymat_index);
 			proposed_spi_out = ntohl(esp_info->new_spi);
 		} else if (type == PARAM_R1_COUNTER) {
-			r1count =ntoh64(((tlv_r1_counter*)tlv)->r1_gen_counter);
+			r1count = ntoh64(((tlv_r1_counter*)tlv)->r1_gen_counter);
 			if ((my_host_id->r1_gen_count - r1count) >
-				ACCEPTABLE_R1_COUNT_RANGE) {
+			    ACCEPTABLE_R1_COUNT_RANGE) {
 				log_(NORM, "Got R1 count of %llu, my R1 count",
-				    r1count);
+				     r1count);
 				log_(NORM, "er is %llu, outside range (%d), ",
-				    my_host_id->r1_gen_count,
-				    ACCEPTABLE_R1_COUNT_RANGE);
+				     my_host_id->r1_gen_count,
+				     ACCEPTABLE_R1_COUNT_RANGE);
 				if (!OPT.permissive) {
 					log_(NORM, "dropping.\n");
 					return(-1);
 				}
 			}
 			log_(NORM,"R1 counter %llu (%llu) acceptable.\n",
-			    r1count, my_host_id->r1_gen_count);
+			     r1count, my_host_id->r1_gen_count);
 		} else if (type == PARAM_SOLUTION) {
-			memcpy(&cookie, &((tlv_solution*)tlv)->cookie, 
-				sizeof(hipcookie));
+			memcpy(&cookie, &((tlv_solution*)tlv)->cookie,
+			       sizeof(hipcookie));
 			/* integers remain in network byte order */
 			solution = ((tlv_solution*)tlv)->j;
 			log_(NORM, "Got the I2 cookie: ");
@@ -889,46 +922,51 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 			j = compute_R1_cache_index(&hiph->hit_sndr, FALSE);
 			/* locate cookie using current random number */
 			if ((validate_solution(
-					my_host_id->r1_cache[i].current_puzzle,
-					&cookie,
-					&hiph->hit_sndr, &hiph->hit_rcvr,
-					solution) == 0) || 
+			             my_host_id->r1_cache[i].current_puzzle,
+			             &cookie,
+			             &hiph->hit_sndr, &hiph->hit_rcvr,
+			             solution) == 0) ||
 			    (validate_solution(
-					my_host_id->r1_cache[i].previous_puzzle,
-					&cookie,
-					&hiph->hit_sndr, &hiph->hit_rcvr,
-					solution) == 0)) {
+			             my_host_id->r1_cache[i].previous_puzzle,
+			             &cookie,
+			             &hiph->hit_sndr, &hiph->hit_rcvr,
+			             solution) == 0)) {
 				dh_entry = my_host_id->r1_cache[i].dh_entry;
-			/* locate cookie using previous random number */
+				/* locate cookie using previous random number */
 			} else if ((validate_solution(
-					my_host_id->r1_cache[j].current_puzzle,
-					&cookie,
-					&hiph->hit_sndr, &hiph->hit_rcvr,
-					solution) == 0) ||
-				   (validate_solution(
-					my_host_id->r1_cache[j].previous_puzzle,
-					&cookie,
-					&hiph->hit_sndr, &hiph->hit_rcvr,
-					solution) == 0)) {
+			                    my_host_id->r1_cache[j].
+			                    current_puzzle,
+			                    &cookie,
+			                    &hiph->hit_sndr, &hiph->hit_rcvr,
+			                    solution) == 0) ||
+			           (validate_solution(
+			                    my_host_id->r1_cache[j].
+			                    previous_puzzle,
+			                    &cookie,
+			                    &hiph->hit_sndr, &hiph->hit_rcvr,
+			                    solution) == 0)) {
 				dh_entry = my_host_id->r1_cache[j].dh_entry;
 			} else {
 				log_(WARN,"Invalid solution received in I2.\n");
-				if (!OPT.permissive)
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			}
 			/* create HIP association state here */
-			hip_a = init_hip_assoc(my_host_id, 
-					(const hip_hit *)&hiph->hit_sndr);
+			hip_a = init_hip_assoc(my_host_id,
+			                       (const hip_hit *)&hiph->hit_sndr);
 			if (!hip_a) {
-				log_(WARN, "Unable to create a HIP association "
-					   "while receiving I2.\n");
+				log_(WARN,
+				     "Unable to create a HIP association "
+				     "while receiving I2.\n");
 				return(-1);
 			}
 			hip_a->dh_group_id = dh_entry->group_id;
 			hip_a->dh = dh_entry->dh;
 			dh_entry->ref_count++;
-			dh_entry->is_current = FALSE; /* mark the entry so it 
-						       will not be used again */
+			dh_entry->is_current = FALSE; /* mark the entry so it
+			                               *  will not be used again
+			                               * */
 			hip_a->spi_out = proposed_spi_out;
 			memcpy(&hip_a->cookie_r, &cookie, sizeof(hipcookie));
 			hip_a->cookie_j = solution;
@@ -937,22 +975,23 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 			hip_a->hi->addrs.if_index = is_my_address(dst);
 			make_address_active(&hip_a->hi->addrs);
 			memcpy(HIPA_DST(hip_a), src, SALEN(src));
-			if (src->sa_family == AF_INET &&
-			   ((struct sockaddr_in*)src)->sin_port > 0) {
+			if ((src->sa_family == AF_INET) &&
+			    (((struct sockaddr_in*)src)->sin_port > 0)) {
 				hip_a->udp = TRUE;
 			}
-		} else if (type == PARAM_DIFFIE_HELLMAN){
-			if (handle_dh(hip_a, &data[location], &g_id, NULL) < 0){
+		} else if (type == PARAM_DIFFIE_HELLMAN) {
+			if (handle_dh(hip_a, &data[location], &g_id,
+			              NULL) < 0) {
 				hip_send_notify(hip_a, NOTIFY_INVALID_DH_CHOSEN,
-					NULL, 0);
+				                NULL, 0);
 				return(-1);
 			}
 			/* We chose g_id in R1, so I2 should match */
 			if (g_id != hip_a->dh_group_id) {
 				log_(NORM, "Got DH group %d, expected %d.",
-				    g_id, hip_a->dh_group_id);
+				     g_id, hip_a->dh_group_id);
 				hip_send_notify(hip_a, NOTIFY_INVALID_DH_CHOSEN,
-					NULL, 0);
+				                NULL, 0);
 				return(-1);
 			}
 			/* compute key from our dh and peer's pub_key and
@@ -964,8 +1003,8 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 			}
 			memset(dh_secret_key, 0, DH_size(hip_a->dh));
 			len = DH_compute_key(dh_secret_key,
-					     hip_a->peer_dh->pub_key,
-					     hip_a->dh);
+			                     hip_a->peer_dh->pub_key,
+			                     hip_a->dh);
 			if (len != DH_size(hip_a->dh)) {
 				log_(NORM,"Warning: secret key len = %d,", len);
 				log_(NORM,"expected %d\n", DH_size(hip_a->dh));
@@ -977,35 +1016,44 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 		} else if (type == PARAM_HIP_TRANSFORM) {
 			p = &((tlv_hip_transform*)tlv)->transform_id;
 			if ((handle_transforms(hip_a, p, length, FALSE)) < 0) {
-				hip_send_notify(hip_a,
-					NOTIFY_INVALID_HIP_TRANSFORM_CHOSEN,
-					NULL, 0);
+				hip_send_notify(
+				        hip_a,
+				        NOTIFY_INVALID_HIP_TRANSFORM_CHOSEN,
+				        NULL,
+				        0);
 				return(-1);
 			}
 			/* Must compute keys here so we can use them below. */
 			if (got_dh) {
 				compute_keys(hip_a);
-				if (proposed_keymat_index > hip_a->keymat_index)
-				    hip_a->keymat_index = proposed_keymat_index;
+				if (proposed_keymat_index >
+				    hip_a->keymat_index) {
+					hip_a->keymat_index =
+					        proposed_keymat_index;
+				}
 				comp_keys = 1;
 			} else {
 				log_(NORM, "Couldn't do compute_keys() ");
 				log_(NORM, "because DH is not set yet.\n");
-				if (!OPT.permissive) return(-1);
+				if (!OPT.permissive) { return(-1); }
 			}
 		} else if (type == PARAM_ESP_TRANSFORM) {
 			/* check E bit */
 			if (((tlv_esp_transform*)tlv)->reserved && 0x01) {
 				log_(NORM, "64-bit ESP sequence numbers reque");
 				log_(NORM, "sted but unsupported by kernel!\n");
-				if (OPT.permissive)
+				if (OPT.permissive) {
 					return(-1);
+				}
 			}
 			p = &((tlv_esp_transform*)tlv)->suite_id;
-			if ((handle_transforms(hip_a, p, length-2, TRUE)) < 0) {
-				hip_send_notify(hip_a,
-					NOTIFY_INVALID_ESP_TRANSFORM_CHOSEN,
-					NULL, 0);
+			if ((handle_transforms(hip_a, p, length - 2,
+			                       TRUE)) < 0) {
+				hip_send_notify(
+				        hip_a,
+				        NOTIFY_INVALID_ESP_TRANSFORM_CHOSEN,
+				        NULL,
+				        0);
 				return(-1);
 			}
 		} else if (type == PARAM_ENCRYPTED) {
@@ -1018,8 +1066,8 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 				unenc_data = malloc(len);
 				memset(unenc_data, 0, len);
 				memcpy(unenc_data, ((tlv_encrypted*)tlv)->iv,
-					len);
-			/* Cipher decryption */
+				       len);
+				/* Cipher decryption */
 			} else {
 				if (!comp_keys) {
 					log_(NORM, "Got ENCRYPTED TLV, but ");
@@ -1039,9 +1087,9 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 				/* AES uses a 128-bit IV, 3-DES and Blowfish
 				 * use 64-bits. */
 				memcpy(enc_data,
-				       ((tlv_encrypted*)tlv)->iv+iv_len, len);
-				memcpy(cbc_iv, ((tlv_encrypted*)tlv)->iv, 
-					iv_len);
+				       ((tlv_encrypted*)tlv)->iv + iv_len, len);
+				memcpy(cbc_iv, ((tlv_encrypted*)tlv)->iv,
+				       iv_len);
 				key = get_key(hip_a, HIP_ENCRYPTION, TRUE);
 				key_len = enc_key_len(hip_a->hip_transform);
 
@@ -1051,8 +1099,9 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 					log_(NORM, "AES decryption key: 0x");
 					print_hex(key, key_len);
 					log_(NORM, "\n");
-					if (AES_set_decrypt_key(key, 8*key_len, 
-								&aes_key)) {
+					if (AES_set_decrypt_key(key, 8 *
+					                        key_len,
+					                        &aes_key)) {
 						log_(WARN, "Unable to use cal");
 						log_(NORM, "ulated DH secret ");
 						log_(NORM, "for AES key.\n");
@@ -1061,20 +1110,28 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 					}
 					log_(NORM, "Decrypting %d bytes ", len);
 					log_(NORM, "using AES.\n");
-					AES_cbc_encrypt(enc_data, unenc_data,
-					    len, &aes_key, cbc_iv, AES_DECRYPT);
+					AES_cbc_encrypt(enc_data,
+					                unenc_data,
+					                len,
+					                &aes_key,
+					                cbc_iv,
+					                AES_DECRYPT);
 					break;
 				case ESP_3DES_CBC_HMAC_SHA1:
 				case ESP_3DES_CBC_HMAC_MD5:
-					memcpy(&secret_key1, key, key_len/3);
-					memcpy(&secret_key2, key+8, key_len/3);
-					memcpy(&secret_key3, key+16, key_len/3);
+					memcpy(&secret_key1, key, key_len / 3);
+					memcpy(&secret_key2,
+					       key + 8,
+					       key_len / 3);
+					memcpy(&secret_key3,
+					       key + 16,
+					       key_len / 3);
 					des_set_odd_parity((des_cblock*)
-							   (&secret_key1));
+					                   (&secret_key1));
 					des_set_odd_parity((des_cblock*)
-							   (&secret_key2));
+					                   (&secret_key2));
 					des_set_odd_parity((des_cblock*)
-							   (&secret_key3));
+					                   (&secret_key3));
 					log_(NORM, "decryption key: 0x");
 					print_hex(secret_key1, key_len);
 					log_(NORM, "-");
@@ -1082,13 +1139,16 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 					log_(NORM, "-");
 					print_hex(secret_key3, key_len);
 					log_(NORM, "\n");
- 
-					if (des_set_key_checked( (des_cblock*)
-						&secret_key1, ks1) ||
-					    des_set_key_checked( (des_cblock*)
-						&secret_key2, ks2) ||
-					    des_set_key_checked( (des_cblock*)
-						&secret_key3, ks3)) {
+
+					if (des_set_key_checked((des_cblock*)
+					                        &secret_key1,
+					                        ks1) ||
+					    des_set_key_checked((des_cblock*)
+					                        &secret_key2,
+					                        ks2) ||
+					    des_set_key_checked((des_cblock*)
+					                        &secret_key3,
+					                        ks3)) {
 						log_(NORM, "Unable to use cal");
 						log_(NORM, "culated DH secret");
 						log_(NORM, " for 3DES key.\n");
@@ -1097,9 +1157,16 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 					}
 					log_(NORM, "Decrypting %d bytes ", len);
 					log_(NORM, "using 3-DES.\n");
-					des_ede3_cbc_encrypt(enc_data,
-					    unenc_data, len, ks1, ks2, ks3,
-					    (des_cblock*)cbc_iv, DES_DECRYPT);
+					des_ede3_cbc_encrypt(
+					        enc_data,
+					        unenc_data,
+					        len,
+					        ks1,
+					        ks2,
+					        ks3,
+					        (des_cblock*)
+					        cbc_iv,
+					        DES_DECRYPT);
 					break;
 				case ESP_BLOWFISH_CBC_HMAC_SHA1:
 					log_(NORM, "BLOWFISH decryption key: ");
@@ -1109,8 +1176,12 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 					BF_set_key(&bfkey, key_len, key);
 					log_(NORM, "Decrypting %d bytes ", len);
 					log_(NORM, "using BLOWFISH.\n");
-					BF_cbc_encrypt(enc_data, unenc_data,
-				    	    len, &bfkey, cbc_iv, BF_DECRYPT);
+					BF_cbc_encrypt(enc_data,
+					               unenc_data,
+					               len,
+					               &bfkey,
+					               cbc_iv,
+					               BF_DECRYPT);
 					break;
 				default:
 					log_(WARN, "Unsupported transform ");
@@ -1118,18 +1189,19 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 					err = NOTIFY_ENCRYPTION_FAILED;
 					goto I2_ERROR;
 					break;
-				}/* end switch(hip_a->hip_transform) */
+				} /* end switch(hip_a->hip_transform) */
 			} /* end if */
-			/* parse HIi */
+			  /* parse HIi */
 			tlv = (tlv_head*) unenc_data;
 			if (ntohs(tlv->type) == PARAM_HOST_ID) {
-				if (handle_hi(&hip_a->peer_hi,unenc_data) < 0) {
+				if (handle_hi(&hip_a->peer_hi,
+				              unenc_data) < 0) {
 					log_(WARN, "Error with I2 HI.\n");
 					err = NOTIFY_ENCRYPTION_FAILED;
 					goto I2_ERROR;
 				}
 				if (!validate_hit(hiph->hit_sndr,
-						  hip_a->peer_hi)) {
+				                  hip_a->peer_hi)) {
 					log_(WARN, "HI in I2 does not match ");
 					log_(NORM, "the sender's HIT\n");
 					err = NOTIFY_INVALID_HIT;
@@ -1140,13 +1212,14 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 				}
 			} else {
 				log_(WARN, "Invalid HI decrypted type: %x.\n",
-				    ntohs(tlv->type));
+				     ntohs(tlv->type));
 				err = NOTIFY_ENCRYPTION_FAILED;
 				goto I2_ERROR;
 			}
 I2_ERROR:
-			if (enc_data) /* NULL encryption doesn't use this */
+			if (enc_data) { /* NULL encryption doesn't use this */
 				free(enc_data);
+			}
 			free(unenc_data);
 			if ((err) && (!OPT.permissive)) {
 				hip_send_notify(hip_a, err, NULL, 0);
@@ -1155,32 +1228,32 @@ I2_ERROR:
 		} else if (type == PARAM_HOST_ID) {
 			if (handle_hi(&hip_a->peer_hi, &data[location]) < 0) {
 				log_(WARN, "Error with I2 HI.\n");
-				hip_send_notify(hip_a, NOTIFY_INVALID_SYNTAX, 
-						NULL, 0);
+				hip_send_notify(hip_a, NOTIFY_INVALID_SYNTAX,
+				                NULL, 0);
 				return(-1);
 			}
 			if (!validate_hit(hiph->hit_sndr,
-					  hip_a->peer_hi)) {
+			                  hip_a->peer_hi)) {
 				log_(WARN, "HI in I2 does not match ");
 				log_(NORM, "the sender's HIT\n");
 				hip_send_notify(hip_a, NOTIFY_INVALID_HIT,
-						NULL, 0);
+				                NULL, 0);
 				return(-1);
 			} else {
 				log_(NORM, "HI in I2 validates the ");
 				log_(NORM, "sender's HIT.\n");
 			}
 		} else if (type == PARAM_CERT) {
-                        if (HCNF.peer_certificate_required &&
-			    handle_cert(hip_a, &data[location]) < 0){
-                                hip_send_notify(hip_a,
-                                        NOTIFY_AUTHENTICATION_FAILED,
-                                        NULL, 0);
-                                return(-1);
-                        }
+			if (HCNF.peer_certificate_required &&
+			    (handle_cert(hip_a, &data[location]) < 0)) {
+				hip_send_notify(hip_a,
+				                NOTIFY_AUTHENTICATION_FAILED,
+				                NULL, 0);
+				return(-1);
+			}
 			valid_cert = TRUE;
 		} else if ((type == PARAM_ECHO_RESPONSE) ||
-			   (type == PARAM_ECHO_RESPONSE_NOSIG)) {
+		           (type == PARAM_ECHO_RESPONSE_NOSIG)) {
 			log_(NORM, "Warning: received unrequested ECHO_RESPON");
 			log_(NORM, "SE from I2 packet.\n");
 		} else if (type == PARAM_HMAC) {
@@ -1188,40 +1261,43 @@ I2_ERROR:
 			/* reset the length and checksum for the HMAC */
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
-			hiph->hdr_len = (len/8) - 1;
+			hiph->hdr_len = (len / 8) - 1;
 			log_(NORM, "HMAC verify over %d bytes. ",len);
 			log_(NORM, "hdr length=%d \n", hiph->hdr_len);
 			if (validate_hmac(data, len,
-				hmac, length,
-				get_key(hip_a, HIP_INTEGRITY, TRUE),
-				hip_a->hip_transform)) {
+			                  hmac, length,
+			                  get_key(hip_a, HIP_INTEGRITY, TRUE),
+			                  hip_a->hip_transform)) {
 				log_(WARN, "Invalid HMAC.\n");
 				hip_send_notify(hip_a,
-						NOTIFY_HMAC_FAILED,
-						NULL, 0);
-				if (!OPT.permissive)
+				                NOTIFY_HMAC_FAILED,
+				                NULL, 0);
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			} else {
 				log_(NORM, "HMAC verified OK.\n");
 			}
 		} else if (type == PARAM_HIP_SIGNATURE) {
-			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+			if ((hip_a == NULL) || (hip_a->peer_hi == NULL)) {
 				log_(WARN, "Received signature parameter "
-					"without any Host Identity context for "
-					"verification.\n");
+				     "without any Host Identity context for "
+				     "verification.\n");
 				return(-1);
 			}
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
-			hiph->hdr_len = (len/8) - 1;
+			hiph->hdr_len = (len / 8) - 1;
 			if (validate_signature(data, len, tlv,
-				hip_a->peer_hi->dsa, hip_a->peer_hi->rsa) < 0) {
+			                       hip_a->peer_hi->dsa,
+			                       hip_a->peer_hi->rsa) < 0) {
 				log_(WARN, "Invalid signature.\n");
 				hip_send_notify(hip_a,
-						NOTIFY_AUTHENTICATION_FAILED,
-						NULL, 0);
-				if (!OPT.permissive)
+				                NOTIFY_AUTHENTICATION_FAILED,
+				                NULL, 0);
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			}
 			/* adopt the new hip_assoc now */
 			if (hip_a_existing) {
@@ -1233,12 +1309,12 @@ I2_ERROR:
 			}
 			/* exit w/OK */
 			status = 0;
-		} else if (type == PARAM_REG_REQUEST) {	/* I2 packet */
+		} else if (type == PARAM_REG_REQUEST) { /* I2 packet */
 			log_(NORM, "Peer has requested registration(s) in its"
-				" I2 packet.\n");
+			     " I2 packet.\n");
 			if (handle_reg_request(hip_a, &data[location]) < 0) {
 				log_(WARN, "Problem with registration "
-					"request.\n");
+				     "request.\n");
 			}
 		} else if (type == PARAM_ESP_INFO_NOSIG) {
 			esp_info = (tlv_esp_info*)tlv;
@@ -1250,48 +1326,49 @@ I2_ERROR:
 				if (hip_a) {
 					__u16 t;
 					t = (__u16)type;
-					hip_send_notify(hip_a,
-				     NOTIFY_UNSUPPORTED_CRITICAL_PARAMETER_TYPE,
-						(__u8*)&t, sizeof(__u16));
+					hip_send_notify(
+					        hip_a,
+					        NOTIFY_UNSUPPORTED_CRITICAL_PARAMETER_TYPE,
+					        (__u8*)&t,
+					        sizeof(__u16));
 				}
 				return(-1);
 			}
 		}
 		location += tlv_length_to_parameter_length(length);
 	}
-	if(HCNF.peer_certificate_required && !valid_cert){
-	   hip_send_notify(hip_a, NOTIFY_AUTHENTICATION_FAILED, NULL, 0);
-	   return -1;
+	if(HCNF.peer_certificate_required && !valid_cert) {
+		hip_send_notify(hip_a, NOTIFY_AUTHENTICATION_FAILED, NULL, 0);
+		return(-1);
 	}
 
 	return(status);
 }
 
-
-int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing, 
-	      struct sockaddr *src, struct sockaddr *dst)
+int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
+                  struct sockaddr *src, struct sockaddr *dst)
 {
-	int err=0;
-	hi_node *my_host_id=NULL;
-	hip_assoc *hip_a=NULL;
-	__u32 old_spi_in=0, old_spi_out=0;
+	int err = 0;
+	hi_node *my_host_id = NULL;
+	hip_assoc *hip_a = NULL;
+	__u32 old_spi_in = 0, old_spi_out = 0;
 	struct timeval time1;
 	hiphdr *hiph;
-	int old_state=0;
+	int old_state = 0;
 	/* this is the SPI from the last received I2 packet, so we know
 	 * whether or not it is a retransmission */
-	static __u32 last_I2_spi=0;
+	static __u32 last_I2_spi = 0;
 
 	/* Accept I2 in all states but E_FAILED.
 	 * Special treatment when in ESTABLISHED. */
 	if (hip_a_existing && (hip_a_existing->state == E_FAILED)) {
 		log_(NORM, "HIP_I2 packet not accepted in state=%d.\n",
-		    hip_a_existing->state);
+		     hip_a_existing->state);
 		return(-1);
 	}
 	hiph = (hiphdr*) buff;
-	
-	/* 
+
+	/*
 	 * Is this my HIT?  If so, get corresponding HI. If not, fail
 	 */
 	if ((my_host_id = check_if_my_hit(&hiph->hit_rcvr)) == NULL) {
@@ -1303,23 +1380,24 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 	 * Retransmit R2 if in state R2_SENT and this is a similar
 	 * I2 to the one that triggered moving to R2_SENT
 	 */
-	if (hip_a_existing && hip_a_existing->state == R2_SENT) {
+	if (hip_a_existing && (hip_a_existing->state == R2_SENT)) {
 		/* XXX should we instead process, then send R2? */
 		if ((hip_a_existing->rexmt_cache.packet != NULL) &&
 		    (hip_a_existing->rexmt_cache.retransmits <
 		     HCNF.max_retries) && (0 == OPT.no_retransmit) &&
-		    last_I2_spi==ntohl(
-			   ((tlv_esp_info*)&buff[sizeof(hiphdr)])->new_spi ) ) {
+		    (last_I2_spi == ntohl(
+		             ((tlv_esp_info*)&buff[sizeof(hiphdr)])->new_spi )))
+		{
 			log_(NORM, "Received I2 in R2_SENT, retransmitting ");
 			log_(NORM, "R2...\n");
 			hip_retransmit(hip_a,hip_a_existing->rexmt_cache.packet,
-					hip_a_existing->rexmt_cache.len,
-					dst, src);
+			               hip_a_existing->rexmt_cache.len,
+			               dst, src);
 			gettimeofday(&time1, NULL);
 			hip_a_existing->rexmt_cache.xmit_time.tv_sec
-				= time1.tv_sec;
+			        = time1.tv_sec;
 			hip_a_existing->rexmt_cache.xmit_time.tv_usec
-				= time1.tv_usec;
+			        = time1.tv_usec;
 			hip_a_existing->rexmt_cache.retransmits++;
 			set_state(hip_a_existing, R2_SENT); /* update time */
 			return(0);
@@ -1332,8 +1410,8 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 		log_(NORM, "Moving from state R2_SENT=>ESTABLISHED because ");
 		log_(NORM, "a new HIP association requested.\n");
 		set_state(hip_a_existing, ESTABLISHED);
-	/* Compare HITs in state I2_SENT
-	 */
+		/* Compare HITs in state I2_SENT
+		 */
 	} else if (hip_a_existing && (hip_a_existing->state == I2_SENT)) {
 		/* peer HIT larger than my HIT */
 		if (compare_hits(hiph->hit_sndr, hiph->hit_rcvr) > 0) {
@@ -1343,11 +1421,11 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 		}
 		/* local HIT is greater than peer HIT, send R2... */
 	}
-	
-	/* 
+
+	/*
 	 * Prepare to drop old SAs
 	 */
-	if (hip_a_existing && hip_a_existing->state == ESTABLISHED) {
+	if (hip_a_existing && (hip_a_existing->state == ESTABLISHED)) {
 		old_state = hip_a_existing->state;
 		old_spi_in = hip_a_existing->spi_in;
 		old_spi_out = hip_a_existing->spi_out;
@@ -1356,7 +1434,7 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 	} else {
 		old_state = UNASSOCIATED;
 	}
-		
+
 
 	/*
 	 * Process the I2, with appropriate checks
@@ -1376,8 +1454,9 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 	/* build R2 and Responder's SA */
 	if ((err = hip_send_R2(hip_a)) > 0) {
 		last_I2_spi = hip_a->spi_out; /* remember that this I2 put us
-					         into R2_SENT */
-		draw_keys(hip_a, FALSE, hip_a->keymat_index);/* draw ESP keys */
+		                               *  into R2_SENT */
+		draw_keys(hip_a, FALSE, hip_a->keymat_index); /* draw ESP keys
+		                                               **/
 		set_state(hip_a, R2_SENT);
 		log_(NORM, "Sent R2 (%d bytes)\n", err);
 
@@ -1387,9 +1466,9 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 		if (old_state == ESTABLISHED) {
 			log_(NORM, "Dropping old SAs with SPIs of");
 			log_(NORM, " 0x%x and 0x%x.\n",
-			    old_spi_out, old_spi_in);
-			err = delete_associations(hip_a, old_spi_in, 
-				old_spi_out);
+			     old_spi_out, old_spi_in);
+			err = delete_associations(hip_a, old_spi_in,
+			                          old_spi_out);
 		}
 
 		err = complete_base_exchange(hip_a);
@@ -1400,27 +1479,27 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 			hip_mr = search_registrations2(REGTYPE_MR, REG_GRANTED);
 			if (draw_mr_key(hip_a, hip_a->keymat_index) < 0) {
 				log_(WARN, "Failed to draw mobile "
-					"router key");
+				     "router key");
 			} else {
 				hip_a->mr_keymat_index = keymat_index;
 				log_(NORM, "Drawing MR proxy key %d\n",
-					hip_a->mr_keymat_index);
+				     hip_a->mr_keymat_index);
 				/* If we are a mobile router client */
 				/* use the same key for our mobile router */
-				if (hip_mr && 
+				if (hip_mr &&
 				    !hits_equal(hip_mr->peer_hi->hit,
-						hip_a->peer_hi->hit)) {
+				                hip_a->peer_hi->hit)) {
 					hip_send_update_proxy_ticket(hip_mr,
-						hip_a);
+					                             hip_a);
 				}
 			}
 		}
 
 		if (!err) {
 #ifdef __MACOSX__
-                        hip_a->ipfw_rule = next_divert_rule();
-                        add_divert_rule(hip_a->ipfw_rule,
-                                        IPPROTO_ESP,logaddr(HIPA_DST(hip_a)));
+			hip_a->ipfw_rule = next_divert_rule();
+			add_divert_rule(hip_a->ipfw_rule,
+			                IPPROTO_ESP,logaddr(HIPA_DST(hip_a)));
 #endif
 			/* stay in state R2_SENT, awaiting
 			 * timeout or incoming ESP data */
@@ -1433,15 +1512,13 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 	return(err);
 }
 
-
-
 /*
  *
  * function hip_parse_R2()
  *
  * in:		data = raw socket bytes
- * 		hip_a = pointer to HIP connection instance
- * 		
+ *              hip_a = pointer to HIP connection instance
+ *
  * out:		Returns -1 if error, packet length otherwise.
  *
  * parse HIP Second Responder packet
@@ -1450,30 +1527,31 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 {
 	hiphdr *hiph;
-	int location, hi_loc, len, data_len, next_location; 
-	int type, length, last_type=0;
+	int location, hi_loc, len, data_len, next_location;
+	int type, length, last_type = 0;
 	tlv_head *tlv;
 	char sig_tlv_tmp[sizeof(tlv_hip_sig) + MAX_SIG_SIZE + 2];
 	tlv_esp_info *esp_info;
 	tlv_hmac hmac_tlv_tmp;
 	unsigned char *hmac;
-	__u16 proposed_keymat_index=0;
-	__u32 proposed_spi_out=0;
-				
+	__u16 proposed_keymat_index = 0;
+	__u32 proposed_spi_out = 0;
+
 	location = 0;
 	hi_loc = 0;
 	hiph = (hiphdr*) &data[location];
-	data_len = location + ((hiph->hdr_len+1) * 8);
+	data_len = location + ((hiph->hdr_len + 1) * 8);
 	location += sizeof(hiphdr);
 	while (location < data_len) {
 		tlv = (tlv_head*) &data[location];
 		type = ntohs(tlv->type);
 		length = ntohs(tlv->length);
-		if (check_tlv_type_length(type, length, last_type, "R2") < 0)
+		if (check_tlv_type_length(type, length, last_type, "R2") < 0) {
 			return(-1);
-		else
+		} else {
 			last_type = type;
-	
+		}
+
 		if (type == PARAM_ESP_INFO) {
 			esp_info = (tlv_esp_info*)tlv;
 			proposed_keymat_index = ntohs(esp_info->keymat_index);
@@ -1483,100 +1561,107 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 			memcpy(&hmac_tlv_tmp, tlv, sizeof(tlv_hmac));
 			hi_loc = eight_byte_align(location);
 		} else if (type == PARAM_HIP_SIGNATURE) {
-			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+			if ((hip_a == NULL) || (hip_a->peer_hi == NULL)) {
 				log_(WARN, "Received signature parameter "
-					"without any Host Identity context for "
-					"verification.\n");
+				     "without any Host Identity context for "
+				     "verification.\n");
 				return(-1);
 			}
 			/* The PARAM_ESP_INFO_NOSIG seems to get overwritten
 			 * Should be reworked in future.
 			 * OTB (2/22/2010) */
 			next_location = location +
-				tlv_length_to_parameter_length(length);
+			                tlv_length_to_parameter_length(length);
 			if (next_location < data_len) {
 				tlv_head *temp_tlv =
-					(tlv_head*) &data[next_location];
+				        (tlv_head*) &data[next_location];
 				if (ntohs(temp_tlv->type) ==
-					PARAM_ESP_INFO_NOSIG) {
+				    PARAM_ESP_INFO_NOSIG) {
 					esp_info = (tlv_esp_info*)temp_tlv;
 					hip_a->spi_nat =
-						ntohl(esp_info->new_spi);
+					        ntohl(esp_info->new_spi);
 					log_(NORMT, "Adding SPI NAT 0x%x\n",
-						hip_a->spi_nat);
+					     hip_a->spi_nat);
 				}
 			}
 			/* save SIG and do HMAC_2 verification */
-			memcpy(sig_tlv_tmp, tlv, length+4);
+			memcpy(sig_tlv_tmp, tlv, length + 4);
 			/* When building host identity tlv for HMAC_2 verify,
 			 * use the DI (FQDN) regardless of HCNF.send_hi_name.
 			 * If no DI was rcvd in R1, then no DI will be used. */
-			memset(&data[hi_loc], 0, 
-				build_tlv_hostid_len(hip_a->peer_hi, TRUE));
+			memset(&data[hi_loc], 0,
+			       build_tlv_hostid_len(hip_a->peer_hi, TRUE));
 			len = hi_loc + build_tlv_hostid(&data[hi_loc],
-							hip_a->peer_hi, TRUE);
+			                                hip_a->peer_hi, TRUE);
 			hiph->checksum = 0;
-			hiph->hdr_len = (len/8) - 1;
+			hiph->hdr_len = (len / 8) - 1;
 			hmac = hmac_tlv_tmp.hmac;
 			log_(NORM, "HMAC_2 verify over %d bytes. ",len);
 			log_(NORM, "hdr length=%d \n", hiph->hdr_len);
 			if (validate_hmac(data, len,
-				hmac, 20,
-				get_key(hip_a, HIP_INTEGRITY, TRUE),
-				hip_a->hip_transform)) {
+			                  hmac, 20,
+			                  get_key(hip_a, HIP_INTEGRITY, TRUE),
+			                  hip_a->hip_transform)) {
 				log_(WARN, "Invalid HMAC_2.\n");
 				hip_send_notify(hip_a,
-						NOTIFY_HMAC_FAILED,
-						NULL, 0);
-				if (OPT.permissive)
+				                NOTIFY_HMAC_FAILED,
+				                NULL, 0);
+				if (OPT.permissive) {
 					return(0);
-				else
+				} else {
 					return(-1);
-			} else  {
+				}
+			} else {
 				log_(NORM, "HMAC_2 verified OK.\n");
 			}
 			/* restore the HMAC_2 and SIG tlvs */
 			memcpy(&data[hi_loc], &hmac_tlv_tmp, sizeof(tlv_hmac));
-			memcpy(tlv, sig_tlv_tmp, length+4);
+			memcpy(tlv, sig_tlv_tmp, length + 4);
 			/* now do signature processing */
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
-			hiph->hdr_len = (len/8) - 1;
+			hiph->hdr_len = (len / 8) - 1;
 			if (validate_signature(data, len, tlv,
-				hip_a->peer_hi->dsa, hip_a->peer_hi->rsa) < 0) {
+			                       hip_a->peer_hi->dsa,
+			                       hip_a->peer_hi->rsa) < 0) {
 				log_(WARN, "Invalid signature.\n");
 				hip_send_notify(hip_a,
-						NOTIFY_AUTHENTICATION_FAILED,
-						NULL, 0);
-				if (!OPT.permissive)
+				                NOTIFY_AUTHENTICATION_FAILED,
+				                NULL, 0);
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			}
 			/* packet is OK, accept SPI and keymat index */
 			hip_a->spi_out = proposed_spi_out;
-			if (proposed_keymat_index > hip_a->keymat_index)
+			if (proposed_keymat_index > hip_a->keymat_index) {
 				hip_a->keymat_index = proposed_keymat_index;
+			}
 			return(0);
-		} else if (type == PARAM_REG_RESPONSE) {  	/* R2 packet */
-			log_(NORM, "Received response from registrar in the R2 "
-				"packet.\n");
+		} else if (type == PARAM_REG_RESPONSE) {        /* R2 packet */
+			log_(NORM,
+			     "Received response from registrar in the R2 "
+			     "packet.\n");
 			if (handle_reg_response(hip_a, &data[location]) < 0) {
 				log_(WARN, "Problem with registration "
-					"response.\n");
+				     "response.\n");
 			}
-		} else if (type == PARAM_REG_FAILED) {		/* R2 packet */
+		} else if (type == PARAM_REG_FAILED) {          /* R2 packet */
 			log_(NORM, "Received failure from registrar in "
-				"UPDATE packet.\n");
+			     "UPDATE packet.\n");
 			if (handle_reg_failed(hip_a, &data[location]) < 0) {
 				log_(WARN, "Problem with registration "
-					"failure.\n");
+				     "failure.\n");
 			}
 		} else {
 			if (check_tlv_unknown_critical(type, length) < 0) {
 				__u16 t;
 				t = (__u16)type;
-				hip_send_notify(hip_a,
-				     NOTIFY_UNSUPPORTED_CRITICAL_PARAMETER_TYPE,
-					(__u8 *)&t, sizeof(__u16));
+				hip_send_notify(
+				        hip_a,
+				        NOTIFY_UNSUPPORTED_CRITICAL_PARAMETER_TYPE,
+				        (__u8 *)&t,
+				        sizeof(__u16));
 				return(-1);
 			}
 		}
@@ -1588,7 +1673,7 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
 
 int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
 {
-	int err=0;
+	int err = 0;
 	hip_assoc *hip_mr;
 
 	/* R2 is only accepted in state I2_SENT */
@@ -1613,10 +1698,10 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
 		set_state(hip_a, ESTABLISHED);
 		if (OPT.mh && (hip_send_update_locators(hip_a) < 0)) {
 			log_(WARN, "Failed to send UPDATE with locators after "
-				"receiving R2.\n");
+			     "receiving R2.\n");
 		}
 		hip_mr = search_registrations2(REGTYPE_MR, REG_GRANTED);
-		if (hip_mr && 
+		if (hip_mr &&
 		    !hits_equal(hip_mr->peer_hi->hit, hip_a->peer_hi->hit)) {
 			/* we are registered with a mobile router service and
 			 * this association is not the one with the mr, so
@@ -1627,7 +1712,7 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
 			} else {
 				hip_a->mr_keymat_index = keymat_index;
 				log_(NORM, "Drawing MR proxy key %d\n",
-					hip_a->mr_keymat_index);
+				     hip_a->mr_keymat_index);
 				hip_send_update_proxy_ticket(hip_mr, hip_a);
 			}
 		}
@@ -1635,8 +1720,8 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
 		log_(NORM, "SA incomplete (%d).\n", err);
 	}
 #ifdef __MACOSX__
-        hip_a->ipfw_rule = next_divert_rule();
-        add_divert_rule(hip_a->ipfw_rule,IPPROTO_ESP,logaddr(HIPA_DST(hip_a)));
+	hip_a->ipfw_rule = next_divert_rule();
+	add_divert_rule(hip_a->ipfw_rule,IPPROTO_ESP,logaddr(HIPA_DST(hip_a)));
 #endif
 	return(err);
 }
@@ -1645,30 +1730,31 @@ int hip_handle_R2(__u8 *buff, hip_assoc *hip_a)
  * function hip_parse_update()
  *
  * in:		data = the data to be parsed
- * 		hip_a = the existing HIP association, for HMAC verification
- * 		rk = struct for storing the peer's rekeying data
- * 		nonce =
- * 		src = source of received UPDATE, for UDP port
+ *              hip_a = the existing HIP association, for HMAC verification
+ *              rk = struct for storing the peer's rekeying data
+ *              nonce =
+ *              src = source of received UPDATE, for UDP port
  *
  * out:
  */
 int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
-    __u32 *nonce, struct sockaddr *src)
+                     __u32 *nonce, struct sockaddr *src)
 {
 	hiphdr *hiph;
-	int location, len, data_len; 
-	int type, length, last_type=0, status;
+	int location, len, data_len;
+	int type, length, last_type = 0, status;
 	int loc_count, loc_len;
-	int sig_verified=FALSE, hmac_verified=FALSE, ticket_verified=FALSE;
+	int sig_verified = FALSE, hmac_verified = FALSE, ticket_verified =
+	        FALSE;
 	tlv_head *tlv;
-	__u32 new_spi=0;
-	__u8 g_id=0, *hmac, *p;
+	__u32 new_spi = 0;
+	__u8 g_id = 0, *hmac, *p;
 	locator *locators[MAX_LOCATORS];
 	tlv_esp_info *esp_info = NULL;
 	tlv_from *from;
 	tlv_via_rvs *via;
 	struct sockaddr_storage rvs_addr;
-	unsigned char *rvs_hmac;	
+	unsigned char *rvs_hmac;
 	hip_assoc *hip_a_rvs;
 
 	memset(locators, 0, sizeof(locators));
@@ -1676,7 +1762,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 	*nonce = 0;
 	location = 0;
 	hiph = (hiphdr*) &data[location];
-	data_len = location + ((hiph->hdr_len+1) * 8);
+	data_len = location + ((hiph->hdr_len + 1) * 8);
 	location += sizeof(hiphdr);
 
 	status = -1;
@@ -1688,10 +1774,12 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 		tlv = (tlv_head*) &data[location];
 		type = ntohs(tlv->type);
 		length = ntohs(tlv->length);
-		if (check_tlv_type_length(type, length, last_type,"UPDATE") < 0)
+		if (check_tlv_type_length(type, length, last_type,
+		                          "UPDATE") < 0) {
 			return(-1);
-		else
+		} else {
 			last_type = type;
+		}
 		/* first verify HMAC and SIGNATURE */
 		if (!hmac_verified && (type == PARAM_HMAC)) {
 			__u8 *key;
@@ -1699,7 +1787,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 			/* reset the length and checksum for the HMAC */
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
-			hiph->hdr_len = (len/8) - 1;
+			hiph->hdr_len = (len / 8) - 1;
 			log_(NORM, "HMAC verify over %d bytes. ",len);
 			log_(NORM, "hdr length=%d \n", hiph->hdr_len);
 			if (ticket_verified) {
@@ -1708,15 +1796,16 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 				key = get_key(hip_a, HIP_INTEGRITY, TRUE);
 			}
 			if (validate_hmac(data, len,
-				hmac, length,
-				key,
-				hip_a->hip_transform)) {
+			                  hmac, length,
+			                  key,
+			                  hip_a->hip_transform)) {
 				log_(WARN, "Invalid HMAC.\n");
 				hip_send_notify(hip_a,
-						NOTIFY_HMAC_FAILED,
-						NULL, 0);
-				if (!OPT.permissive)
+				                NOTIFY_HMAC_FAILED,
+				                NULL, 0);
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			}
 			log_(NORM, "HMAC verified OK.\n");
 			hmac_verified = TRUE;
@@ -1729,23 +1818,25 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 			}
 			continue;
 		} else if (!sig_verified && (type == PARAM_HIP_SIGNATURE)) {
-			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+			if ((hip_a == NULL) || (hip_a->peer_hi == NULL)) {
 				log_(WARN, "Received signature parameter "
-					"without any Host Identity context for "
-					"verification.\n");
+				     "without any Host Identity context for "
+				     "verification.\n");
 				return(-1);
 			}
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
-			hiph->hdr_len = (len/8) - 1;
+			hiph->hdr_len = (len / 8) - 1;
 			if (validate_signature(data, len, tlv,
-				hip_a->peer_hi->dsa, hip_a->peer_hi->rsa) < 0) {
+			                       hip_a->peer_hi->dsa,
+			                       hip_a->peer_hi->rsa) < 0) {
 				log_(WARN, "Invalid signature.\n");
 				hip_send_notify(hip_a,
-						NOTIFY_AUTHENTICATION_FAILED,
-						NULL, 0);
-				if (!OPT.permissive)
+				                NOTIFY_AUTHENTICATION_FAILED,
+				                NULL, 0);
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			}
 			/* now we may save changes from this UPDATE */
 			status = 0;
@@ -1754,16 +1845,16 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 			location = sizeof(hiphdr);
 			continue;
 		} else if (!ticket_verified && (type == PARAM_AUTH_TICKET) &&
-			   hip_a->spi_nat) {
+		           hip_a->spi_nat) {
 			tlv_auth_ticket *auth_ticket =
-				(tlv_auth_ticket *) &data[location];
+			        (tlv_auth_ticket *) &data[location];
 			if (hip_a->mr_keymat_index !=
 			    ntohs(auth_ticket->hmac_key_index)) {
 				log_(WARN, "Keymat indices do not match!\n");
 				log_(WARN, "My mr_keymat_index is %d\n",
-					hip_a->mr_keymat_index);
+				     hip_a->mr_keymat_index);
 				log_(WARN, "Proxy keymat_index is %d\n",
-					ntohs(auth_ticket->hmac_key_index));
+				     ntohs(auth_ticket->hmac_key_index));
 				/* Generate new keymat? */
 			}
 			len = sizeof(auth_ticket->hmac_key_index) +
@@ -1772,23 +1863,24 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 			      sizeof(auth_ticket->lifetime);
 			log_(NORM, "HMAC verify ticket over %d bytes.\n",len);
 			if (validate_hmac(
-				(const __u8*)&auth_ticket->hmac_key_index, len,
-				auth_ticket->hmac, sizeof(auth_ticket->hmac),
-				get_key(hip_a, HIP_INTEGRITY, TRUE),
-				hip_a->hip_transform)) {
+			            (const __u8*)&auth_ticket->hmac_key_index,
+			            len,
+			            auth_ticket->hmac, sizeof(auth_ticket->hmac),
+			            get_key(hip_a, HIP_INTEGRITY, TRUE),
+			            hip_a->hip_transform)) {
 				log_(WARN, "Invalid HMAC over ticket.\n");
 			} else {
 				log_(NORM, "HMAC over ticket succeeded\n");
 				ticket_verified = TRUE;
 			}
-		} 
-		
+		}
+
 		/* skip all parameters until verification */
 		if (!hmac_verified && !sig_verified) {
 			location += tlv_length_to_parameter_length(length);
 			continue;
 		}
-		
+
 		if (type == PARAM_LOCATOR) {
 			/* get location of first locator */
 			locators[loc_count] = ((tlv_locator*)tlv)->locator1;
@@ -1799,8 +1891,8 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 			while (len > 0) {
 				if (loc_count >= MAX_LOCATORS) {
 					log_(WARN, "Only handling first %d loc",
-					    "ators, dropping %d.\n",
-					    MAX_LOCATORS, loc_count + 1);
+					     "ators, dropping %d.\n",
+					     MAX_LOCATORS, loc_count + 1);
 					break;
 				}
 				/* p used to point to next locator */
@@ -1810,21 +1902,27 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 				/* calculate length of this locator */
 				if ((locators[loc_count]->locator_length != 5)
 				    &&
-				    (locators[loc_count]->locator_length != 4)){
+				    (locators[loc_count]->locator_length !=
+				     4)) {
 					log_(WARN, "Invalid locator length of");
-					log_(NORM, " %d found.\n",
-					   locators[loc_count]->locator_length);
+					log_(
+					        NORM,
+					        " %d found.\n",
+					        locators[loc_count]->
+					        locator_length);
 					return(-1);
 				}
 				loc_len = 8;
-				loc_len+= 4*locators[loc_count]->locator_length;
+				loc_len += 4 *
+				           locators[loc_count]->locator_length;
 				len -= loc_len;
 				loc_count++;
 			}
 		} else if (type == PARAM_ESP_INFO) {
 			esp_info = (tlv_esp_info *) tlv;
 			new_spi = ntohl(esp_info->new_spi);
-			if (handle_esp_info(esp_info, hip_a->spi_out, rk) < 0) {
+			if (handle_esp_info(esp_info, hip_a->spi_out,
+			                    rk) < 0) {
 				log_(WARN, "Problem with ESP_INFO.\n");
 			}
 		} else if (type == PARAM_SEQ) {
@@ -1833,58 +1931,67 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 			if (rk->update_id < hip_a->peer_hi->update_id) {
 				log_(WARN, "Received Update ID is smaller ");
 				log_(NORM, "than stored Update ID.\n");
-				if (!OPT.permissive)
+				if (!OPT.permissive) {
 					return(-1);
-			} else if (rk->update_id == hip_a->peer_hi->update_id) {
+				}
+			} else if (rk->update_id ==
+			           hip_a->peer_hi->update_id) {
 				/* probably a retransmission, but SHOULD
 				 * rate-limit against DOS here*/
 			}
 			/* save new update ID */
 			hip_a->peer_hi->update_id = rk->update_id;
 		} else if (type == PARAM_ACK) {
-			if (handle_acks(hip_a, (tlv_ack*)tlv))
+			if (handle_acks(hip_a, (tlv_ack*)tlv)) {
 				hip_a->rekey->need_ack = FALSE;
+			}
 		} else if (type == PARAM_DIFFIE_HELLMAN) {
 			if (rk->keymat_index != 0) {
 				log_(WARN, "Diffie-Hellman found in UPDATE, ");
 				log_(NORM, "but keymat_index=%d.\n",
-				    rk->keymat_index);
-				if (!OPT.permissive)
+				     rk->keymat_index);
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			}
 			/* Save the DH context in rk->dh for later use */
 			rk->dh = DH_new();
-			if (handle_dh(NULL, &data[location], &g_id, rk->dh)< 0)
+			if (handle_dh(NULL, &data[location], &g_id,
+			              rk->dh) < 0) {
 				return(-1);
+			}
 		} else if ((type == PARAM_ECHO_RESPONSE) ||
-			   (type == PARAM_ECHO_RESPONSE_NOSIG)) {
+		           (type == PARAM_ECHO_RESPONSE_NOSIG)) {
 			if (length != sizeof(__u32)) {
 				log_(WARN, "ECHO_RESPONSE has wrong length.\n");
-				if (!OPT.permissive)
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			}
 			memcpy(nonce, ((tlv_echo*)tlv)->opaque_data, length);
 		} else if ((type == PARAM_ECHO_REQUEST) ||
-			   (type == PARAM_ECHO_REQUEST_NOSIG)) {
+		           (type == PARAM_ECHO_REQUEST_NOSIG)) {
 			/* prevent excessive memory consumption */
 			if (length > MAX_OPAQUE_SIZE) {
 				log_(WARN,"ECHO_REQUEST in UPDATE is ");
 				log_(NORM,"too large.\n");
 				if (!OPT.permissive &&
-				    (type & PARAM_CRITICAL_BIT))
+				    (type & PARAM_CRITICAL_BIT)) {
 					return(-1);
+				}
 			} else {
-				hip_a->opaque = (struct opaque_entry*) 
-					malloc(sizeof(struct opaque_entry));
+				hip_a->opaque = (struct opaque_entry*)
+				                malloc(sizeof(struct
+				                              opaque_entry));
 				if (hip_a->opaque == NULL) {
 					log_(NORM,"Malloc err: ECHO_REQUEST\n");
 					return(-1);
 				}
 				hip_a->opaque->opaque_len = (__u16)length;
-				memcpy(hip_a->opaque->opaque_data, 
-					((tlv_echo*)tlv)->opaque_data, length);
-				hip_a->opaque->opaque_nosig = 
-					(type == PARAM_ECHO_REQUEST_NOSIG);
+				memcpy(hip_a->opaque->opaque_data,
+				       ((tlv_echo*)tlv)->opaque_data, length);
+				hip_a->opaque->opaque_nosig =
+				        (type == PARAM_ECHO_REQUEST_NOSIG);
 			}
 		} else if (type == PARAM_PROXY_TICKET) {
 #ifdef MOBILE_ROUTER
@@ -1892,56 +1999,57 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 #else /* MOBILE_ROUTER */
 			log_(WARN, "Ignoring proxy ticket in UPDATE packet.\n");
 #endif /* MOBILE_ROUTER */
-		} else if (type == PARAM_REG_INFO){	/* update packet */
-			log_(NORM, "Peer is a registrar providing registration "
-				"info in its UPDATE packet.\n");
+		} else if (type == PARAM_REG_INFO) {     /* update packet */
+			log_(NORM,
+			     "Peer is a registrar providing registration "
+			     "info in its UPDATE packet.\n");
 			if (handle_reg_info(hip_a, &data[location]) < 0) {
 				log_(WARN, "Problem with registration info.\n");
 			}
-		} else if (type == PARAM_REG_REQUEST){	/* update packet */
+		} else if (type == PARAM_REG_REQUEST) {  /* update packet */
 			log_(NORM, "Peer has requested registration(s) in its "
-				"UPDATE packet.\n");
+			     "UPDATE packet.\n");
 			if (handle_reg_request(hip_a, &data[location]) < 0) {
 				log_(WARN, "Problem with registration "
-					"request.\n");
+				     "request.\n");
 			}
 		} else if (type == PARAM_REG_RESPONSE) { /* update packet */
 			log_(NORM, "Received response from registrar in "
-				"UPDATE packet.\n");
+			     "UPDATE packet.\n");
 			if (handle_reg_response(hip_a, &data[location]) < 0) {
 				log_(WARN, "Problem with registration "
-					"response.\n");
+				     "response.\n");
 			}
-		} else if (type == PARAM_REG_FAILED) { 	/* update packet */
+		} else if (type == PARAM_REG_FAILED) {  /* update packet */
 			log_(NORM, "Received failure from registrar in "
-				"UPDATE packet.\n");
+			     "UPDATE packet.\n");
 			if (handle_reg_failed(hip_a, &data[location]) < 0) {
 				log_(WARN, "Problem with registration "
-					"failure.\n");
+				     "failure.\n");
 			}
-                } else if (type == PARAM_FROM) {
+		} else if (type == PARAM_FROM) {
 			from = (tlv_from*) &data[location];
 			if (length > (sizeof(tlv_from) - 4)) {
 				log_(NORM, "Ignoring extra address data.\n");
 			}
 			add_from_via(hip_a, PARAM_FROM, NULL, from->address);
-                } else if (type == PARAM_VIA_RVS) {
+		} else if (type == PARAM_VIA_RVS) {
 			via = (tlv_via_rvs *) &data[location];
 			if (IN6_IS_ADDR_V4MAPPED(
-					(struct in6_addr*)via->address)) {
+			            (struct in6_addr*)via->address)) {
 				rvs_addr.ss_family = AF_INET;
 				memcpy(SA2IP(&rvs_addr), &via->address[12],
-						SAIPLEN(&rvs_addr));
+				       SAIPLEN(&rvs_addr));
 			} else {
 				rvs_addr.ss_family = AF_INET;
 				memcpy(SA2IP(&rvs_addr), via->address,
-						SAIPLEN(&rvs_addr));
+				       SAIPLEN(&rvs_addr));
 			}
 			log_(NORM, "UPDATE packet relayed by the Rendezvous "
-				"Server address %s.\n", logaddr(SA(&rvs_addr)));
-		} else if (type == PARAM_RVS_HMAC){
+			     "Server address %s.\n", logaddr(SA(&rvs_addr)));
+		} else if (type == PARAM_RVS_HMAC) {
 			hip_a_rvs = search_registrations2(REGTYPE_RVS,
-				REG_GRANTED);
+			                                  REG_GRANTED);
 			if (!hip_a_rvs) {
 				log_(WARN, "Received UPDATE with RVS_HMAC, "
 				     "but could not find an association "
@@ -1950,46 +2058,50 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 					free(hip_a->from_via);
 					hip_a->from_via = NULL;
 				}
-               	                if (!OPT.permissive)
-                       	                return(-1);
+				if (!OPT.permissive) {
+					return(-1);
+				}
 			} else {
 				rvs_hmac = ((tlv_hmac*)tlv)->hmac;
 				/* reset the length and checksum for the HMAC */
-       		                len = eight_byte_align(location);
-       	        	        hiph->checksum = 0;
-       	                	hiph->hdr_len = (len/8) - 1;
+				len = eight_byte_align(location);
+				hiph->checksum = 0;
+				hiph->hdr_len = (len / 8) - 1;
 				log_(NORM, "RVS_HMAC verify over %d bytes. ",
 				     len);
-       		                log_(NORM, "hdr length=%d \n", hiph->hdr_len);
-       	        	        if (validate_hmac(data, len, rvs_hmac, length,
-				    get_key(hip_a_rvs, HIP_INTEGRITY, TRUE),
-				    hip_a_rvs->hip_transform)) {
-       		                        log_(WARN, "Invalid RVS_HMAC.\n");
+				log_(NORM, "hdr length=%d \n", hiph->hdr_len);
+				if (validate_hmac(data, len, rvs_hmac, length,
+				                  get_key(hip_a_rvs,
+				                          HIP_INTEGRITY, TRUE),
+				                  hip_a_rvs->hip_transform)) {
+					log_(WARN, "Invalid RVS_HMAC.\n");
 					if (hip_a->from_via) {
 						free(hip_a->from_via);
 						hip_a->from_via = NULL;
 					}
-       	        	                if (!OPT.permissive)
-       	                	                return(-1);
+					if (!OPT.permissive) {
+						return(-1);
+					}
 				} else {
-       		                        log_(NORM, "RVS_HMAC verified OK.\n");
-       	        	        }
+					log_(NORM, "RVS_HMAC verified OK.\n");
+				}
 			}
-		} else if ((type == PARAM_HMAC) || 
-			   (type == PARAM_HIP_SIGNATURE) ||
-			   (type == PARAM_AUTH_TICKET)) {
+		} else if ((type == PARAM_HMAC) ||
+		           (type == PARAM_HIP_SIGNATURE) ||
+		           (type == PARAM_AUTH_TICKET)) {
 			/* these parameters already processed */
 		} else {
-			if (check_tlv_unknown_critical(type, length) < 0)
+			if (check_tlv_unknown_critical(type, length) < 0) {
 				return(-1);
+			}
 		}
 		location += tlv_length_to_parameter_length(length);
 	}
-	
+
 	/* update peer address list */
-	if (loc_count > 0) { 
+	if (loc_count > 0) {
 		if (handle_locators(hip_a, locators, loc_count, src,
-								new_spi) < 0) {
+		                    new_spi) < 0) {
 			log_(WARN, "Problem with LOCATOR.\n");
 			status = -1;
 		}
@@ -1998,12 +2110,12 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
 }
 
 int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
-		struct sockaddr *dst)
+                      struct sockaddr *dst)
 {
 	int err;
 	struct rekey_info rk;
-	struct sockaddr *addrcheck=NULL;
-	int need_to_send_update=FALSE;
+	struct sockaddr *addrcheck = NULL;
+	int need_to_send_update = FALSE;
 	__u32 nonce;
 	struct reg_info *reg;
 	hip_assoc *hip_a_rvs;
@@ -2021,41 +2133,43 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
 				return(-1);
 			}
 			if (add_from_via(hip_a_client, PARAM_FROM, src, NULL)
-				< 0)
+			    < 0) {
 				return(-1);
-			if (hip_send_update_relay(data, hip_a_client) < 0)
+			}
+			if (hip_send_update_relay(data, hip_a_client) < 0) {
 				return(-1);
-			else
+			} else {
 				return(0);
+			}
 		} else {
 			return(-1);
 		}
 	}
 
 	/*
-  	 * UPDATE only accepted in ESTABLISHED and R2_SENT states
-	*/
+	 * UPDATE only accepted in ESTABLISHED and R2_SENT states
+	 */
 	if ((hip_a->state != ESTABLISHED) && (hip_a->state != R2_SENT)) {
 		log_(WARN, "UPDATE not accepted in state %d, dropping.\n",
-		    hip_a->state);
+		     hip_a->state);
 		return(-1);
 	}
-	
+
 	memset(&rk, 0, sizeof(struct rekey_info));
 	nonce = 0;
 	if ((err = hip_parse_update(data, hip_a, &rk, &nonce, src)) < 0) {
 		log_(WARN, "Error while processing UPDATE, dropping.\n");
 		return(-1);
 	}
-	
+
 	/*
 	 * If received an UPDATE in R2_SENT state, move to ESTABLISHED state
 	 */
 	if (hip_a->state == R2_SENT) {
 		set_state(hip_a, ESTABLISHED);
 	}
-	
-	/* 
+
+	/*
 	 * Only save the peer's rekeying state after the UPDATE
 	 * has been verified as OK.
 	 */
@@ -2066,7 +2180,7 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
 		hip_a->peer_rekey = malloc(sizeof(struct rekey_info));
 		if (hip_a->peer_rekey) {
 			memcpy(hip_a->peer_rekey, &rk,
-				sizeof(struct rekey_info));
+			       sizeof(struct rekey_info));
 		} else {
 			log_(WARN, "Malloc error\n");
 			return(-1);
@@ -2075,17 +2189,19 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
 		/* A new SPI has been proposed, e.g. during readdress,
 		 * replace old peer information.
 		 */
-		if (hip_a->peer_rekey->dh)
+		if (hip_a->peer_rekey->dh) {
 			DH_free(hip_a->peer_rekey->dh);
+		}
 		memcpy(hip_a->peer_rekey, &rk, sizeof(struct rekey_info));
 	}
-	
-	/* 
-	 * Update address status if we received our 
+
+	/*
+	 * Update address status if we received our
 	 * address verification nonce
 	 */
-	if (nonce)
+	if (nonce) {
 		finish_address_check(hip_a, nonce, src);
+	}
 
 	/*
 	 * Handle rekeying, based on current state
@@ -2097,32 +2213,34 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
 		need_to_send_update = TRUE;
 	}
 
-	/* 
+	/*
 	 * Generate a new UPDATE because of ACK?
 	 */
 	if (hip_a->peer_rekey && hip_a->peer_rekey->need_ack) {
 		log_(NORM, "Send new UPDATE to ack update ID %d.\n",
-			hip_a->peer_rekey->update_id);
+		     hip_a->peer_rekey->update_id);
 		need_to_send_update = TRUE;
 	}
 
-	/* 
+	/*
 	 * Generate a new UPDATE because of REG_REQUEST?
 	 */
 	if (hip_a->regs) {
 		for (reg = hip_a->regs->reginfos; reg; reg = reg->next) {
-			if (reg->state == REG_SEND_RESP  ||
-			    reg->state == REG_SEND_CANCELLED  ||
-			    reg->state == REG_SEND_FAILED) {
-				log_(NORM, "Send new UPDATE due to registration"
-					"request (state=%d).\n", reg->state);
+			if ((reg->state == REG_SEND_RESP) ||
+			    (reg->state == REG_SEND_CANCELLED) ||
+			    (reg->state == REG_SEND_FAILED)) {
+				log_(NORM,
+				     "Send new UPDATE due to registration"
+				     "request (state=%d).\n",
+				     reg->state);
 				need_to_send_update = TRUE;
 				break;
 			}
 		}
 	}
 
-	/* 
+	/*
 	 * Handle readdress and address verification.
 	 * Look for new preferred addresses that may have been added,
 	 * and for addresses that need verifying
@@ -2139,14 +2257,14 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
 	 * in address for VIA_RVS parameter.
 	 */
 	if (need_to_send_update && hip_a->from_via &&
-	    (ntohs(hip_a->from_via->type) == PARAM_FROM)) { 
+	    (ntohs(hip_a->from_via->type) == PARAM_FROM)) {
 		/* get RVS */
 		hip_a_rvs = search_registrations2(REGTYPE_RVS, REG_GRANTED);
 		if (hip_a_rvs) {
 			/* get address from FROM parameter */
 			memset(&addr, 0, sizeof(addr));
-			if (IN6_IS_ADDR_V4MAPPED( (struct in6_addr*) 
-						  hip_a->from_via->address)) {
+			if (IN6_IS_ADDR_V4MAPPED((struct in6_addr*)
+			                         hip_a->from_via->address)) {
 				addr.ss_family = AF_INET;
 				addrp = &hip_a->from_via->address[12];
 			} else {
@@ -2155,17 +2273,18 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
 			}
 			memcpy(SA2IP(&addr), addrp, SAIPLEN(&addr));
 			src = SA(&addr);
-			if (HIPA_DST(hip_a)->sa_family == AF_INET)
+			if (HIPA_DST(hip_a)->sa_family == AF_INET) {
 				((struct sockaddr_in *)src)->sin_port =
-				  ((struct sockaddr_in *)
-					HIPA_DST(hip_a))->sin_port;
+				        ((struct sockaddr_in *)
+				         HIPA_DST(hip_a))->sin_port;
+			}
 			log_(NORM, "Relayed UPDATE from RVS %s, ",
-				logaddr(HIPA_DST(hip_a_rvs))); 
+			     logaddr(HIPA_DST(hip_a_rvs)));
 			log_(NORM, "using %s as new destination address.\n",
-				logaddr(src));
+			     logaddr(src));
 			/* store RVS address for VIA_RVS parameter */
-			add_from_via(hip_a, PARAM_VIA_RVS, 
-					HIPA_DST(hip_a_rvs), NULL);
+			add_from_via(hip_a, PARAM_VIA_RVS,
+			             HIPA_DST(hip_a_rvs), NULL);
 		}
 	}
 
@@ -2174,12 +2293,12 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
 			log_(NORM, "Sent UPDATE (%d bytes)\n", err);
 		} else {
 			log_(WARN, "Failed to send UPDATE: %s.\n",
-			    strerror(errno));
+			     strerror(errno));
 		}
 	}
 
 	/*
-	 * cleanup unused structures 
+	 * cleanup unused structures
 	 */
 	if ((hip_a->rekey) && !hip_a->rekey->need_ack &&
 	    !hip_a->rekey->new_spi && !hip_a->rekey->dh) {
@@ -2194,15 +2313,14 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
 	return(0);
 }
 
-
 /*
  * handle_update_rekey()
  *
  * in:		hip_a = the association containing peer_rekey, rekey structs
- * 			for building the UPDATE message, and the DH
- * 		
+ *                      for building the UPDATE message, and the DH
+ *
  * out:		Returns 0 if no update needs to be sent, 1 if update is needed,
- * 		or -1 on error.
+ *              or -1 on error.
  *
  * Take care of the rekeying portion of UPDATE messages.
  * Uses hip_a->rekey and hip_a->peer_rekey for managing rekeying.
@@ -2211,20 +2329,21 @@ int handle_update_rekey(hip_assoc *hip_a)
 {
 	int need_to_send_update = FALSE;
 
-	if (!hip_a)
-		return -1;
+	if (!hip_a) {
+		return(-1);
+	}
 
 	/* Did we initiate the rekey? */
 	if (hip_a->rekey) {
 		if (!hip_a->rekey->new_spi) {
 			/* finish_address_check() should've already taken
-			 * care of this case 
+			 * care of this case
 			 */
 			log_(WARN, "handle_update_rekey(): unexpected ");
 			log_(NORM, "rekey state reached!\n");
 
 		}
-		/* We initiated the rekey, which will finish in 
+		/* We initiated the rekey, which will finish in
 		 * hip_handle_state_timeouts()
 		 */
 		return(need_to_send_update);
@@ -2232,27 +2351,27 @@ int handle_update_rekey(hip_assoc *hip_a)
 
 	if ((hip_a->state == ESTABLISHED) &&
 	    (hip_a->peer_rekey) &&
-	    (hip_a->peer_rekey->new_spi > 0)) {	/* 8.11.1 */
+	    (hip_a->peer_rekey->new_spi > 0)) { /* 8.11.1 */
 		/* use hip_a->rekey for the new update
 		 * keymat_index = index to use in ESP_INFO
 		 * dh_group_id, dh = new DH key to send
 		 */
 		if (build_rekey(hip_a) < 0) {
 			log_(WARN, "handle_update_rekey() failed to build a "
-				"new rekey structure for response to peer "
-				"rekeying event.\n");
+			     "new rekey structure for response to peer "
+			     "rekeying event.\n");
 			return(-1);
 		}
 		need_to_send_update = TRUE;
-	} 
-		/* 8.11.2
-		 * At this point the rekey can be finished if the updates
-		 * have been properly acked. However, we cannot call
-		 * hip_finish_rekey() here because there may be pending
-		 * expires on the ESP socket.
-		 *
-		 * Thus, defer until hip_handle_state_timeouts()
-		 */
+	}
+	/* 8.11.2
+	 * At this point the rekey can be finished if the updates
+	 * have been properly acked. However, we cannot call
+	 * hip_finish_rekey() here because there may be pending
+	 * expires on the ESP socket.
+	 *
+	 * Thus, defer until hip_handle_state_timeouts()
+	 */
 	return(need_to_send_update);
 }
 
@@ -2260,10 +2379,10 @@ int handle_update_rekey(hip_assoc *hip_a)
  * handle_update_readdress()
  *
  * in:		hip_a = the association containing peer_hi with the peer's
- * 			address list
- * 		
+ *                      address list
+ *
  * out:		Returns 0 if no update needs to be sent, 1 if update is needed,
- * 		or -1 on error.
+ *              or -1 on error.
  *
  * Take care of the address verification and readdressing tasks when
  * receiving UPDATE messages. hip_a->peer_hi->addrs is a list of peer
@@ -2277,23 +2396,25 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck)
 	struct sockaddr *pref_addr, *new_af_addr = NULL;
 	__u32 nonce, new_spi, new_peer_spi;
 
-	if (!hip_a)
-		return -1;
+	if (!hip_a) {
+		return(-1);
+	}
 
 	l = peer_list = &hip_a->peer_hi->addrs;
 	while (l) {
 		l_next = l->next;
 		/* new preferred address, do readdressing tasks */
-		if (l->preferred && 
-		    (hip_a->peer_hi->skip_addrcheck || l->status==ACTIVE)) {
+		if (l->preferred &&
+		    (hip_a->peer_hi->skip_addrcheck ||
+		     (l->status == ACTIVE))) {
 			pref_addr = (struct sockaddr*)&l->addr;
 			log_(NORMT, "Making new preferred address active: %s\n",
-			    logaddr(pref_addr));
+			     logaddr(pref_addr));
 			/* draw new keys, adopt new SPIs if necessary */
 			new_spi = 0;
 			new_peer_spi = 0;
 			if ((hip_a->rekey) && (!hip_a->rekey->need_ack) &&
-			    (hip_a->peer_rekey) && 
+			    (hip_a->peer_rekey) &&
 			    (hip_a->peer_rekey->new_spi > 0)) {
 				log_(NORMT, "Performing rekey...\n");
 				new_spi = hip_a->rekey->new_spi;
@@ -2302,35 +2423,44 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck)
 			}
 			my_list = &hip_a->hi->addrs;
 			if (l->addr.ss_family != my_list->addr.ss_family) {
-				for (new_af = my_list; new_af; new_af = new_af->next)
-					if (new_af->addr.ss_family == l->addr.ss_family)
+				for (new_af = my_list;
+				     new_af;
+				     new_af = new_af->next) {
+					if (new_af->addr.ss_family ==
+					    l->addr.ss_family) {
 						break;
+					}
+				}
 				if (!new_af) {
-					log_(WARN, "Could not find an address of family %d\n",
-						l->addr.ss_family);
-					return -1;
+					log_(
+					        WARN,
+					        "Could not find an address of family %d\n",
+					        l->addr.ss_family);
+					return(-1);
 				} else {
-					log_(NORMT, "Found new address family %s.\n",
-						logaddr((struct sockaddr*)&new_af->addr));
+					log_(NORMT,
+					     "Found new address family %s.\n",
+					     logaddr((struct sockaddr*)&new_af
+					             ->addr));
 				}
 			}
 			if (!new_af) {
 				rebuild_sa(hip_a, pref_addr, new_spi,
-					TRUE, TRUE);
+				           TRUE, TRUE);
 				rebuild_sa(hip_a, pref_addr, new_peer_spi,
-					FALSE, TRUE);
+				           FALSE, TRUE);
 			} else {
 				new_af_addr = SA(&new_af->addr);
 				rebuild_sa_x2(hip_a, pref_addr, new_af_addr,
-					new_peer_spi, TRUE);
+				              new_peer_spi, TRUE);
 				rebuild_sa_x2(hip_a, new_af_addr, pref_addr,
-					new_spi, FALSE);
+				              new_spi, FALSE);
 			}
-			log_hipa_fromto(QOUT, "Update completed (readdress)", 
-					hip_a, FALSE, TRUE);
+			log_hipa_fromto(QOUT, "Update completed (readdress)",
+			                hip_a, FALSE, TRUE);
 			if (l != peer_list) {
 				memcpy(HIPA_DST(hip_a), pref_addr,
-				    SALEN(pref_addr));
+				       SALEN(pref_addr));
 				hip_a->peer_hi->addrs.lifetime = l->lifetime;
 				make_address_active(&hip_a->peer_hi->addrs);
 				delete_address_entry_from_list(&peer_list, l);
@@ -2338,16 +2468,21 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck)
 			if (new_af) {
 				struct sockaddr_storage temp_addr;
 				int temp_lifetime;
-				log_hipa_fromto(QOUT, "Update completed (readdress)", 
-					hip_a, TRUE, FALSE);
+				log_hipa_fromto(QOUT,
+				                "Update completed (readdress)",
+				                hip_a,
+				                TRUE,
+				                FALSE);
 				/* Swap addrs instead of just overwriting */
-				memcpy(&temp_addr, HIPA_SRC(hip_a), SALEN(HIPA_SRC(hip_a)));
+				memcpy(&temp_addr, HIPA_SRC(hip_a),
+				       SALEN(HIPA_SRC(hip_a)));
 				temp_lifetime = hip_a->hi->addrs.lifetime;
 				memcpy(HIPA_SRC(hip_a), new_af_addr,
-				    SALEN(new_af_addr));
+				       SALEN(new_af_addr));
 				hip_a->hi->addrs.lifetime = new_af->lifetime;
 				make_address_active(&hip_a->hi->addrs);
-				memcpy(new_af_addr, &temp_addr, SALEN(&temp_addr));
+				memcpy(new_af_addr, &temp_addr,
+				       SALEN(&temp_addr));
 				new_af->lifetime = temp_lifetime;
 			}
 			/* adopt new SPIs; rekey structures freed later  */
@@ -2355,22 +2490,22 @@ int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck)
 				hip_a->spi_in = new_spi;
 				hip_a->spi_out = new_peer_spi;
 			}
-		/* choose address to verify */
-		} else if (!hip_a->peer_hi->skip_addrcheck && 
-		    (l->status == UNVERIFIED)) {
+			/* choose address to verify */
+		} else if (!hip_a->peer_hi->skip_addrcheck &&
+		           (l->status == UNVERIFIED)) {
 			/* XXX for now, verify only the first address */
 			*addrcheck = (struct sockaddr *)&l->addr;
 			log_(NORMT, "Performing address check for: %s\n",
-			    logaddr(*addrcheck));
+			     logaddr(*addrcheck));
 			RAND_bytes((__u8*)&nonce, sizeof(__u32));
 			l->nonce = nonce;
 			/* add SEQ parameter to UPDATE if it doesn't have one */
 			if (!hip_a->rekey) {
-				hip_a->rekey =malloc(sizeof(struct rekey_info));
+				hip_a->rekey = malloc(sizeof(struct rekey_info));
 				memset(hip_a->rekey, 0,
-					sizeof(struct rekey_info));
+				       sizeof(struct rekey_info));
 				hip_a->rekey->update_id =
-					hip_a->hi->update_id++;
+				        hip_a->hi->update_id++;
 				hip_a->rekey->need_ack = TRUE;
 				gettimeofday(&hip_a->rekey->rk_time, NULL);
 			}
@@ -2386,22 +2521,24 @@ void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src)
 {
 	sockaddr_list *l;
 
-	if (!hip_a || !src)
+	if (!hip_a || !src) {
 		return;
+	}
 
 	/* find peer address */
-	for (l = &hip_a->peer_hi->addrs; l; l=l->next) {
+	for (l = &hip_a->peer_hi->addrs; l; l = l->next) {
 		if ((l->addr.ss_family == src->sa_family) &&
-		    (!memcmp(SA2IP(&l->addr),SA2IP(src),SAIPLEN(src))))
+		    (!memcmp(SA2IP(&l->addr),SA2IP(src),SAIPLEN(src)))) {
 			break;
+		}
 	}
 	if (!l) {
 		log_(WARN, "Could not find address check address %s.\n",
-		    logaddr(src));
-	/* check that echoed nonce matches, and update address status */
+		     logaddr(src));
+		/* check that echoed nonce matches, and update address status */
 	} else if (nonce == l->nonce) {
 		log_(NORM, "Address check succeeded for %s (preferred=%s).\n",
-		    logaddr(src), l->preferred ? "yes" : "no");
+		     logaddr(src), l->preferred ? "yes" : "no");
 		make_address_active(l);
 		/* cleanup structures if they have no more use */
 		if ((!hip_a->rekey->need_ack) && (!hip_a->rekey->new_spi)) {
@@ -2418,7 +2555,7 @@ void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src)
 		 * scanned for new ACTIVE addresses */
 	} else {
 		log_(WARN, "Address check failed for source %s with nonce 0x%x"
-			" (0x%x).\n", logaddr(src), nonce, l->nonce);
+		     " (0x%x).\n", logaddr(src), nonce, l->nonce);
 	}
 }
 
@@ -2426,8 +2563,8 @@ void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src)
  * hip_finish_rekey()
  *
  * in:		hip_a = HIP association with rekey and peer_rekey data
- * 		rebuild = TRUE if SAs should be rebuilt (rekey only)
- * 			  FALSE to leave SAs alone (readdress + rekey)
+ *              rebuild = TRUE if SAs should be rebuilt (rekey only)
+ *                        FALSE to leave SAs alone (readdress + rekey)
  *
  * Completes the rekey process (UPDATE exchange) by drawing or generating
  * new keying material, adding SAs with new SPIs, and dropping the old SAs.
@@ -2437,7 +2574,7 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 	int len, keymat_index, err;
 	unsigned char *dh_secret_key;
 
-	/* 
+	/*
 	 * Rekey from section 8.11.3
 	 */
 
@@ -2449,8 +2586,10 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 		log_(NORM, "At least one DH found in UPDATE exchange, ");
 		log_(NORM, "computing new secret key.\n");
 		if ((hip_a->rekey->dh && hip_a->peer_rekey->dh) &&
-		    (hip_a->rekey->dh_group_id!=hip_a->peer_rekey->dh_group_id))
+		    (hip_a->rekey->dh_group_id !=
+		     hip_a->peer_rekey->dh_group_id)) {
 			log_(WARN, "Warning: UPDATE DH group mismatch!\n");
+		}
 
 		if (hip_a->rekey->dh) {
 			unuse_dh_entry(hip_a->dh);
@@ -2463,8 +2602,8 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 			hip_a->peer_rekey->dh = NULL; /* moved to ->peer_dh*/
 		}
 
-		/* 
-		 * compute a new secret key from our dh and peer's pub_key 
+		/*
+		 * compute a new secret key from our dh and peer's pub_key
 		 * and recompute the keymat
 		 */
 		dh_secret_key = malloc(DH_size(hip_a->dh));
@@ -2473,9 +2612,9 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 			return(-1);
 		}
 		memset(dh_secret_key, 0, DH_size(hip_a->dh));
-		len = DH_compute_key(dh_secret_key, 
-				     hip_a->peer_dh->pub_key,
-				     hip_a->dh);
+		len = DH_compute_key(dh_secret_key,
+		                     hip_a->peer_dh->pub_key,
+		                     hip_a->dh);
 		if (len != DH_size(hip_a->dh)) {
 			log_(WARN, "Warning: secret key len = %d, ", len);
 			log_(NORM, "expected %d\n", DH_size(hip_a->dh));
@@ -2483,18 +2622,21 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 		set_secret_key(dh_secret_key, hip_a);
 		keymat_index = 0;
 		compute_keymat(hip_a);
-	/* 2. set new keymat_index to 0, or choose lowest keymat index */
+		/* 2. set new keymat_index to 0, or choose lowest keymat index
+		 **/
 	} else {
-		if (hip_a->rekey->keymat_index <hip_a->peer_rekey->keymat_index)
+		if (hip_a->rekey->keymat_index <
+		    hip_a->peer_rekey->keymat_index) {
 			keymat_index = hip_a->rekey->keymat_index;
-		else
+		} else {
 			keymat_index = hip_a->peer_rekey->keymat_index;
+		}
 	}
 
 	log_(NORM, "Using keymat index = %d for drawing new keys.\n",
-	    keymat_index);
-	
-	/* 
+	     keymat_index);
+
+	/*
 	 * 3. draw keys for new incoming/outgoing ESP SAs
 	 *    do not draw HIP keys!
 	 */
@@ -2502,7 +2644,7 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 		log_(WARN, "Error drawing new keys, old SAs retained.\n");
 		return(-1);
 	}
-	
+
 	/* 4. move to ESTABLISHED
 	 * 5. add the NEW outgoing/incoming SA
 	 */
@@ -2511,8 +2653,8 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 	/* no need to call sadb_readdress(), since address is not changing */
 
 	if (!err) {
-		log_hipa_fromto(QOUT, "Update completed (rekey)", 
-					hip_a, FALSE, TRUE);
+		log_hipa_fromto(QOUT, "Update completed (rekey)",
+		                hip_a, FALSE, TRUE);
 		hip_a->spi_out = hip_a->peer_rekey->new_spi;
 		hip_a->spi_in = hip_a->rekey->new_spi;
 		free(hip_a->peer_rekey);
@@ -2528,9 +2670,9 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
  * function hip_parse_close()
  *
  * in:		data = raw socket bytes
- * 		hip_a = pointer to HIP connection instance
- * 		*nonce = pointer for storing echo response
- * 		
+ *              hip_a = pointer to HIP connection instance
+ *              *nonce = pointer for storing echo response
+ *
  * out:		Returns -1 if error, packet length otherwise.
  *
  * parse HIP CLOSE and CLOSE_ACK packets
@@ -2539,31 +2681,34 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
 {
 	hiphdr *hiph;
-	int location, len, data_len; 
-	int type, length, last_type=0;
+	int location, len, data_len;
+	int type, length, last_type = 0;
 	tlv_head *tlv;
 	__u8 *hmac;
 	int is_ack;
-	__u32 received_nonce=0;
-   
+	__u32 received_nonce = 0;
+
 	location = 0;
 	hiph = (hiphdr*) &data[location];
-	data_len = location + ((hiph->hdr_len+1) * 8);
+	data_len = location + ((hiph->hdr_len + 1) * 8);
 	location += sizeof(hiphdr);
 	is_ack = (hiph->packet_type == CLOSE_ACK);
-	if (is_ack)
+	if (is_ack) {
 		*nonce = 0;
+	}
 
 	while (location < data_len) {
 		tlv = (tlv_head*) &data[location];
 		type = ntohs(tlv->type);
 		length = ntohs(tlv->length);
 		if (check_tlv_type_length(type, length, last_type,
-			is_ack ? "CLOSE_ACK" : "CLOSE") < 0)
+		                          is_ack ? "CLOSE_ACK" : "CLOSE") <
+		    0) {
 			return(-1);
-		else
+		} else {
 			last_type = type;
-	
+		}
+
 		if (type == PARAM_ECHO_REQUEST) {
 			if (is_ack) {
 				log_(WARN, "Found ECHO_REQUEST in CLOSE_ACK ");
@@ -2573,18 +2718,20 @@ int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
 			/* prevent excessive memory consumption */
 			if (length > MAX_OPAQUE_SIZE) {
 				log_(WARN,"ECHO_REQUEST in CLOSE too large.\n");
-				if (!OPT.permissive)
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			} else {
-				hip_a->opaque = (struct opaque_entry*) 
-					malloc(sizeof(struct opaque_entry));
+				hip_a->opaque = (struct opaque_entry*)
+				                malloc(sizeof(struct
+				                              opaque_entry));
 				if (hip_a->opaque == NULL) {
 					log_(NORM,"Malloc err: ECHO_REQUEST\n");
 					return(-1);
 				}
 				hip_a->opaque->opaque_len = (__u16)length;
-				memcpy(hip_a->opaque->opaque_data, 
-					((tlv_echo*)tlv)->opaque_data, length);
+				memcpy(hip_a->opaque->opaque_data,
+				       ((tlv_echo*)tlv)->opaque_data, length);
 				hip_a->opaque->opaque_nosig = FALSE;
 			}
 		} else if (type == PARAM_ECHO_RESPONSE) {
@@ -2595,35 +2742,40 @@ int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
 			}
 			if (length != sizeof(__u32)) {
 				log_(WARN, "ECHO_RESPONSE has wrong length.\n");
-				if (!OPT.permissive)
+				if (!OPT.permissive) {
 					return(-1);
+				}
 			}
-			memcpy(&received_nonce, 
-			    ((tlv_echo*)tlv)->opaque_data, length);
+			memcpy(&received_nonce,
+			       ((tlv_echo*)tlv)->opaque_data, length);
 		} else if (type == PARAM_HIP_SIGNATURE) {
-			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+			if ((hip_a == NULL) || (hip_a->peer_hi == NULL)) {
 				log_(WARN, "Received signature parameter "
-					"without any Host Identity context for "
-					"verification.\n");
+				     "without any Host Identity context for "
+				     "verification.\n");
 				return(-1);
 			}
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
-			hiph->hdr_len = (len/8) - 1;
+			hiph->hdr_len = (len / 8) - 1;
 			if (validate_signature(data, len, tlv,
-				hip_a->peer_hi->dsa, hip_a->peer_hi->rsa) < 0) {
+			                       hip_a->peer_hi->dsa,
+			                       hip_a->peer_hi->rsa) < 0) {
 				log_(WARN, "Invalid signature.\n");
 				hip_send_notify(hip_a,
-						NOTIFY_AUTHENTICATION_FAILED,
-						NULL, 0);
-				if (OPT.permissive)
+				                NOTIFY_AUTHENTICATION_FAILED,
+				                NULL, 0);
+				if (OPT.permissive) {
 					return(0);
-				else
+				}
+				else {
 					return(-1);
+				}
 			} else {
 				/* save nonce from echo reply */
-				if (received_nonce > 0) 
+				if (received_nonce > 0) {
 					*nonce = received_nonce;
+				}
 				return(0);
 			}
 		} else if (type == PARAM_HMAC) {
@@ -2631,27 +2783,29 @@ int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
 			/* reset the length and checksum for the HMAC */
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
-			hiph->hdr_len = (len/8) - 1;
+			hiph->hdr_len = (len / 8) - 1;
 			log_(NORM, "HMAC verify over %d bytes. ",len);
 			log_(NORM, "hdr length=%d \n", hiph->hdr_len);
 			if (validate_hmac(data, len,
-				hmac, length,
-				get_key(hip_a, HIP_INTEGRITY, TRUE),
-				hip_a->hip_transform)) {
+			                  hmac, length,
+			                  get_key(hip_a, HIP_INTEGRITY, TRUE),
+			                  hip_a->hip_transform)) {
 				log_(WARN, "Invalid HMAC.\n");
 				hip_send_notify(hip_a,
-						NOTIFY_HMAC_FAILED,
-						NULL, 0);
-				if (OPT.permissive)
+				                NOTIFY_HMAC_FAILED,
+				                NULL, 0);
+				if (OPT.permissive) {
 					return(0);
-				else
+				} else {
 					return(-1);
-			} else  {
+				}
+			} else {
 				log_(NORM, "HMAC verified OK.\n");
 			}
 		} else {
-			if (check_tlv_unknown_critical(type, length) < 0)
+			if (check_tlv_unknown_critical(type, length) < 0) {
 				return(-1);
+			}
 		}
 		location += tlv_length_to_parameter_length(length);
 	}
@@ -2661,7 +2815,7 @@ int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
 
 int hip_handle_close(__u8 *buff, hip_assoc *hip_a)
 {
-	int err=0;
+	int err = 0;
 	int is_ack = (((hiphdr*)buff)->packet_type == CLOSE_ACK);
 	__u32 nonce, saved_nonce;
 
@@ -2670,38 +2824,39 @@ int hip_handle_close(__u8 *buff, hip_assoc *hip_a)
 		log_(WARN, "CLOSE_ACK packet not accepted in state=%d.\n",
 		     hip_a->state);
 		return(-1);
-	/* CLOSE is only accepted in states ESTABLISHED, CLOSING, CLOSED */
+		/* CLOSE is only accepted in states ESTABLISHED, CLOSING, CLOSED
+		 **/
 	} else if (!is_ack && (hip_a->state != ESTABLISHED) &&
-		   (hip_a->state != CLOSING) && (hip_a->state != CLOSED) &&
-		   (hip_a->state != R2_SENT)) {
+	           (hip_a->state != CLOSING) && (hip_a->state != CLOSED) &&
+	           (hip_a->state != R2_SENT)) {
 		log_(WARN, "CLOSE packet not accepted in state=%d.\n",
 		     hip_a->state);
 		return(-1);
 	}
 	if (hip_parse_close(buff, hip_a, &nonce) < 0) {
 		log_(WARN, "Error while processing CLOSE%s, dropping.\n",
-			is_ack ? "_ACK" : "");
+		     is_ack ? "_ACK" : "");
 		/* stay in the same state */
 		return(-1);
 	}
 	clear_retransmissions(hip_a);
 #ifdef __MACOSX__
-        if(hip_a->ipfw_rule > 0) {
-                del_divert_rule(hip_a->ipfw_rule);
-                hip_a->ipfw_rule = 0;
-        }
+	if(hip_a->ipfw_rule > 0) {
+		del_divert_rule(hip_a->ipfw_rule);
+		hip_a->ipfw_rule = 0;
+	}
 #endif
 	if (!is_ack) { /* respond with CLOSE_ACK */
 		if ((err = hip_send_close(hip_a, TRUE)) > 0) {
 			log_(NORM, "Sent CLOSE_ACK (%d bytes)\n", err);
 		} else {
 			log_(WARN, "Failed to send CLOSE_ACK: %s.\n",
-			    strerror(errno));
+			     strerror(errno));
 		}
 	} else { /* check CLOSE_ACK echo response */
 		if (!hip_a->opaque) {
 			log_(WARN, "CLOSE_ACK received but nonce has already "
-				"been freed, dropping.");
+			     "been freed, dropping.");
 			return(-1);
 		}
 		memcpy(&saved_nonce, hip_a->opaque->opaque_data, sizeof(__u32));
@@ -2715,7 +2870,7 @@ int hip_handle_close(__u8 *buff, hip_assoc *hip_a)
 		 * CLOSING.
 		 */
 		log_hipa_fromto(QOUT, "Close completed (received ack)",
-				hip_a, TRUE, TRUE);
+		                hip_a, TRUE, TRUE);
 		set_state(hip_a, UNASSOCIATED);
 		free_hip_assoc(hip_a);
 		return(0);
@@ -2728,32 +2883,38 @@ int hip_handle_close(__u8 *buff, hip_assoc *hip_a)
 	err = 0;
 	set_state(hip_a, CLOSED);
 	log_hipa_fromto(QOUT, "Close completed (sent ack)",
-			hip_a, TRUE, TRUE);
+	                hip_a, TRUE, TRUE);
 	err = delete_associations(hip_a, 0, 0);
 	return(err);
 }
 
-int hip_parse_notify(__u8 *data, hip_assoc *hip_a, __u16 *code, __u8 **nd, __u16 *nd_len)
+int hip_parse_notify(__u8 *data,
+                     hip_assoc *hip_a,
+                     __u16 *code,
+                     __u8 **nd,
+                     __u16 *nd_len)
 {
 	hiphdr *hiph;
-	int location, len, data_len; 
-	int type, length, last_type=0;
+	int location, len, data_len;
+	int type, length, last_type = 0;
 	tlv_head *tlv;
 	tlv_notify *notify;
-   
+
 	location = 0;
 	hiph = (hiphdr*) &data[location];
-	data_len = location + ((hiph->hdr_len+1) * 8);
+	data_len = location + ((hiph->hdr_len + 1) * 8);
 	location += sizeof(hiphdr);
 
 	while (location < data_len) {
 		tlv = (tlv_head*) &data[location];
 		type = ntohs(tlv->type);
 		length = ntohs(tlv->length);
-		if (check_tlv_type_length(type, length, last_type, "NOTIFY")< 0)
+		if (check_tlv_type_length(type, length, last_type,
+		                          "NOTIFY") < 0) {
 			return(-1);
-		else
+		} else {
 			last_type = type;
+		}
 
 		if (type == PARAM_NOTIFY) {
 			notify = (tlv_notify*)tlv;
@@ -2762,37 +2923,41 @@ int hip_parse_notify(__u8 *data, hip_assoc *hip_a, __u16 *code, __u8 **nd, __u16
 				*nd_len = length - (sizeof(tlv_notify) - 4);
 				if ((*nd_len > data_len) || (*nd_len < 1)) {
 					log_(WARN,"Bad notify data length:%d\n",
-					    *nd_len);
+					     *nd_len);
 					*nd_len = 0;
 					return(-1);
 				}
 				*nd = notify->notify_data;
 			}
 		} else if (type == PARAM_HIP_SIGNATURE) {
-			if (hip_a == NULL || hip_a->peer_hi == NULL) {
+			if ((hip_a == NULL) || (hip_a->peer_hi == NULL)) {
 				log_(WARN, "Received signature parameter "
-					"without any Host Identity context for "
-					"verification.\n");
+				     "without any Host Identity context for "
+				     "verification.\n");
 				return(-1);
 			}
 			len = eight_byte_align(location);
 			hiph->checksum = 0;
-			hiph->hdr_len = (len/8) - 1;
+			hiph->hdr_len = (len / 8) - 1;
 			if (validate_signature(data, len, tlv,
-				hip_a->peer_hi->dsa, hip_a->peer_hi->rsa) < 0) {
+			                       hip_a->peer_hi->dsa,
+			                       hip_a->peer_hi->rsa) < 0) {
 				log_(WARN, "Invalid signature.\n");
 				/* Don't send NOTIFY responding to a NOTIFY
 				 * (this might create a NOTIFY war) */
-				if (OPT.permissive)
+				if (OPT.permissive) {
 					return(0);
-				else
+				}
+				else {
 					return(-1);
+				}
 			} else {
 				return(0);
 			}
 		} else {
-			if (check_tlv_unknown_critical(type, length) < 0)
+			if (check_tlv_unknown_critical(type, length) < 0) {
 				return(-1);
+			}
 		}
 		location += tlv_length_to_parameter_length(length);
 	}
@@ -2802,9 +2967,9 @@ int hip_parse_notify(__u8 *data, hip_assoc *hip_a, __u16 *code, __u8 **nd, __u16
 
 int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
 {
-	int err=0;
-	__u16 code=0, data_len=0;
-	__u8* data=NULL;
+	int err = 0;
+	__u16 code = 0, data_len = 0;
+	__u8* data = NULL;
 	/* NOTIFY accepted in all states? */
 	if (!hip_a) {
 		log_(WARN, "Received NOTIFY with no association.\n");
@@ -2881,14 +3046,14 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
 		log_(NORM, "Unknown notify code: %d\n", code);
 		break;
 	}
-	
+
 	if (data_len > 0) {
 		log_(NORM, "NOTIFY data: ");
 		print_hex(data, data_len);
 		log_(NORM, "\n");
 	}
 
-	/* 
+	/*
 	 * This was deprecated in draft-06: do not change state based on
 	 * a received NOTIFY packet.
 	 */
@@ -2897,8 +3062,8 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
 	if ((hip_a->state == I1_SENT) || (hip_a->state == I2_SENT) ||
 	    (hip_a->state == R2_SENT)) {
 		log_(WARN, "Association with %s moving from state %d to ",
-			logaddr( (hip_a->state == R2_SENT) ?
-			HIPA_SRC(hip_a) : HIPA_DST(hip_a)), hip_a->state);
+		     logaddr((hip_a->state == R2_SENT) ?
+		             HIPA_SRC(hip_a) : HIPA_DST(hip_a)), hip_a->state);
 		log_(NORM, "E_FAILED because of received NOTIFY.\n");
 		clear_retransmissions(hip_a);
 		set_state(hip_a, E_FAILED);
@@ -2912,7 +3077,7 @@ int hip_handle_BOS(__u8 *data, struct sockaddr *src)
 {
 	hiphdr *hiph;
 	hi_node *peer_hi;
-	int location, len, err=0;
+	int location, len, err = 0;
 	tlv_head *tlv;
 
 
@@ -2927,7 +3092,7 @@ int hip_handle_BOS(__u8 *data, struct sockaddr *src)
 	}
 	peer_hi = NULL;
 	location = sizeof(hiphdr);
-	
+
 	/* validate the packet first */
 	/* Host Identity */
 	tlv = (tlv_head*) &data[location];
@@ -2935,15 +3100,16 @@ int hip_handle_BOS(__u8 *data, struct sockaddr *src)
 		log_(NORM, "Expected HOST_ID in BOS, dropping.\n");
 		return(-1);
 	}
-		
+
 	if (handle_hi(&peer_hi, &data[location]) < 0) {
 		log_(NORM, "Problem with HOST_ID in BOS, dropping.\n");
 		return(-1);
 	}
 	if (!validate_hit(hiph->hit_sndr, peer_hi)) {
 		log_(WARN, "HI in BOS does not match sender's HIT\n");
-		if (!OPT.permissive)
+		if (!OPT.permissive) {
 			err = -1;
+		}
 		goto bos_cleanup;
 	} else {
 		log_(NORM, "HI in BOS validates the sender's HIT.\n");
@@ -2959,15 +3125,15 @@ int hip_handle_BOS(__u8 *data, struct sockaddr *src)
 	}
 	len = eight_byte_align(location);
 	hiph->checksum = 0;
-	hiph->hdr_len = (len/8) - 1;
-	if (validate_signature(	data, location, tlv, peer_hi->dsa, 
-				peer_hi->rsa) < 0) {
+	hiph->hdr_len = (len / 8) - 1;
+	if (validate_signature( data, location, tlv, peer_hi->dsa,
+	                        peer_hi->rsa) < 0) {
 		log_(WARN, "Invalid signature in BOS.\n");
 		err = -1;
 		goto bos_cleanup;
 	} else { /* adopt the new HIT into our peer list */
 		log_(NORM, "BOS signature is good. Adding HIT from %s.\n",
-		    logaddr(src));
+		     logaddr(src));
 		add_peer_hit(hiph->hit_sndr, src);
 		err = 0;
 	}
@@ -2984,16 +3150,16 @@ int hip_handle_CER(__u8 *data, hip_assoc *hip_a)
 
 /*
  * function validate_signature()
- * 
+ *
  * in:		data = data to sign
- * 		data_len = bytes of data to sign
- * 		tlv = sig tlv of signature to verify
+ *              data_len = bytes of data to sign
+ *              tlv = sig tlv of signature to verify
  *
  *
  * out:		Returns 0 if signature is correct, -1 if incorrect or error.
  */
 int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
-			DSA *dsa, RSA *rsa)
+                       DSA *dsa, RSA *rsa)
 {
 	int err;
 	SHA_CTX c;
@@ -3005,43 +3171,45 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
 
 	length = ntohs(sig->length);
 	alg = sig->algorithm;
-	
+
 	switch (alg) {
-		case HI_ALG_DSA:
-			if (!dsa) {
-				log_(WARN, "validate_signature(): ");
-				log_(NORM, "no DSA context!\n");
-				return(-1);
-			}
-			if (length != (1 + HIP_DSA_SIG_SIZE)) {
-				log_(WARN, "Invalid DSA signature size of %d ",
-				    length);
-				log_(NORM, "(should be %d).\n",
-				    1+HIP_DSA_SIG_SIZE);
-				if (!OPT.permissive)
-					return(-1);
-			}
-			break;
-		case HI_ALG_RSA:
-			if (!rsa) {
-				log_(WARN, "validate_signature(): ");
-				log_(NORM, "no RSA context!\n");
-				return(-1);
-			}
-			if (length > (1 + RSA_size(rsa))) {
-				log_(WARN, "Invalid RSA signature size of %d ",
-				    length);
-				log_(NORM, "(should be %d).\n", 
-				    1+RSA_size(rsa));
-				if (!OPT.permissive)
-					return(-1);
-			}
-			break;
-		default:
-			log_(WARN, "Invalid signature algorithm.\n");
+	case HI_ALG_DSA:
+		if (!dsa) {
+			log_(WARN, "validate_signature(): ");
+			log_(NORM, "no DSA context!\n");
 			return(-1);
+		}
+		if (length != (1 + HIP_DSA_SIG_SIZE)) {
+			log_(WARN, "Invalid DSA signature size of %d ",
+			     length);
+			log_(NORM, "(should be %d).\n",
+			     1 + HIP_DSA_SIG_SIZE);
+			if (!OPT.permissive) {
+				return(-1);
+			}
+		}
+		break;
+	case HI_ALG_RSA:
+		if (!rsa) {
+			log_(WARN, "validate_signature(): ");
+			log_(NORM, "no RSA context!\n");
+			return(-1);
+		}
+		if (length > (1 + RSA_size(rsa))) {
+			log_(WARN, "Invalid RSA signature size of %d ",
+			     length);
+			log_(NORM, "(should be %d).\n",
+			     1 + RSA_size(rsa));
+			if (!OPT.permissive) {
+				return(-1);
+			}
+		}
+		break;
+	default:
+		log_(WARN, "Invalid signature algorithm.\n");
+		return(-1);
 	}
-	sig_len = length - 1; 
+	sig_len = length - 1;
 
 	/* calculate SHA1 hash of the HIP message */
 	SHA1_Init(&c);
@@ -3066,7 +3234,7 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
 	case HI_ALG_RSA:
 		/* verify the RSA signature */
 		err = RSA_verify(NID_sha1, md, SHA_DIGEST_LENGTH,
-				sig->signature, sig_len, rsa);
+		                 sig->signature, sig_len, rsa);
 		break;
 	default:
 		err = -1;
@@ -3075,7 +3243,7 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
 
 	if (err < 0) {
 		log_(WARN, "Error with verifying %s signature.\n",
-			HI_TYPESTR(alg));
+		     HI_TYPESTR(alg));
 		return(-1);
 	} else if (err == 0) {
 		log_(WARN, "Incorrect %s signature found.\n", HI_TYPESTR(alg));
@@ -3091,18 +3259,18 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
 
 /*
  * function validate_hmac()
- * 
+ *
  * in:		data     = data to hash
- * 		data_len = number of bytes of data to hash
- * 		hmac     = the hmac sent in the packet, to verify
- * 		hmac_len = length of the above hmac
- * 		key      = key used for the HMAC keyed hashing algorithm
- * 		key_len  = length of the above key
+ *              data_len = number of bytes of data to hash
+ *              hmac     = the hmac sent in the packet, to verify
+ *              hmac_len = length of the above hmac
+ *              key      = key used for the HMAC keyed hashing algorithm
+ *              key_len  = length of the above key
  *
  * out:		Returns 0 if HMAC is correct, -1 if incorrect or error.
  */
 int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
-			__u8 *key, int type)
+                  __u8 *key, int type)
 {
 	unsigned char hmac_md[EVP_MAX_MD_SIZE];
 	unsigned int hmac_md_len = EVP_MAX_MD_SIZE;
@@ -3114,27 +3282,29 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
 	case ESP_3DES_CBC_HMAC_SHA1:
 	case ESP_BLOWFISH_CBC_HMAC_SHA1:
 	case ESP_NULL_HMAC_SHA1:
-		HMAC(	EVP_sha1(),
-			key, key_len,
-			data, data_len,
-			hmac_md, &hmac_md_len  );
+		HMAC(   EVP_sha1(),
+		        key, key_len,
+		        data, data_len,
+		        hmac_md, &hmac_md_len  );
 		break;
 	case ESP_3DES_CBC_HMAC_MD5:
 	case ESP_NULL_HMAC_MD5:
-		HMAC(	EVP_md5(),
-			key, key_len,
-			data, data_len,
-			hmac_md, &hmac_md_len  );
+		HMAC(   EVP_md5(),
+		        key, key_len,
+		        data, data_len,
+		        hmac_md, &hmac_md_len  );
 		break;
 	}
-	/* 
+	/*
 	 * note that hmac_md_len may be < hmac_len,
 	 * i.e. for MD5 hmac_md_len==16
 	 */
-	/* compare lower bits of received HMAC versus calculated HMAC 
+	/* compare lower bits of received HMAC versus calculated HMAC
 	 * for MD5, this is the lower 128 bits; for SHA-1 it's 160-bits */
-	if ((memcmp(&hmac[hmac_len-hmac_md_len], hmac_md, hmac_md_len)==0))
+	if ((memcmp(&hmac[hmac_len - hmac_md_len], hmac_md,
+	            hmac_md_len) == 0)) {
 		return(0);
+	}
 	log_(WARN, "computed hmac: (%d) ", hmac_md_len);
 	print_hex(hmac_md, hmac_md_len);
 	log_(NORM, "\n    received hmac: (%d) ", hmac_len);
@@ -3143,14 +3313,13 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
 	return(-1);
 }
 
-
 /*
  * check_if_my_hit()
  *
  * in:		hit = the HIT to check
  *
  * out:		returns NULL if HIT is not known, pointer to HI otherwise
- * 
+ *
  * Checks if the specified HIT corresponds to one of this machine's
  * Host Identities, and returns a pointer to it. Allows for NULL
  * HIT in opportunisitc mode (then the preferred HI is stored.)
@@ -3159,14 +3328,15 @@ hi_node *check_if_my_hit(hip_hit *hit)
 {
 	hi_node *my_host_id = NULL;
 
-	/* NULL HIT accepted with opportunistic */
 	if ((OPT.opportunistic) &&
-	    (memcmp(hit, &zero_hit, sizeof(hip_hit))==0))
+	    (memcmp(hit, &zero_hit, sizeof(hip_hit)) == 0)) {
+		/* NULL HIT accepted with opportunistic */
 		my_host_id = get_preferred_hi(my_hi_head);
-	/* lookup HIT in my HIT list */
-	else
+	} else {
+		/* lookup HIT in my HIT list */
 		my_host_id = find_host_identity(my_hi_head, *hit);
-	
+	}
+
 	return(my_host_id);
 }
 
@@ -3174,14 +3344,14 @@ hi_node *check_if_my_hit(hip_hit *hit)
  * handle_transforms()
  *
  * in:		hip_a = hip association where chosen transform is stored
- * 			and available_transforms bit mask resides
- * 		transforms = pointer to a list of transforms
- * 		length = byte length of transform list
+ *                      and available_transforms bit mask resides
+ *              transforms = pointer to a list of transforms
+ *              length = byte length of transform list
  *
  * out:		Returns 0 if a transform was found, -1 on error.
- * 		Stores the best transform into the hip association.
- * 		Note that the signature should be verified beforehand, since
- * 		hip_a is modified.
+ *              Stores the best transform into the hip association.
+ *              Note that the signature should be verified beforehand, since
+ *              hip_a is modified.
  */
 int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp)
 {
@@ -3189,35 +3359,38 @@ int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp)
 	int transforms_left, offset;
 	__u16 transform_id;
 	__u16 *chosen = esp ? &hip_a->esp_transform : &hip_a->hip_transform;
-		
+
 	offset = esp ? ESP_OFFSET : 0;
 	transforms_left = length / sizeof(__u16);
 	transform_id_packet = transforms;
 	*chosen = 0;
 	if (transforms_left >= SUITE_ID_MAX) {
 		log_(WARN, "Warning: There are %d transforms present but the "
-			"maximum number is %d.\n", 
-			transforms_left, SUITE_ID_MAX-1);
+		     "maximum number is %d.\n",
+		     transforms_left, SUITE_ID_MAX - 1);
 		/* continue to read the transforms... */
 	}
-	
-	for(; (transforms_left > 0); transform_id_packet++, transforms_left--) {
+
+	for(; (transforms_left > 0); transform_id_packet++,
+	    transforms_left--) {
 		transform_id = ntohs(*transform_id_packet);
-		
+
 		if ((transform_id <= RESERVED) ||
 		    (transform_id >= SUITE_ID_MAX)) {
 			log_(WARN, "Ignoring invalid transform (%d).\n",
-				transform_id);
+			     transform_id);
 			continue;
 		}
 		if ((hip_a->available_transforms >>
-		    (transform_id+offset)) & 0x1) {
+		     (transform_id + offset)) & 0x1) {
 			*chosen = transform_id;
 			break;
 		}
 	}
 	if (*chosen == 0) {
-		log_(WARN, "Couldn't find a suitable HIP transform.  This error could indicate that hip.conf was not successfully loaded.\n");
+		log_(
+		        WARN,
+		        "Couldn't find a suitable HIP transform.  This error could indicate that hip.conf was not successfully loaded.\n");
 		if (OPT.permissive) { /* AES is mandatory */
 			log_(WARN, "Continuing using AES.\n");
 			*chosen = ESP_AES_CBC_HMAC_SHA1;
@@ -3244,7 +3417,7 @@ int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh)
 	tlv_diffie_hellman_pub_value *pub_val2;
 
 	tlv_dh = (tlv_diffie_hellman*) data;
-	
+
 	g_id = tlv_dh->group_id;
 	*g = g_id;
 	if ((g_id <= DH_RESERVED) ||
@@ -3252,7 +3425,7 @@ int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh)
 		log_(WARN, "DH group unsupported %d\n", g_id);
 		return(-1);
 	}
-	
+
 	len = ntohs(tlv_dh->pub_len);
 	if (len > (ntohs(tlv_dh->length) - 3)) {
 		log_(WARN, "Error: public key length specified (%d) was longer"
@@ -3263,7 +3436,7 @@ int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh)
 	if (len != dhprime_len[g_id]) {
 		log_(WARN, "Warning: public key len = %d, ", len);
 		log_(NORM, "expected %d for this group id (%d)\n",
-		    dhprime_len[g_id], g_id);
+		     dhprime_len[g_id], g_id);
 	}
 	pub = tlv_dh->pub;
 
@@ -3274,16 +3447,17 @@ int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh)
 		if ((g_id2 <= DH_RESERVED) ||
 		    (g_id2 >= DH_MAX)) {
 			log_(WARN, "Warning: DH group of second DH value is "
-				"unsupported %d\n", g_id2);
+			     "unsupported %d\n", g_id2);
 			goto decode_dh; /* use first DH value */
 		}
-		if (g_id >= g_id2)
+		if (g_id >= g_id2) {
 			goto decode_dh; /* use first DH value */
+		}
 		/* use second DH value, it is stronger than the first */
 		len2 = ntohs(pub_val2->pub_len);
 		if ((6 + len + len2) > ntohs(tlv_dh->length)) {
 			log_(WARN, "Error: second public key length specified "
-				"(%d) was longer than TLV length!\n", len);
+			     "(%d) was longer than TLV length!\n", len);
 			return(-1);
 		}
 		g_id = g_id2;
@@ -3303,22 +3477,23 @@ decode_dh:
 
 	/* store the public key in hip_a->peer_dh */
 	if (dh == NULL) {
-		if (hip_a->peer_dh)
+		if (hip_a->peer_dh) {
 			DH_free(hip_a->peer_dh);
+		}
 		hip_a->peer_dh = DH_new();
 		hip_a->peer_dh->g = BN_new();
 		BN_set_word(hip_a->peer_dh->g, dhgen[g_id]);
 		hip_a->peer_dh->p = BN_bin2bn(dhprime[g_id],
-					      dhprime_len[g_id], NULL);
+		                              dhprime_len[g_id], NULL);
 		hip_a->peer_dh->pub_key = BN_bin2bn(pub_key, len, NULL);
-	/* or return the public key */
+		/* or return the public key */
 	} else {
 		dh->g = BN_new();
 		BN_set_word(dh->g, dhgen[g_id]);
 		dh->p = BN_bin2bn(dhprime[g_id], dhprime_len[g_id], NULL);
 		dh->pub_key = BN_bin2bn(pub_key, len, NULL);
 	}
-	
+
 	free(pub_key);
 	return(0);
 }
@@ -3329,34 +3504,35 @@ int handle_cert(hip_assoc *hip_a, const __u8 *data)
 	tlv_cert *cert;
 	char cert_buf[MAX_CERT_LEN];
 
-  	hi_node *peer_hi;
-        peer_hi = hip_a->peer_hi;
- 	if(!peer_hi)
-	   return -1;
+	hi_node *peer_hi;
+	peer_hi = hip_a->peer_hi;
+	if(!peer_hi) {
+		return(-1);
+	}
 	memset(cert_buf, '\0', sizeof(cert_buf));
 	cert = (tlv_cert*) data;
-        len = ntohs(cert->length)-4;
+	len = ntohs(cert->length) - 4;
 	memcpy(cert_buf, cert->certificate, len);
 #ifdef HIP_VPLS
 	len = hipcfg_verifyCert(cert_buf, peer_hi->hit);
 	if(len == 1) {
-	  log_(NORM, "validated certificate with url: %s\n", cert_buf);
-	  return(0);
+		log_(NORM, "validated certificate with url: %s\n", cert_buf);
+		return(0);
 	}
 #endif
 	log_(WARN, "Fail to validate certificate with url: %s\n", cert_buf);
-	return -1;
+	return(-1);
 }
 
 /*
  * function handle_hi()
- * 
+ *
  * in:		hi_p = pointer to pointer that will store new Host ID
- * 		data  = pointer to start of HI TLV
+ *              data  = pointer to start of HI TLV
  *
  * out:		*hi_p is created or modified,
- * 		(*hi_p)->dsa or (*hi_p)->rsa must not exist, and is created
- * 		Returns length of HI TLV used, -1 if error.
+ *              (*hi_p)->dsa or (*hi_p)->rsa must not exist, and is created
+ *              Returns length of HI TLV used, -1 if error.
  *
  * Reads HI TLV into a hi_node structure.
  */
@@ -3370,58 +3546,58 @@ int handle_hi(hi_node **hi_p, const __u8 *data)
 	 * DI length     12 bits
 	 * RDATA header   4
 	 */
-	
+
 	int length, hi_length, di_length;
 	char di_type;
 	tlv_host_id *tlv = (tlv_host_id*)data;
 	__u32 hi_hdr;
 	__u8 alg;
-	
+
 	length = ntohs(tlv->length);
 	hi_length = ntohs(tlv->hi_length);
 	di_type = ntohs(tlv->di_type_length) >> 12; /* 4 bits type */
 	di_type &= 0x000F;
-	di_length = ntohs(tlv->di_type_length) & 0x0FFF; /* 12 bits length */ 
-	
+	di_length = ntohs(tlv->di_type_length) & 0x0FFF; /* 12 bits length */
+
 	memcpy(&hi_hdr, tlv->hi_hdr, 4);
 	hi_hdr = ntohl(hi_hdr);
 	alg = hi_hdr & 0xFF; /* get algorithm from last byte of RDATA header */
-	hi_length -= 4;		/* subtract RDATA length from HI length */
-	length -= 8;		/* subtract TLV fields and RDATA length */
+	hi_length -= 4;         /* subtract RDATA length from HI length */
+	length -= 8;            /* subtract TLV fields and RDATA length */
 
-	return(key_data_to_hi(	&data[sizeof(tlv_host_id)], 
-				alg, hi_length, (__u8)di_type, di_length,
-				hi_p, length ));
+	return(key_data_to_hi(  &data[sizeof(tlv_host_id)],
+	                        alg, hi_length, (__u8)di_type, di_length,
+	                        hi_p, length ));
 }
 
 int handle_acks(hip_assoc *hip_a, tlv_ack *ack)
 {
 	__u32 *p_ack, ack_update_id;
-	int length, ret=FALSE;
+	int length, ret = FALSE;
 
 	/* We may receive multiple ACKs, search them
 	 * for the update id matching hip_a->rekey->update_id */
 	p_ack = &ack->peer_update_id;
 	for (length = ntohs(ack->length);
-	     length > 0; 
+	     length > 0;
 	     p_ack++, length -= sizeof(__u32)) {
 		ack_update_id = ntohl(*p_ack);
 		/* check if ACK corresponds to a previously sent UPDATE */
-		if (hip_a->rekey && 
+		if (hip_a->rekey &&
 		    (ack_update_id == hip_a->rekey->update_id)) {
 			log_(NORM, "Update id=0x%x has been acked.\n",
-			    ack_update_id);
+			     ack_update_id);
 			ret = TRUE;
 			/* continue parsing so that ignored IDs are logged */
 		} else {
 			log_(NORM, "Ignoring unknown ID (0x%x) in ACK.\n",
-			    ack_update_id);
+			     ack_update_id);
 		}
 	}
 	return(ret);
 }
 
-/* 
+/*
  * build rekeying state
  */
 int handle_esp_info(tlv_esp_info *ei, __u32 spi_out, struct rekey_info *rk)
@@ -3432,34 +3608,34 @@ int handle_esp_info(tlv_esp_info *ei, __u32 spi_out, struct rekey_info *rk)
 	new_spi = ntohl(ei->new_spi);
 
 	/* add a new SPI/SA only */
-	if (old_spi == 0 && new_spi > 0) {
+	if ((old_spi == 0) && (new_spi > 0)) {
 		log_(NORM, "New SA requested for SPI 0x%x.\n", new_spi);
 		log_(WARN, "Warning: creating additional new SAs is "
-			"currently unsupported.\n");
+		     "currently unsupported.\n");
 		/* XXX May add a new SPI here, but need a way to
-		       keep track of SPIs so SA can be later deleted.
-		       Also, if this multi-homed host uses the SA as
-		       a fallback, it is pointless to create without
-		       a corresponding SPD rule.                     */
+		 *      keep track of SPIs so SA can be later deleted.
+		 *      Also, if this multi-homed host uses the SA as
+		 *      a fallback, it is pointless to create without
+		 *      a corresponding SPD rule.                     */
 		return(0);
-	/* Gratuitous */
+		/* Gratuitous */
 	} else if (old_spi == new_spi) {
 		log_(NORM, "Gratuitous ESP_INFO: keeping old SPI of 0x%x.\n",
-			new_spi);
+		     new_spi);
 		rk->keymat_index = ntohs(ei->keymat_index);
 		rk->new_spi = new_spi;
 		return(0);
-	/* Rekey with unknown SPI */
+		/* Rekey with unknown SPI */
 	} else if (old_spi != spi_out) {
 		log_(WARN, "Old SPI in ESP_INFO (0x%x) is unknown.\n", old_spi);
 		return(-1);
-	/* Deprecating SA */
+		/* Deprecating SA */
 	} else if (new_spi == 0) {
 		log_(NORM, "Request to deprecate SA with SPI 0x%x\n", old_spi);
 		log_(WARN, "Warning: deprecating SAs is currently "
-			"unsupported.\n");
+		     "unsupported.\n");
 		/* XXX Deprecate all locators uniquely bound to this SPI */
-	/* change current SA */
+		/* change current SA */
 	} else {
 		rk->keymat_index = ntohs(ei->keymat_index);
 		rk->new_spi = new_spi;
@@ -3468,14 +3644,17 @@ int handle_esp_info(tlv_esp_info *ei, __u32 spi_out, struct rekey_info *rk)
 	return(0);
 }
 
-
 /*
  * handle_locators()
  *
  * Following HIP packet parsing, handle the locator TLVs contained in the HIP
  * packet.
  */
-int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockaddr *src, __u32 new_spi)
+int handle_locators(hip_assoc *hip_a,
+                    locator **locators,
+                    int num,
+                    struct sockaddr *src,
+                    __u32 new_spi)
 {
 	int i, preferred, first;
 	locator *loc;
@@ -3491,13 +3670,13 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
 	first = TRUE;
 	gettimeofday(&now, NULL);
 
-	for (i=0; i < num; i++) {
+	for (i = 0; i < num; i++) {
 		loc = locators[i];
 		if (loc->traffic_type == LOCATOR_TRAFFIC_TYPE_SIGNALING) {
 			log_(WARN, "Warning: Ignoring signaling locator.\n");
 			continue;
 		} else if ((loc->traffic_type != LOCATOR_TRAFFIC_TYPE_BOTH) &&
-			   (loc->traffic_type != LOCATOR_TRAFFIC_TYPE_DATA)) {
+		           (loc->traffic_type != LOCATOR_TRAFFIC_TYPE_DATA)) {
 			log_(WARN, "Warning Ignoring unknown locator traffic ");
 			log_(NORM, "type: %d.\n", loc->traffic_type);
 			continue;
@@ -3507,7 +3686,7 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
 			p_addr = &loc->locator[0];
 			spi = new_spi;
 		} else if ((loc->locator_type == LOCATOR_TYPE_SPI_IPV6) &&
-			   (loc->locator_length == 5)) {
+		           (loc->locator_length == 5)) {
 			memcpy(&spi, &loc->locator[0], 4);
 			spi = ntohl(spi);
 			p_addr = &loc->locator[4];
@@ -3515,17 +3694,17 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
 			/* send NOTIFY whether or not preferred; only include
 			 * maximum 20 bytes of locators to prevent overflows */
 			log_(WARN, "Locator type %d unsupported (length %d)\n",
-			    loc->locator_type, loc->locator_length);
+			     loc->locator_type, loc->locator_length);
 			hip_send_notify(hip_a, NOTIFY_LOCATOR_TYPE_UNSUPPORTED,
-					loc->locator, 
-					(loc->locator_length <= 5) ? 
-					4*loc->locator_length : 20);
+			                loc->locator,
+			                (loc->locator_length <= 5) ?
+			                4 * loc->locator_length : 20);
 			continue;
 		}
-		
-		if (new_spi > 0 && new_spi != spi) {
+
+		if ((new_spi > 0) && (new_spi != spi)) {
 			log_(WARN, "SPIs in ESP_INFO and LOCATOR parameters "
-				"do not match (0x%x, 0x%x)\n", new_spi, spi);
+			     "do not match (0x%x, 0x%x)\n", new_spi, spi);
 			continue;
 		}
 
@@ -3534,28 +3713,32 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
 		 */
 		/* get address and check validity */
 		if (IN6_IS_ADDR_V4MAPPED(
-		    (struct in6_addr*)p_addr)) {
+		            (struct in6_addr*)p_addr)) {
 			addr->sa_family = AF_INET;
 			memcpy(SA2IP(addr), p_addr + 12, SAIPLEN(addr));
-			if (IN_MULTICAST(*(SA2IP(addr))))
+			if (IN_MULTICAST(*(SA2IP(addr)))) {
 				continue;
+			}
 			if (((struct sockaddr_in*)addr)->sin_addr.s_addr
-					== INADDR_BROADCAST)
+			    == INADDR_BROADCAST) {
 				continue;
+			}
 		} else {
 			unsigned char *p = SA2IP(addr);
 			addr->sa_family = AF_INET6;
 			memcpy(SA2IP(addr), p_addr, SAIPLEN(addr));
-			if (IN6_IS_ADDR_MULTICAST((struct in6_addr*)p))
+			if (IN6_IS_ADDR_MULTICAST((struct in6_addr*)p)) {
 				continue;
+			}
 			/* IPv6 doesn't have broadcast addresses */
 		}
 
-		/* only check preferred (P) bit for 
+		/* only check preferred (P) bit for
 		 * the first address in LOCATOR */
 		preferred = FALSE;
-		if (first && (loc->reserved & LOCATOR_PREFERRED))
+		if (first && (loc->reserved & LOCATOR_PREFERRED)) {
 			preferred = TRUE;
+		}
 		first = FALSE;
 
 		/* check the new preferred address against the source address
@@ -3563,31 +3746,32 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
 		if (src && preferred) {
 			if ((!hip_a->from_via) &&
 			    ((addr->sa_family != src->sa_family) ||
-			    (memcmp(SA2IP(addr), SA2IP(src), SAIPLEN(src))))) {
+			     (memcmp(SA2IP(addr), SA2IP(src),
+			             SAIPLEN(src))))) {
 				log_(WARN, "Warning: source address is %s and ",
-					logaddr(src));
+				     logaddr(src));
 				log_(NORM, "new preferred LOCATOR is %s.\n",
-					logaddr(addr));
+				     logaddr(addr));
 			} else if (src->sa_family == AF_INET) {
 				/* addresses are equal, copy the port number
 				 * so UDP will work */
 				((struct sockaddr_in *)addr)->sin_port =
-					((struct sockaddr_in *)src)->sin_port;
+				        ((struct sockaddr_in *)src)->sin_port;
 				/* TODO: IPv6 UDP here */
 			}
 		}
-		
+
 		/* address already may already exists in peer list */
 		peer_list = &hip_a->peer_hi->addrs;
 		l = add_address_to_list(&peer_list, addr, 0);
 		if (!l) {
 			log_(WARN, "Unable to add new address (%s) to " \
-				   "peer list.\n", logaddr(addr));
+			     "peer list.\n", logaddr(addr));
 			continue;
 		} else if (preferred && (l == peer_list)) {
 			/* not a new preferred address */
 			log_(NORM, "Preferred address %s for SPI=0x%x remains "
-				"the same.\n", logaddr(addr), spi);
+			     "the same.\n", logaddr(addr), spi);
 			continue;
 		}
 		l->status = UNVERIFIED;
@@ -3595,23 +3779,24 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
 		l->creation_time.tv_sec = now.tv_sec; /* update creation time */
 		l->creation_time.tv_usec = now.tv_usec;
 		log_(NORM, "New %saddress %s for SPI=0x%x\n",
-		    (preferred) ? "preferred ":"", logaddr(addr), spi);
+		     (preferred) ? "preferred " : "", logaddr(addr), spi);
 		/* handle new preferred address */
-		if (preferred && (l != peer_list))
+		if (preferred && (l != peer_list)) {
 			l->preferred = TRUE; /* this flags a readdress */
-		else if (!preferred)
+		} else if (!preferred) {
 			l->preferred = FALSE;
+		}
 	}
 
 	/* mark all unlisted addresses for this peer as deprecated */
 	for (l = &hip_a->peer_hi->addrs; l; l = l->next) {
-		if (l->creation_time.tv_sec != now.tv_sec)
+		if (l->creation_time.tv_sec != now.tv_sec) {
 			l->status = DEPRECATED;
+		}
 	}
-	
+
 	return(0);
 }
-
 
 /*
  * complete_base_exchange()
@@ -3623,7 +3808,7 @@ int handle_locators(hip_assoc *hip_a, locator **locators,int num, struct sockadd
  */
 int complete_base_exchange(hip_assoc *hip_a)
 {
-	int err=0;
+	int err = 0;
 	struct sockaddr_storage src_hit, dst_hit;
 
 	log_(NORM, "---------- HIP exchange complete. ----------\n");
@@ -3633,62 +3818,62 @@ int complete_base_exchange(hip_assoc *hip_a)
 	hit_to_sockaddr(SA(&dst_hit), hip_a->peer_hi->hit);
 
 	if (hip_sadb_add(hip_a->udp ? 3 : 0, 2,
-		    SA(&src_hit), SA(&dst_hit),
-		    HIPA_SRC(hip_a), HIPA_DST(hip_a),
-		    HIPA_SRC_LSI(hip_a), HIPA_DST_LSI(hip_a),
-		    hip_a->spi_out, hip_a->spi_nat,
-		    get_key(hip_a, ESP_ENCRYPTION, 0),
-		    transform_to_ealg(hip_a->esp_transform),
-		    enc_key_len(hip_a->esp_transform),
-		    get_key(hip_a, ESP_AUTH, 0),
-		    transform_to_aalg(hip_a->esp_transform),
-		    auth_key_len(hip_a->esp_transform),
-		    HCNF.sa_lifetime)
-			< 0) {
+	                 SA(&src_hit), SA(&dst_hit),
+	                 HIPA_SRC(hip_a), HIPA_DST(hip_a),
+	                 HIPA_SRC_LSI(hip_a), HIPA_DST_LSI(hip_a),
+	                 hip_a->spi_out, hip_a->spi_nat,
+	                 get_key(hip_a, ESP_ENCRYPTION, 0),
+	                 transform_to_ealg(hip_a->esp_transform),
+	                 enc_key_len(hip_a->esp_transform),
+	                 get_key(hip_a, ESP_AUTH, 0),
+	                 transform_to_aalg(hip_a->esp_transform),
+	                 auth_key_len(hip_a->esp_transform),
+	                 HCNF.sa_lifetime)
+	    < 0) {
 		err = -1;
-		log_(WARN, "Error building outgoing SA: %s.\n", 
-		    strerror(errno));
+		log_(WARN, "Error building outgoing SA: %s.\n",
+		     strerror(errno));
 	}
-	if (hip_sadb_add(hip_a->udp ? 3: 0, 1,
-		    SA(&dst_hit), SA(&src_hit),
-		    HIPA_DST(hip_a), HIPA_SRC(hip_a),
-		    HIPA_DST_LSI(hip_a), HIPA_SRC_LSI(hip_a),
-		    hip_a->spi_in, hip_a->spi_nat,
-		    get_key(hip_a, ESP_ENCRYPTION, 1),
-		    transform_to_ealg(hip_a->esp_transform),
-		    enc_key_len(hip_a->esp_transform),
-		    get_key(hip_a, ESP_AUTH, 1),
-		    transform_to_aalg(hip_a->esp_transform),
-		    auth_key_len(hip_a->esp_transform),
-		    HCNF.sa_lifetime)
-			< 0) {
+	if (hip_sadb_add(hip_a->udp ? 3 : 0, 1,
+	                 SA(&dst_hit), SA(&src_hit),
+	                 HIPA_DST(hip_a), HIPA_SRC(hip_a),
+	                 HIPA_DST_LSI(hip_a), HIPA_SRC_LSI(hip_a),
+	                 hip_a->spi_in, hip_a->spi_nat,
+	                 get_key(hip_a, ESP_ENCRYPTION, 1),
+	                 transform_to_ealg(hip_a->esp_transform),
+	                 enc_key_len(hip_a->esp_transform),
+	                 get_key(hip_a, ESP_AUTH, 1),
+	                 transform_to_aalg(hip_a->esp_transform),
+	                 auth_key_len(hip_a->esp_transform),
+	                 HCNF.sa_lifetime)
+	    < 0) {
 		err = -2;
-		log_(WARN, "Error building incoming SA: %s.\n", 
-		    strerror(errno));
+		log_(WARN, "Error building incoming SA: %s.\n",
+		     strerror(errno));
 	}
 
 	if (!err) {
-		log_hipa_fromto(QOUT, "Base exchange completed", 
-				hip_a, TRUE, TRUE);
+		log_hipa_fromto(QOUT, "Base exchange completed",
+		                hip_a, TRUE, TRUE);
 	}
-	return err;
+	return(err);
 }
 
 /*
  * rebuild_sa()
  *
  * in:		hip_a = association containing old addresses, SPIs, keys
- * 		newaddr = the new address, or NULL if rekey only
- * 		newspi = the new SPI, or zero if readdress only
- * 		in = TRUE for incoming, FALSE for outgoing
- * 		peer = TRUE if the new address is the peer's, FALSE if we have
- * 		       changed addresses
+ *              newaddr = the new address, or NULL if rekey only
+ *              newspi = the new SPI, or zero if readdress only
+ *              in = TRUE for incoming, FALSE for outgoing
+ *              peer = TRUE if the new address is the peer's, FALSE if we have
+ *                     changed addresses
  *
  * A single function to take care of rebuilding an SA and its SPD entry.
  * Handles both readdress and rekey cases.
  */
 int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
-		int in, int peer)
+               int in, int peer)
 {
 	__u32 spi;
 	int err = 0, direction;
@@ -3698,23 +3883,23 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 	struct sockaddr *src_lsi, *dst_lsi;
 
 	if (in) { /* incoming */
-	    direction = 1;
-	    spi = hip_a->spi_in;
-	    hit_to_sockaddr(src_hit, hip_a->peer_hi->hit);
-	    hit_to_sockaddr(dst_hit, hip_a->hi->hit);
-	    src_old = HIPA_DST(hip_a);
-	    dst_old = HIPA_SRC(hip_a);
-	    src_lsi = HIPA_DST_LSI(hip_a);
-	    dst_lsi = HIPA_SRC_LSI(hip_a);
+		direction = 1;
+		spi = hip_a->spi_in;
+		hit_to_sockaddr(src_hit, hip_a->peer_hi->hit);
+		hit_to_sockaddr(dst_hit, hip_a->hi->hit);
+		src_old = HIPA_DST(hip_a);
+		dst_old = HIPA_SRC(hip_a);
+		src_lsi = HIPA_DST_LSI(hip_a);
+		dst_lsi = HIPA_SRC_LSI(hip_a);
 	} else { /* outgoing */
-	    direction = 2;
-	    spi = hip_a->spi_out;
-	    hit_to_sockaddr(src_hit, hip_a->hi->hit);
-	    hit_to_sockaddr(dst_hit, hip_a->peer_hi->hit);
-	    src_old = HIPA_SRC(hip_a);
-	    dst_old = HIPA_DST(hip_a);
-	    src_lsi = HIPA_SRC_LSI(hip_a);
-	    dst_lsi = HIPA_DST_LSI(hip_a);
+		direction = 2;
+		spi = hip_a->spi_out;
+		hit_to_sockaddr(src_hit, hip_a->hi->hit);
+		hit_to_sockaddr(dst_hit, hip_a->peer_hi->hit);
+		src_old = HIPA_SRC(hip_a);
+		dst_old = HIPA_DST(hip_a);
+		src_lsi = HIPA_SRC_LSI(hip_a);
+		dst_lsi = HIPA_DST_LSI(hip_a);
 	}
 	if (newaddr && (peer == in)) {
 		src_new = newaddr;
@@ -3729,25 +3914,26 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
 
 	if (hip_sadb_delete(spi) < 0) {
 		log_(WARN, "Error removing old SA: %s\n",
-		    strerror(errno));
+		     strerror(errno));
 		err--;
 	}
 
 	/* new SPI is used if it is nonzero */
 	if (hip_sadb_add(hip_a->udp ? 3 : 0, direction,
-		    src_hit, dst_hit, src_new, dst_new, src_lsi, dst_lsi,
-		    newspi > 0 ? newspi : spi, hip_a->spi_nat,
-		    get_key(hip_a, ESP_ENCRYPTION, in),
-		    transform_to_ealg(hip_a->esp_transform),
-		    enc_key_len(hip_a->esp_transform),
-		    get_key(hip_a, ESP_AUTH, in),
-		    transform_to_aalg(hip_a->esp_transform),
-		    auth_key_len(hip_a->esp_transform),
-		    HCNF.sa_lifetime)
-			< 0) {
+	                 src_hit, dst_hit, src_new, dst_new, src_lsi, dst_lsi,
+	                 (newspi > 0) ? newspi : spi,
+	                 hip_a->spi_nat,
+	                 get_key(hip_a, ESP_ENCRYPTION, in),
+	                 transform_to_ealg(hip_a->esp_transform),
+	                 enc_key_len(hip_a->esp_transform),
+	                 get_key(hip_a, ESP_AUTH, in),
+	                 transform_to_aalg(hip_a->esp_transform),
+	                 auth_key_len(hip_a->esp_transform),
+	                 HCNF.sa_lifetime)
+	    < 0) {
 		err = -1;
-		log_(WARN, "Error building new SA: %s.\n", 
-		    strerror(errno));
+		log_(WARN, "Error building new SA: %s.\n",
+		     strerror(errno));
 	}
 
 	hip_a->used_bytes_in = 0;
@@ -3759,16 +3945,16 @@ int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
  * rebuild_sa_x2()
  *
  * in:		hip_a = association containing old addresses, SPIs, keys
- * 		src_new = the new source address
- * 		dst_new = the new destination address
- * 		newspi = the new SPI, or zero if readdress only
- * 		in = TRUE for incoming, FALSE for outgoing
+ *              src_new = the new source address
+ *              dst_new = the new destination address
+ *              newspi = the new SPI, or zero if readdress only
+ *              in = TRUE for incoming, FALSE for outgoing
  *
  * This function takes care of rebuilding an SA
  * when readdress involves a change of address family.
  */
 int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
-		struct sockaddr *dst_new, __u32 newspi, int in)
+                  struct sockaddr *dst_new, __u32 newspi, int in)
 {
 	__u32 spi;
 	int err = 0, direction;
@@ -3777,40 +3963,42 @@ int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
 	struct sockaddr *src_lsi, *dst_lsi;
 
 	if (in) { /* incoming */
-	    direction = 1;
-	    spi = hip_a->spi_in;
-	    hit_to_sockaddr(src_hit, hip_a->peer_hi->hit);
-	    hit_to_sockaddr(dst_hit, hip_a->hi->hit);
-	    src_lsi = HIPA_DST_LSI(hip_a);
-	    dst_lsi = HIPA_SRC_LSI(hip_a);
+		direction = 1;
+		spi = hip_a->spi_in;
+		hit_to_sockaddr(src_hit, hip_a->peer_hi->hit);
+		hit_to_sockaddr(dst_hit, hip_a->hi->hit);
+		src_lsi = HIPA_DST_LSI(hip_a);
+		dst_lsi = HIPA_SRC_LSI(hip_a);
 	} else { /* outgoing */
-	    direction = 2;
-	    spi = hip_a->spi_out;
-	    hit_to_sockaddr(src_hit, hip_a->hi->hit);
-	    hit_to_sockaddr(dst_hit, hip_a->peer_hi->hit);
-	    src_lsi = HIPA_SRC_LSI(hip_a);
-	    dst_lsi = HIPA_DST_LSI(hip_a);
+		direction = 2;
+		spi = hip_a->spi_out;
+		hit_to_sockaddr(src_hit, hip_a->hi->hit);
+		hit_to_sockaddr(dst_hit, hip_a->peer_hi->hit);
+		src_lsi = HIPA_SRC_LSI(hip_a);
+		dst_lsi = HIPA_DST_LSI(hip_a);
 	}
 
 	if (hip_sadb_delete(spi) < 0) {
 		log_(WARN, "Error removing old outgoing SA: %s\n",
-		    strerror(errno));
+		     strerror(errno));
 		err--;
 	}
 
 	if (hip_sadb_add(hip_a->udp ? 3 : 0, direction,
-		    src_hit, dst_hit, src_new, dst_new, src_lsi, dst_lsi,
-		    newspi > 0 ? newspi : spi, hip_a->spi_nat,
-		    get_key(hip_a, ESP_ENCRYPTION, in),
-		    transform_to_ealg(hip_a->esp_transform),
-		    enc_key_len(hip_a->esp_transform),
-		    get_key(hip_a, ESP_AUTH, in),
-		    transform_to_aalg(hip_a->esp_transform),
-		    auth_key_len(hip_a->esp_transform),
-		    HCNF.sa_lifetime)
-			< 0) {
+                         src_hit, dst_hit, src_new, dst_new,
+	                 src_lsi, dst_lsi,
+	                 (newspi > 0) ? newspi : spi,
+	                 hip_a->spi_nat,
+	                 get_key(hip_a, ESP_ENCRYPTION, in),
+	                 transform_to_ealg(hip_a->esp_transform),
+	                 enc_key_len(hip_a->esp_transform),
+	                 get_key(hip_a, ESP_AUTH, in),
+	                 transform_to_aalg(hip_a->esp_transform),
+	                 auth_key_len(hip_a->esp_transform),
+	                 HCNF.sa_lifetime)
+	    < 0) {
 		log_(WARN, "Error building new outgoing SA: %s\n",
-		    strerror(errno));
+		     strerror(errno));
 		err--;
 	}
 
@@ -3823,13 +4011,15 @@ void update_peer_list(hip_assoc *hip_a)
 {
 	hi_node *peer, *tmp, *prev;
 	__u32 lsi_hit;
-	
+
 	/* copy attributes learned from peer's HI back into peer_hi_head */
 	peer = find_host_identity(peer_hi_head, hip_a->peer_hi->hit);
-	if (VALID_FAM(&peer->lsi) && !VALID_FAM(&hip_a->peer_hi->lsi))
+	if (VALID_FAM(&peer->lsi) && !VALID_FAM(&hip_a->peer_hi->lsi)) {
 		memcpy(&hip_a->peer_hi->lsi, &peer->lsi, SALEN(&peer->lsi));
-	if (peer->size == 0)
+	}
+	if (peer->size == 0) {
 		peer->size = hip_a->peer_hi->size;
+	}
 	if (peer->algorithm_id == 0) {
 		peer->algorithm_id = hip_a->peer_hi->algorithm_id;
 		peer->anonymous = hip_a->peer_hi->anonymous;
@@ -3841,54 +4031,58 @@ void update_peer_list(hip_assoc *hip_a)
 		peer->name_len = hip_a->peer_hi->name_len;
 	}
 
-	if (VALID_FAM(&hip_a->peer_hi->lsi))
+	if (VALID_FAM(&hip_a->peer_hi->lsi)) {
 		return;
+	}
 	/* need to fill in LSI */
 	prev = NULL;
-	for (tmp = peer_hi_head; tmp; prev=tmp, tmp=tmp->next) {
+	for (tmp = peer_hi_head; tmp; prev = tmp, tmp = tmp->next) {
 		/* search for LSI-only entry bearing the same name */
-		if (strcmp(tmp->name, hip_a->peer_hi->name)==0) {
-			if (!VALID_FAM(&tmp->lsi))
+		if (strcmp(tmp->name, hip_a->peer_hi->name) == 0) {
+			if (!VALID_FAM(&tmp->lsi)) {
 				continue;
+			}
 			log_(NORM, "Found LSI %s for this association.\n",
-				logaddr(SA(&tmp->lsi)));
+			     logaddr(SA(&tmp->lsi)));
 			/* fill-in LSI for hip_assoc */
-			memcpy(	&hip_a->peer_hi->lsi, &tmp->lsi,
-				SALEN(&tmp->lsi));
+			memcpy( &hip_a->peer_hi->lsi, &tmp->lsi,
+			        SALEN(&tmp->lsi));
 			/* fill-in LSI for other peer_hi_head entry
 			 * that has no LSI */
-			memcpy(	&peer->lsi, &tmp->lsi, SALEN(&tmp->lsi));
+			memcpy( &peer->lsi, &tmp->lsi, SALEN(&tmp->lsi));
 			/* phantom entry is no longer needed */
 			if (hits_equal(tmp->hit, zero_hit)) {
-				if (tmp == peer_hi_head)
+				if (tmp == peer_hi_head) {
 					peer_hi_head = tmp->next;
-				else
+				}
+				else {
 					prev->next = tmp->next;
+				}
 				free(tmp);
 			}
 			break;
 		}
 	}
-	
+
 	if (!VALID_FAM(&hip_a->peer_hi->lsi)) {
 		log_(WARN, "Searched for corresponding LSI but none found.\n");
 		lsi_hit = htonl(HIT2LSI(hip_a->peer_hi->hit));
 		hip_a->peer_hi->lsi.ss_family = AF_INET;
 		memcpy(SA2IP(&hip_a->peer_hi->lsi), &lsi_hit, sizeof(__u32));
 		log_(NORM, "Falling back to HIT-based LSI: %s\n",
-			logaddr(SA(&hip_a->peer_hi->lsi)));
-		memcpy(&peer->lsi, &hip_a->peer_hi->lsi, 
-			SALEN(&hip_a->peer_hi->lsi));
+		     logaddr(SA(&hip_a->peer_hi->lsi)));
+		memcpy(&peer->lsi, &hip_a->peer_hi->lsi,
+		       SALEN(&hip_a->peer_hi->lsi));
 	}
-	
+
 }
 
 void log_sa_info(hip_assoc *hip_a)
 {
 	log_(NORMT, "Adding security association:\n\tsrc ip = %s",
-	    logaddr(HIPA_SRC(hip_a)));
+	     logaddr(HIPA_SRC(hip_a)));
 	log_(NORM, " dst ip = %s\n\tSPIs in = 0x%x out = 0x%x\n",
-	    logaddr(HIPA_DST(hip_a)), hip_a->spi_in, hip_a->spi_out);
+	     logaddr(HIPA_DST(hip_a)), hip_a->spi_in, hip_a->spi_out);
 }
 
 /*
@@ -3898,22 +4092,22 @@ void log_sa_info(hip_assoc *hip_a)
 int check_tlv_type_length(int type, int length, int last_type, char *p)
 {
 	log_(NORM, " %s TLV type = %d length = %d \n", p, type, length);
-	
+
 	/* TLV type strictly defines the order, except for types 2048-4095 */
 	/* XXX this should only apply if both lastype and type are within
 	 *     the range 2048-4095
 	 */
 	if ((last_type > type) &&
 	    (type >= PARAM_TRANSFORM_LOW) &&
-	    (type <= PARAM_TRANSFORM_HIGH)){
+	    (type <= PARAM_TRANSFORM_HIGH)) {
 		log_(WARN, "Out of order TLV parameter, (%d > %d) ",
-		    last_type, type);
+		     last_type, type);
 		log_(NORM, "malformed %s packet.\n", p);
 		return(-1);
 	}
 	if (!check_tlv_length(type, length)) {
 		log_(WARN, "TLV parameter %d has invalid length %d ",
-		    type, length);
+		     type, length);
 		log_(NORM, "malformed %s packet.\n", p);
 		return(-1);
 	}
@@ -3925,8 +4119,9 @@ int check_tlv_type_length(int type, int length, int last_type, char *p)
  */
 int check_tlv_length(int type, int length)
 {
-	if ((length < 0) || (length == 0))
+	if ((length < 0) || (length == 0)) {
 		return(FALSE);
+	}
 
 	/* some parameters have fixed lengths, enforce them */
 	switch(type) {
@@ -3976,17 +4171,19 @@ int handle_reg_info(hip_assoc *hip_a, const __u8 *data)
 	__u8 *reg_types, lifetime;
 	char str[128];
 
-	if (ntohs(info->type) != PARAM_REG_INFO)
+	if (ntohs(info->type) != PARAM_REG_INFO) {
 		return(-1);
+	}
 	length = ntohs(info->length);
 	num_regs = length - 2;
 	reg_types = &(info->reg_type);
 
 	if (!hip_a->regs) {
 		hip_a->regs = (struct reg_entry *)
-				malloc(sizeof(struct reg_entry));
-		if (!hip_a->regs)
+		              malloc(sizeof(struct reg_entry));
+		if (!hip_a->regs) {
 			return(-1);
+		}
 		memset(hip_a->regs, 0, sizeof(struct reg_entry));
 		hip_a->regs->reginfos = NULL;
 		hip_a->regs->number = 0;
@@ -3998,16 +4195,15 @@ int handle_reg_info(hip_assoc *hip_a, const __u8 *data)
 	for (i = 0; i < num_regs; i++) {
 		if (regtype_to_string(reg_types[i], str, sizeof(str)) < 0) {
 			log_(NORM, "Skipping registration type %d: %s\n",
-					reg_types[i], str);
+			     reg_types[i], str);
 			continue;
-		}			
+		}
 		log_(NORM,"Registration type %d offered: %s\n",
-			reg_types[i], str);
+		     reg_types[i], str);
 		add_reg_info(hip_a->regs, reg_types[i], REG_OFFERED, lifetime);
 	}
 	return(0);
 }
-
 
 /*
  * handle_reg_request()
@@ -4017,12 +4213,13 @@ int handle_reg_info(hip_assoc *hip_a, const __u8 *data)
 int handle_reg_request(hip_assoc *hip_a, const __u8 *data)
 {
 	tlv_reg_request *req = (tlv_reg_request *)data;
-	int i, num_regs, length, state; 
+	int i, num_regs, length, state;
 	__u8 *reg_types, lifetime;
 	char str[128];
 
-	if (ntohs(req->type) != PARAM_REG_REQUEST)
+	if (ntohs(req->type) != PARAM_REG_REQUEST) {
 		return(-1);
+	}
 	length = ntohs(req->length);
 	lifetime = req->lifetime;
 	num_regs = length - 1; /* lifetime occupies first byte */
@@ -4038,9 +4235,9 @@ int handle_reg_request(hip_assoc *hip_a, const __u8 *data)
 		for (i = 0; i < num_regs; i++) {
 			regtype_to_string(reg_types[i], str, sizeof(str));
 			log_(NORM,"Registration type %d canceled: %s\n",
-				reg_types[i], str);
+			     reg_types[i], str);
 			add_reg_info(hip_a->regs, reg_types[i],
-					REG_SEND_CANCELLED, 0);
+			             REG_SEND_CANCELLED, 0);
 		}
 		return(0);
 	}
@@ -4048,40 +4245,43 @@ int handle_reg_request(hip_assoc *hip_a, const __u8 *data)
 	/* prepare reg_entry structure */
 	if (hip_a->regs) {
 		log_(WARN, "Already have pending registration request(s), "
-			"ignoring new registration request(s).\n");
+		     "ignoring new registration request(s).\n");
 		return(-1);
 	}
 	hip_a->regs = (struct reg_entry *) malloc(sizeof(struct reg_entry));
-	if (!hip_a->regs)
+	if (!hip_a->regs) {
 		return(-1);
+	}
 	hip_a->regs->reginfos = NULL;
 	hip_a->regs->number = 0;
 	/* as registrar, we enforce min/max lifetimes specified
 	 * in the conf file */
-	if (lifetime < HCNF.min_reg_lifetime)
+	if (lifetime < HCNF.min_reg_lifetime) {
 		lifetime = HCNF.min_reg_lifetime;
-	else if (lifetime > HCNF.max_reg_lifetime)
+	}
+	else if (lifetime > HCNF.max_reg_lifetime) {
 		lifetime = HCNF.max_reg_lifetime;
+	}
 
 	for (i = 0; i < num_regs; i++) {
 		regtype_to_string(reg_types[i], str, sizeof(str));
 		log_(NORM,"Registration type %d requested: %s\n",
-			reg_types[i], str);
+		     reg_types[i], str);
 
 		state = REG_SEND_FAILED;
-		if (reg_types[i] == REGTYPE_RVS && OPT.rvs) {
+		if ((reg_types[i] == REGTYPE_RVS) && OPT.rvs) {
 			state = REG_SEND_RESP;
 			log_(NORM, "Registration with Rendezvous Service "
-				"accepted.\n");
+			     "accepted.\n");
 #ifdef MOBILE_ROUTER
-		} else if (reg_types[i] == REGTYPE_MR && OPT.mr) {
+		} else if ((reg_types[i] == REGTYPE_MR) && OPT.mr) {
 			if (init_hip_mr_client( hip_a->peer_hi->hit,
-						HIPA_DST(hip_a)) < 0) {
+			                        HIPA_DST(hip_a)) < 0) {
 				log_(WARN,"Error initializing mobile router "
-				    "client\n");
+				     "client\n");
 			}
 			log_(NORM, "Registration with Mobile Router Service "
-				"accepted.\n");
+			     "accepted.\n");
 			state = REG_SEND_RESP;
 #endif /* MOBILE_ROUTER */
 		} else { /* Unknown or unsupported type */
@@ -4093,11 +4293,10 @@ int handle_reg_request(hip_assoc *hip_a, const __u8 *data)
 	return(0);
 }
 
-
 /*
  * handle_reg_response()
  *
- * Parse the registration response from the registrar in the R2 or 
+ * Parse the registration response from the registrar in the R2 or
  * UPDATE packets.
  */
 int handle_reg_response(hip_assoc *hip_a, const __u8 *data)
@@ -4107,31 +4306,34 @@ int handle_reg_response(hip_assoc *hip_a, const __u8 *data)
 	__u8 *reg_types = &(resp->reg_type);
 	char str[128];
 
-	if (ntohs(resp->type) != PARAM_REG_RESPONSE)
+	if (ntohs(resp->type) != PARAM_REG_RESPONSE) {
 		return(-1);
+	}
 	length = ntohs(resp->length);
 	num_regs = length - 1;
 
 	for (i = 0; i < num_regs; i++) {
 		if (regtype_to_string(reg_types[i], str, sizeof(str)) < 0) {
 			log_(NORM, "Skipping unknown registration type %d: "
-				"%s\n", reg_types[i], str);
+			     "%s\n", reg_types[i], str);
 			continue;
 		}
 		if (resp->lifetime == 0) {
 			log_(NORM, "Registration type %d %s canceled.\n",
-				reg_types[i], str);
-			if (delete_reg_info(hip_a->regs, reg_types[i]) < 0)
+			     reg_types[i], str);
+			if (delete_reg_info(hip_a->regs, reg_types[i]) < 0) {
 				log_(NORM, "Registration not found.\n");
-			else
+			}
+			else {
 				log_(NORM, "Registration removed OK.\n");
+			}
 			continue;
 		}
 		log_(NORM,"Registration type %d %s succeeded with "
-			"lifetime %d.\n", reg_types[i], str, resp->lifetime);
+		     "lifetime %d.\n", reg_types[i], str, resp->lifetime);
 
-		add_reg_info(hip_a->regs, reg_types[i], REG_GRANTED, 
-				resp->lifetime);
+		add_reg_info(hip_a->regs, reg_types[i], REG_GRANTED,
+		             resp->lifetime);
 	}
 	return(0);
 }
@@ -4155,24 +4357,27 @@ int handle_reg_failed(hip_assoc *hip_a, const __u8 *data)
 	for (i = 0; i < num_regs; i++) {
 		regtype_to_string(reg_types[i], str, sizeof(str));
 		for (reg = hip_a->regs->reginfos; reg; reg = reg->next) {
-			if (reg->type == reg_types[i])
+			if (reg->type == reg_types[i]) {
 				break;
+			}
 		}
 		if (!reg) {
-			log_(NORM, "Registration type %d %s failed with code %d"
-				" and there is no registration state.\n",
-				reg_types[i], str, fail->fail_type);
+			log_(NORM,
+			     "Registration type %d %s failed with code %d"
+			     " and there is no registration state.\n",
+			     reg_types[i],
+			     str,
+			     fail->fail_type);
 			continue;
 		}
 		log_(NORM, "Registration type %d %s failed with failure "
-			"code %d.\n", reg_types[i], str, fail->fail_type);
+		     "code %d.\n", reg_types[i], str, fail->fail_type);
 		reg->state = REG_FAILED;
 		reg->failure_code = fail->fail_type;
 		gettimeofday(&reg->state_time, NULL);
 	}
 	return(0);
 }
-
 
 /*
  * add_reg_info()
@@ -4183,19 +4388,21 @@ int add_reg_info(struct reg_entry *regs, __u8 type, int state, __u8 lifetime)
 {
 	struct reg_info *reg;
 
-	if (!regs)
+	if (!regs) {
 		return(-1);
+	}
 
 	/* search for existing registration */
 	for (reg = regs->reginfos; reg; reg = reg->next) {
-		if (type == reg->type)
+		if (type == reg->type) {
 			break;
+		}
 	}
 
 	/* allocate new reg_info if it doesn't already exist */
 	if (!reg) {
 		reg = (struct reg_info*) malloc(sizeof(struct reg_info));
-		if (reg == NULL) return(-1);
+		if (reg == NULL) { return(-1); }
 		memset(reg, 0, sizeof(struct reg_info));
 		reg->type = type;
 		reg->next = regs->reginfos; /* link it into the list */
@@ -4213,24 +4420,29 @@ int add_reg_info(struct reg_entry *regs, __u8 type, int state, __u8 lifetime)
  */
 int delete_reg_info(struct reg_entry *regs, __u8 type)
 {
-	struct reg_info *reg, *prev=NULL;
+	struct reg_info *reg, *prev = NULL;
 
-	if (!regs)
+	if (!regs) {
 		return(-1);
+	}
 
 	/* search for existing registration */
 	for (reg = regs->reginfos; reg; reg = reg->next) {
-		if (type == reg->type)
+		if (type == reg->type) {
 			break;
+		}
 		prev = reg;
 	}
 
-	if (!reg)
+	if (!reg) {
 		return(-1);
-	if (!prev)
+	}
+	if (!prev) {
 		regs->reginfos = reg->next;
-	else
+	}
+	else {
 		prev->next = reg->next;
+	}
 	memset(reg, 0, sizeof(struct reg_info));
 	free(reg);
 	return(0);
@@ -4243,27 +4455,31 @@ int delete_reg_info(struct reg_entry *regs, __u8 type)
  * or VIA RVS rendevous parameters on I1 or R1 output.
  */
 int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
-		__u8* address)
+                 __u8* address)
 {
-	if (!addr && !address) /* must specify either type of address */
+	if (!addr && !address) { /* must specify either type of address */
 		return(-1);
-	if (!hip_a->from_via)
+	}
+	if (!hip_a->from_via) {
 		hip_a->from_via = malloc(eight_byte_align(sizeof(tlv_from)));
-	if (!hip_a->from_via)
+	}
+	if (!hip_a->from_via) {
 		return(-1); /* malloc error */
+	}
 	memset(hip_a->from_via, 0, eight_byte_align(sizeof(tlv_from)));
 	hip_a->from_via->type = htons(type);
 	hip_a->from_via->length = htons(sizeof(tlv_from) - 4);
-	if (addr && addr->sa_family == AF_INET6) {
+	if (addr && (addr->sa_family == AF_INET6)) {
 		memcpy(hip_a->from_via->address, SA2IP(addr), SAIPLEN(addr));
-	} else if (addr && addr->sa_family == AF_INET) {
+	} else if (addr && (addr->sa_family == AF_INET)) {
 		/* IPv4-in-IPv6 address format */
 		memset(&hip_a->from_via->address[10], 0xFF, 2);
-		memcpy(&hip_a->from_via->address[12], SA2IP(addr), 
-				SAIPLEN(addr));
+		memcpy(&hip_a->from_via->address[12], SA2IP(addr),
+		       SAIPLEN(addr));
 	} else if (address) {
 		memcpy(hip_a->from_via->address, address,
-			sizeof(hip_a->from_via->address));
+		       sizeof(hip_a->from_via->address));
 	}
 	return(0);
 }
+

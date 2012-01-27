@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2002-05 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,11 +15,11 @@
  *  hip_globals.h
  *
  *  Author:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
- *  
+ *
  */
-#include <openssl/dsa.h>	/* DSA support                  */
-#include <openssl/dh.h>		/* Diffie-Hellman contexts      */
-#include <math.h>		/* for exponential macros (reg life) */
+#include <openssl/dsa.h>        /* DSA support                  */
+#include <openssl/dh.h>         /* Diffie-Hellman contexts      */
+#include <math.h>               /* for exponential macros (reg life) */
 #include <hip/hip_types.h>
 
 /* global variables */
@@ -44,7 +44,7 @@ extern dh_cache_entry *dh_cache;
 /* Diffie-Hellman constants */
 extern const unsigned char *dhprime[DH_MAX];
 extern const int dhprime_len[DH_MAX]; /* only used by new_dh_cache_entry()
-					   use DH_size() elsewhere */
+                                       *    use DH_size() elsewhere */
 extern unsigned char dhgen[DH_MAX];
 
 

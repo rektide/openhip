@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2002-07  the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  *  hitgen.c   Generates DSA and RSA Host Identities
  *
  *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
- *  		Tom Henderson <thomas.r.henderson@boeing.com>
+ *              Tom Henderson <thomas.r.henderson@boeing.com>
  *
  */
 
@@ -34,12 +34,12 @@
 #include <errno.h>
 #ifndef __WIN32__
 #include <unistd.h>
-#include <sys/wait.h>		/* wait_pid() 			*/
-#include <sys/time.h>		/* gettimeofday()		*/
+#include <sys/wait.h>           /* wait_pid()                   */
+#include <sys/time.h>           /* gettimeofday()		*/
 #else
-#include <io.h>			/* access() 			*/
+#include <io.h>                 /* access()                     */
 #include <winsock2.h>
-#include <ws2tcpip.h>		/* INET6_ADDRSTRLEN		*/
+#include <ws2tcpip.h>           /* INET6_ADDRSTRLEN		*/
 #endif
 #include <hip/hip_version.h>
 #include <hip/hip_types.h>
@@ -61,7 +61,7 @@
 #endif
 
 /* dummy globals to fix undefined variables when building */
-#ifdef __UMH__ 
+#ifdef __UMH__
 int g_state;
 int netlsp[2];
 #endif
@@ -71,14 +71,14 @@ int netlsp[2];
 #define F_OK 0x00  /* test for file existence only */
 #endif
 
-/* 
+/*
  * These are the default bit sizes to generate.
  */
-int default_sizes[] = {1024};
+int default_sizes[] = { 1024 };
 
 /* seed is taken from the updated Appendix 5 to
  * FIPS PUB 186 and also appears in Appendix 5 to FIPS PIB 186-1 */
-static unsigned char seed[20]={
+static unsigned char seed[20] = {
 	0xd5,0x01,0x4e,0x4b,0x60,0xef,0x2b,0xa8,0xb6,0x21,0x1b,0x40,
 	0x62,0xba,0x32,0x24,0xe0,0x42,0x7d,0xd3,
 };
@@ -108,11 +108,11 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 
 	/* Crypto stuff */
 	BIO *bp;
-	DSA *dsa=NULL;
-	RSA *rsa=NULL;
+	DSA *dsa = NULL;
+	RSA *rsa = NULL;
 
 	printf("Generating a %d-bit %s key\n",
-	    opts->bitsize, HI_TYPESTR(opts->type));
+	       opts->bitsize, HI_TYPESTR(opts->type));
 	if (opts->bitsize < 512) {
 		printf("Error: bit size too small. ");
 		printf("512 bits is the minimum size\n");
@@ -122,7 +122,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 		return(-1);
 	}
 
-	/* 
+	/*
 	 * generate the HI
 	 */
 	printf("Generating %s keys for HI...", HI_TYPESTR(opts->type));
@@ -130,7 +130,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 	case HI_ALG_DSA:
 		printf("Generating DSA parameters (p,q,g)...");
 		dsa = DSA_generate_parameters(opts->bitsize, seed, sizeof(seed),
-					NULL, NULL, cb, stdout);
+		                              NULL, NULL, cb, stdout);
 		printf("\n");
 		if (dsa == NULL) {
 			fprintf(stderr, "DSA_generate_parameters failed\n");
@@ -164,7 +164,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 	xmlNewProp(hi, BAD_CAST "alg", BAD_CAST HI_TYPESTR(opts->type));
 	sprintf(tmp, "%d", opts->type);
 	xmlNewProp(hi, BAD_CAST "alg_id", BAD_CAST tmp);
-	sprintf(tmp, "%d", opts->bitsize/8);
+	sprintf(tmp, "%d", opts->bitsize / 8);
 	xmlNewProp(hi, BAD_CAST "length", BAD_CAST tmp);
 	xmlNewProp(hi, BAD_CAST "anon", BAD_CAST (yesno(opts->anon)));
 	xmlNewProp(hi, BAD_CAST "incoming", BAD_CAST (yesno(opts->incoming)));
@@ -173,16 +173,16 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 		xmlNewProp(hi, BAD_CAST "r1count", BAD_CAST tmp);
 	}
 	xmlNewChild(hi, NULL, BAD_CAST "name", BAD_CAST opts->name);
-	
+
 	switch (opts->type) {
 	case HI_ALG_DSA:
 		xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST BN_bn2hex(dsa->p));
 		xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST BN_bn2hex(dsa->q));
 		xmlNewChild(hi, NULL, BAD_CAST "G", BAD_CAST BN_bn2hex(dsa->g));
-		xmlNewChild(hi, NULL, BAD_CAST "PUB", 
-		    BAD_CAST BN_bn2hex(dsa->pub_key));
+		xmlNewChild(hi, NULL, BAD_CAST "PUB",
+		            BAD_CAST BN_bn2hex(dsa->pub_key));
 		xmlNewChild(hi, NULL,BAD_CAST "PRIV",
-		    BAD_CAST BN_bn2hex(dsa->priv_key));
+		            BAD_CAST BN_bn2hex(dsa->priv_key));
 		break;
 	case HI_ALG_RSA:
 		xmlNewChild(hi, NULL, BAD_CAST "N", BAD_CAST BN_bn2hex(rsa->n));
@@ -191,11 +191,11 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 		xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST BN_bn2hex(rsa->p));
 		xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST BN_bn2hex(rsa->q));
 		xmlNewChild(hi, NULL, BAD_CAST "dmp1",
-		    BAD_CAST BN_bn2hex(rsa->dmp1));
+		            BAD_CAST BN_bn2hex(rsa->dmp1));
 		xmlNewChild(hi, NULL, BAD_CAST "dmq1",
-		    BAD_CAST BN_bn2hex(rsa->dmq1));
+		            BAD_CAST BN_bn2hex(rsa->dmq1));
 		xmlNewChild(hi, NULL, BAD_CAST "iqmp",
-		    BAD_CAST BN_bn2hex(rsa->iqmp));
+		            BAD_CAST BN_bn2hex(rsa->iqmp));
 		break;
 	default:
 		break;
@@ -209,7 +209,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 	memset(hit_hex, 0, INET6_ADDRSTRLEN);
 
 	hostid.algorithm_id = opts->type;
-	hostid.size = (opts->bitsize)/8;
+	hostid.size = (opts->bitsize) / 8;
 	hostid.rsa = rsa;
 	hostid.dsa = dsa;
 
@@ -219,10 +219,10 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 		printf("Error generating HIT!\n");
 		exit(1);
 	}
-	
+
 	if (addr_to_str(SA(&hit), (__u8*)hit_hex, INET6_ADDRSTRLEN)) {
 		printf("Error generating HIT! Do you have the IPv6 protocol "
-			"installed?\n");
+		       "installed?\n");
 		exit(1);
 	}
 	xmlNewChild(hi, NULL, BAD_CAST "HIT", BAD_CAST hit_hex);
@@ -233,21 +233,21 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 	memset(&lsi, 0, sizeof(struct sockaddr_in));
 	memset(lsi_str, 0, INET_ADDRSTRLEN);
 	lsi.sin_family = AF_INET;
-	lsi.sin_addr.s_addr = ntohl(HIT2LSI(hitp)); 
-	if (addr_to_str(SA(&lsi), (__u8*)lsi_str, INET_ADDRSTRLEN))
+	lsi.sin_addr.s_addr = ntohl(HIT2LSI(hitp));
+	if (addr_to_str(SA(&lsi), (__u8*)lsi_str, INET_ADDRSTRLEN)) {
 		printf("Error generating LSI from HIT!\n");
+	}
 	xmlNewChild(hi, NULL, BAD_CAST "LSI", BAD_CAST lsi_str);
 
-	if (D_VERBOSE==OPT.debug) {
+	if (D_VERBOSE == OPT.debug) {
 		bp = BIO_new_fp(stdout, BIO_NOCLOSE);
-		if (dsa) DSAparams_print(bp, dsa);
-		if (rsa) RSA_print(bp, rsa, 0);
+		if (dsa) { DSAparams_print(bp, dsa); }
+		if (rsa) { RSA_print(bp, rsa, 0); }
 		BIO_free(bp);
 	}
 
 	return(0);
 }
-
 
 #ifdef HIP_VPLS
 int output_HI(xmlNodePtr root_node, hi_options *opts)
@@ -265,20 +265,20 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 
 	/* Crypto stuff */
 	BIO *bp;
-	DSA *dsa=NULL;
-	RSA *rsa=NULL;
+	DSA *dsa = NULL;
+	RSA *rsa = NULL;
 	EVP_PKEY *pkey = NULL;
- 	char pin[12]="123456";
+	char pin[12] = "123456";
 	ENGINE *engine = NULL;
-        SSL_CTX *ctx = NULL;
-        SSL *con = NULL;
+	SSL_CTX *ctx = NULL;
+	SSL *con = NULL;
 	struct {
-          const char * cert_id;
-          X509 * cert;
-        } parms;
+		const char * cert_id;
+		X509 * cert;
+	} parms;
 
 	printf("Generating a %d-bit %s key\n",
-	    opts->bitsize, HI_TYPESTR(opts->type));
+	       opts->bitsize, HI_TYPESTR(opts->type));
 	if (opts->bitsize < 512) {
 		printf("Error: bit size too small. ");
 		printf("512 bits is the minimum size\n");
@@ -288,59 +288,62 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 		return(-1);
 	}
 
-	/* TODO: If hitgen is regularly used with smartcard, the opensc engine and
+	/* TODO: If hitgen is regularly used with smartcard, the opensc engine
+	 * and
 	 * opensc module should be parameterized in engine_init call */
-        /* Initialize OpenSC engine for OpenSSL */
-        engine = engine_init(pin);
-        if (engine == NULL) {
-    	    fprintf(stderr,"Error in engine init\n");
-    	    exit(1);
-        }
-    
-        /* Initialize OpenSSL context, sending PIN for smartcard */
-        ctx = ssl_ctx_init(engine, pin);
-        if (ctx == NULL) {
-    	    fprintf(stderr,"Error in ssl init, bailing...\n");
-    	    exit(1);
-        }
-    
-        /* Initialize the OpenSSL connection */
-        con = SSL_new(ctx);
-        if (con == NULL) {
-            fprintf(stderr,"Error calling SSL_new()\n");
-    	    exit(1);
-        }
+	/* Initialize OpenSC engine for OpenSSL */
+	engine = engine_init(pin);
+	if (engine == NULL) {
+		fprintf(stderr,"Error in engine init\n");
+		exit(1);
+	}
 
-        int slot, id;
+	/* Initialize OpenSSL context, sending PIN for smartcard */
+	ctx = ssl_ctx_init(engine, pin);
+	if (ctx == NULL) {
+		fprintf(stderr,"Error in ssl init, bailing...\n");
+		exit(1);
+	}
+
+	/* Initialize the OpenSSL connection */
+	con = SSL_new(ctx);
+	if (con == NULL) {
+		fprintf(stderr,"Error calling SSL_new()\n");
+		exit(1);
+	}
+
+	int slot, id;
 	char buff[100];
-	/* TODO: If hitgen is regularly used with smartcard, slot and id should be
+	/* TODO: If hitgen is regularly used with smartcard, slot and id should
+	 * be
 	 * parameterized */
-	slot=4;
-	id=45;
+	slot = 4;
+	id = 45;
 	sprintf(buff, "%d:%d", slot, id);
-        parms.cert_id = buff;
+	parms.cert_id = buff;
 	parms.cert = NULL;
 	ENGINE_ctrl_cmd(engine, "LOAD_CERT_CTRL", 0, &parms, NULL, 1);
-        if(parms.cert)
-	  printf("get cert - %s\n", buff);
+	if(parms.cert) {
+		printf("get cert - %s\n", buff);
+	}
 
-        pkey=SSL_get_privatekey(con);
-        if(pkey==NULL){
-            fprintf(stderr,"Error call SSL_get_privatekey\n");
-    	    exit(1);
-        }
+	pkey = SSL_get_privatekey(con);
+	if(pkey == NULL) {
+		fprintf(stderr,"Error call SSL_get_privatekey\n");
+		exit(1);
+	}
 
-        rsa=EVP_PKEY_get1_RSA(pkey);
-        dsa=EVP_PKEY_get1_DSA(pkey);
+	rsa = EVP_PKEY_get1_RSA(pkey);
+	dsa = EVP_PKEY_get1_DSA(pkey);
 
-	/* 
+	/*
 	 * generate the HI
 	 */
 	printf("Generating %s keys for HI...", HI_TYPESTR(opts->type));
-	if(dsa){
-	        printf("Generating DSA parameters (p,q,g)...");
+	if(dsa) {
+		printf("Generating DSA parameters (p,q,g)...");
 		dsa = DSA_generate_parameters(opts->bitsize, seed, sizeof(seed),
-					NULL, NULL, cb, stdout);
+		                              NULL, NULL, cb, stdout);
 		printf("\n");
 		if (dsa == NULL) {
 			fprintf(stderr, "DSA_generate_parameters failed\n");
@@ -355,12 +358,12 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 	}
 	else if(rsa) {
 		/* = HIP_RSA_DFT_EXP;
-		rsa = RSA_generate_key(opts->bitsize, e, cb, stdout);
-		if (!rsa) {
-			fprintf(stderr, "RSA_generate_key() failed.\n");
-			exit(1);
-		}
-	        */
+		 *  rsa = RSA_generate_key(opts->bitsize, e, cb, stdout);
+		 *  if (!rsa) {
+		 *       fprintf(stderr, "RSA_generate_key() failed.\n");
+		 *       exit(1);
+		 *  }
+		 */
 	} else {
 		printf("Error: generate_HI() got invalid HI type\n");
 		exit(1);
@@ -373,7 +376,7 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 	xmlNewProp(hi, BAD_CAST "alg", BAD_CAST HI_TYPESTR(opts->type));
 	sprintf(tmp, "%d", opts->type);
 	xmlNewProp(hi, BAD_CAST "alg_id", BAD_CAST tmp);
-	sprintf(tmp, "%d", opts->bitsize/8);
+	sprintf(tmp, "%d", opts->bitsize / 8);
 	xmlNewProp(hi, BAD_CAST "length", BAD_CAST tmp);
 	xmlNewProp(hi, BAD_CAST "anon", BAD_CAST (yesno(opts->anon)));
 	xmlNewProp(hi, BAD_CAST "incoming", BAD_CAST (yesno(opts->incoming)));
@@ -382,29 +385,32 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 		xmlNewProp(hi, BAD_CAST "r1count", BAD_CAST tmp);
 	}
 	xmlNewChild(hi, NULL, BAD_CAST "name", BAD_CAST opts->name);
-	
-	if(dsa){
+
+	if(dsa) {
 		xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST BN_bn2hex(dsa->p));
 		xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST BN_bn2hex(dsa->q));
 		xmlNewChild(hi, NULL, BAD_CAST "G", BAD_CAST BN_bn2hex(dsa->g));
-		xmlNewChild(hi, NULL, BAD_CAST "PUB", 
-		    BAD_CAST BN_bn2hex(dsa->pub_key));
+		xmlNewChild(hi, NULL, BAD_CAST "PUB",
+		            BAD_CAST BN_bn2hex(dsa->pub_key));
 		xmlNewChild(hi, NULL,BAD_CAST "PRIV",
-		    BAD_CAST BN_bn2hex(dsa->priv_key));
-	} else if(rsa){
+		            BAD_CAST BN_bn2hex(dsa->priv_key));
+	} else if(rsa) {
 		xmlNewChild(hi, NULL, BAD_CAST "N", BAD_CAST BN_bn2hex(rsa->n));
 		xmlNewChild(hi, NULL, BAD_CAST "E", BAD_CAST BN_bn2hex(rsa->e));
 /* output public key parameters only
-		xmlNewChild(hi, NULL, BAD_CAST "D", BAD_CAST BN_bn2hex(rsa->d));
-		xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST BN_bn2hex(rsa->p));
-		xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST BN_bn2hex(rsa->q));
-		xmlNewChild(hi, NULL, BAD_CAST "dmp1",
-		    BAD_CAST BN_bn2hex(rsa->dmp1));
-		xmlNewChild(hi, NULL, BAD_CAST "dmq1",
-		    BAD_CAST BN_bn2hex(rsa->dmq1));
-		xmlNewChild(hi, NULL, BAD_CAST "iqmp",
-		    BAD_CAST BN_bn2hex(rsa->iqmp));
-*/
+ *               xmlNewChild(hi, NULL, BAD_CAST "D", BAD_CAST
+ * BN_bn2hex(rsa->d));
+ *               xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST
+ * BN_bn2hex(rsa->p));
+ *               xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST
+ * BN_bn2hex(rsa->q));
+ *               xmlNewChild(hi, NULL, BAD_CAST "dmp1",
+ *                   BAD_CAST BN_bn2hex(rsa->dmp1));
+ *               xmlNewChild(hi, NULL, BAD_CAST "dmq1",
+ *                   BAD_CAST BN_bn2hex(rsa->dmq1));
+ *               xmlNewChild(hi, NULL, BAD_CAST "iqmp",
+ *                   BAD_CAST BN_bn2hex(rsa->iqmp));
+ */
 	}
 
 	/*
@@ -415,7 +421,7 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 	memset(hit_hex, 0, INET6_ADDRSTRLEN);
 
 	hostid.algorithm_id = opts->type;
-	hostid.size = (opts->bitsize)/8;
+	hostid.size = (opts->bitsize) / 8;
 	hostid.rsa = rsa;
 	hostid.dsa = dsa;
 
@@ -425,10 +431,10 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 		printf("Error generating HIT!\n");
 		exit(1);
 	}
-	
+
 	if (addr_to_str(SA(&hit), (__u8*)hit_hex, INET6_ADDRSTRLEN)) {
 		printf("Error generating HIT! Do you have the IPv6 protocol "
-			"installed?\n");
+		       "installed?\n");
 		exit(1);
 	}
 	xmlNewChild(hi, NULL, BAD_CAST "HIT", BAD_CAST hit_hex);
@@ -439,15 +445,16 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 	memset(&lsi, 0, sizeof(struct sockaddr_in));
 	memset(lsi_str, 0, INET_ADDRSTRLEN);
 	lsi.sin_family = AF_INET;
-	lsi.sin_addr.s_addr = ntohl(HIT2LSI(hitp)); 
-	if (addr_to_str(SA(&lsi), (__u8*)lsi_str, INET_ADDRSTRLEN))
+	lsi.sin_addr.s_addr = ntohl(HIT2LSI(hitp));
+	if (addr_to_str(SA(&lsi), (__u8*)lsi_str, INET_ADDRSTRLEN)) {
 		printf("Error generating LSI from HIT!\n");
+	}
 	xmlNewChild(hi, NULL, BAD_CAST "LSI", BAD_CAST lsi_str);
 
-	if (D_VERBOSE==OPT.debug) {
+	if (D_VERBOSE == OPT.debug) {
 		bp = BIO_new_fp(stdout, BIO_NOCLOSE);
-		if (dsa) DSAparams_print(bp, dsa);
-		if (rsa) RSA_print(bp, rsa, 0);
+		if (dsa) { DSAparams_print(bp, dsa); }
+		if (rsa) { RSA_print(bp, rsa, 0); }
 		BIO_free(bp);
 	}
 
@@ -456,13 +463,13 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 
 #endif
 
-/* 
+/*
  * Delete whitespace from an XML document, which is necessary if you
  * want the document to be reformatted after reading it from a file.
  *
  * from:
  * http://mail.gnome.org/archives/gnome-devel-list/2003-May/msg00067.html
- * 
+ *
  */
 static void
 delete_unused_whitespace_r(xmlNodePtr node) {
@@ -491,7 +498,7 @@ void publish_hits(char *out_filename)
 	xmlDocPtr doc = NULL, doc_myids = NULL;
 	xmlNodePtr root_node, node, hi, child;
 	xmlAttrPtr attr;
-        int out_filename_exists = 0;
+	int out_filename_exists = 0;
 
 	sprintf(filename, "%s/%s", SYSCONFDIR, HIP_MYID_FILENAME);
 	doc_myids = xmlParseFile(filename);
@@ -499,13 +506,13 @@ void publish_hits(char *out_filename)
 		fprintf(stderr, "Error parsing xml file (%s)\n", filename);
 		return;
 	}
-		
+
 	printf("Saving HITs to '%s'...\n", out_filename);
-        /*
-         * The below check for file existence will remove the
-         * "I/O warning : failed to load external entity ..." messages
-         */
-	if (!access(out_filename, F_OK) ) {
+	/*
+	 * The below check for file existence will remove the
+	 * "I/O warning : failed to load external entity ..." messages
+	 */
+	if (!access(out_filename, F_OK)) {
 		out_filename_exists = 1;
 		doc = xmlParseFile(out_filename);
 	}
@@ -516,11 +523,13 @@ void publish_hits(char *out_filename)
 		delete_unused_whitespace(doc);
 		root_node = xmlDocGetRootElement(doc);
 		xmlDocSetRootElement(doc, root_node);
-	/* create a new file */
+		/* create a new file */
 	} else {
 		doc = xmlNewDoc(BAD_CAST "1.0");
-		node = xmlNewComment(BAD_CAST "The following HITs can be "
-			"copied into a " HIP_KNOWNID_FILENAME " file.");
+		node = xmlNewComment(
+		        BAD_CAST "The following HITs can be "
+		        "copied into a " HIP_KNOWNID_FILENAME
+		        " file.");
 		xmlDocSetRootElement(doc, node);
 		root_node = xmlNewNode(NULL, BAD_CAST "known_host_identities");
 		xmlAddSibling(node, root_node);
@@ -529,40 +538,45 @@ void publish_hits(char *out_filename)
 	node = xmlDocGetRootElement(doc_myids);
 	for (node = node->children; node; node = node->next)
 	{
-		if (strcmp((char *)node->name, "host_identity")!=0)
+		if (strcmp((char *)node->name, "host_identity") != 0) {
 			continue;
+		}
 		hi = xmlNewChild(root_node,NULL,BAD_CAST "host_identity", NULL);
 		/* copy attributes */
 		for (attr = node->properties; attr; attr = attr->next) {
-			if ((attr->type==XML_ATTRIBUTE_NODE) &&
-			    (attr->children) && 
-			    (attr->children->type==XML_TEXT_NODE))
-	                        data = attr->children->content;
-        	        else /* no attribute value */
-                	        continue;
+			if ((attr->type == XML_ATTRIBUTE_NODE) &&
+			    (attr->children) &&
+			    (attr->children->type == XML_TEXT_NODE)) {
+				data = attr->children->content;
+			}
+			else { /* no attribute value */
+				continue;
+			}
 			/* save recognized attributes */
-			if (	(strcmp((char *)attr->name, "alg")==0) ||
-				(strcmp((char *)attr->name, "alg_id")==0) ||
-				(strcmp((char *)attr->name, "anon")==0) ||
-				(strcmp((char *)attr->name, "incoming")==0) ||
-				(strcmp((char *)attr->name, "length")==0)) 
+			if ((strcmp((char *)attr->name, "alg") == 0) ||
+			    (strcmp((char *)attr->name, "alg_id") == 0) ||
+			    (strcmp((char *)attr->name, "anon") == 0) ||
+			    (strcmp((char *)attr->name, "incoming") == 0) ||
+			    (strcmp((char *)attr->name, "length") == 0))
 			{
 				xmlNewProp(hi, BAD_CAST attr->name,
-						BAD_CAST data);
+				           BAD_CAST data);
 			}
 		}
 		/* copy the children nodes that we wish to publish */
 		for (child = node->children; child; child = child->next) {
-			if (strcmp((char *)child->name, "text")==0)
+			if (strcmp((char *)child->name, "text") == 0) {
 				continue;
-			if ( (strcmp((char *)child->name, "name")!=0) &&
-			     (strcmp((char *)child->name, "HIT")!=0) &&
-			     (strcmp((char *)child->name, "LSI")!=0) &&
-			     (strcmp((char *)child->name, "addr")!=0))
+			}
+			if ((strcmp((char *)child->name, "name") != 0) &&
+			    (strcmp((char *)child->name, "HIT") != 0) &&
+			    (strcmp((char *)child->name, "LSI") != 0) &&
+			    (strcmp((char *)child->name, "addr") != 0)) {
 				continue;
+			}
 			data = xmlNodeGetContent(child);
-			xmlNewChild(hi, NULL, BAD_CAST child->name, 
-				    BAD_CAST data);
+			xmlNewChild(hi, NULL, BAD_CAST child->name,
+			            BAD_CAST data);
 			xmlFree(data);
 		}
 	}
@@ -579,7 +593,7 @@ void generate_conf_file(char *filename)
 	doc = xmlNewDoc(BAD_CAST "1.0");
 
 	printf("Saving default configuration to '%s'...\n", filename);
-	
+
 	root_node = xmlNewNode(NULL, BAD_CAST "hip_configuration");
 	xmlDocSetRootElement(doc, root_node);
 	xmlNewDocComment(doc, BAD_CAST "HIP Configuration File");
@@ -613,21 +627,21 @@ void generate_conf_file(char *filename)
 	xmlNewChild(node, NULL, BAD_CAST "id", BAD_CAST "4");
 	xmlNewChild(node, NULL, BAD_CAST "id", BAD_CAST "5");
 	xmlNewChild(node, NULL, BAD_CAST "id", BAD_CAST "6");
-	xmlNewChild(root_node, NULL, BAD_CAST "disable_dns_lookups", 
-			BAD_CAST "no");
-	xmlNewChild(root_node, NULL, BAD_CAST "save_known_identities", 
-			BAD_CAST "no");
+	xmlNewChild(root_node, NULL, BAD_CAST "disable_dns_lookups",
+	            BAD_CAST "no");
+	xmlNewChild(root_node, NULL, BAD_CAST "save_known_identities",
+	            BAD_CAST "no");
 	xmlNewChild(root_node, NULL, BAD_CAST "disable_notify", BAD_CAST "no");
 #ifdef __UMH__
 	xmlNewChild(root_node, NULL, BAD_CAST "disable_dns_thread",
-			BAD_CAST "yes");
+	            BAD_CAST "yes");
 	xmlNewChild(root_node, NULL, BAD_CAST "enable_broadcast",BAD_CAST "no");
 #endif
 	xmlNewChild(root_node, NULL, BAD_CAST "disable_udp",
 #ifdef __MACOSX__
-			BAD_CAST "yes");
+	            BAD_CAST "yes");
 #else
-			BAD_CAST "no");
+	            BAD_CAST "no");
 #endif
 	xmlSaveFormatFileEnc(filename, doc, "UTF-8", 1);
 	xmlFreeDoc(doc);
@@ -649,7 +663,7 @@ void print_hitgen_usage()
 	printf("\t\t[-publish] ");
 	printf("[-conf]\n");
 	printf("Generate host identities (public/private key pairs) for use"
-		" with OpenHIP.\n");
+	       " with OpenHIP.\n");
 	printf("General options:\n");
 	printf(" -v \t\t show verbose debugging information\n");
 	printf(" -name <string>\t is the human-readable handle for the HI\n");
@@ -664,18 +678,20 @@ void print_hitgen_usage()
 	printf(" -incoming \t unsets the allow incoming flag for this HI\n");
 	printf("Other operating modes:\n");
 	printf(" -publish \t extract HITs from the existing '%s'\n",
-		HIP_MYID_FILENAME);
+	       HIP_MYID_FILENAME);
 	printf("\t\t file and create a file named ");
 	printf("'hostname_host_identities.pub.xml'\n");
-	printf(" -conf \t\t generates a default '%s' file (overwrites existing)"
-		"\n", HIP_CONF_FILENAME);
+	printf(
+	        " -conf \t\t generates a default '%s' file (overwrites existing)"
+	        "\n",
+	        HIP_CONF_FILENAME);
 	printf("Configuration files are stored in '%s'.\n", SYSCONFDIR);
 	printf("By default, identities are generated and written to '%s'\n",
-		HIP_MYID_FILENAME);
+	       HIP_MYID_FILENAME);
 	printf("with the string of 'default', the anonymous flag set to false");
 	printf(", allow \nincoming set to true, for each of the default ");
 	printf("lengths (");
-	for (i=0; i < (sizeof(default_sizes)/sizeof(int)); i++) {
+	for (i = 0; i < (sizeof(default_sizes) / sizeof(int)); i++) {
 		printf("%d ", default_sizes[i]);
 	}
 	printf("bits).\n\n");
@@ -683,35 +699,40 @@ void print_hitgen_usage()
 
 /*
  * main()
- * 
+ *
  * opens hip.conf file and calls generate_HI()
- * 
+ *
  */
 int main(int argc, char *argv[])
 {
 	char name[255], basename[255], filename[255];
 	char rnd_seed[255];
-	int i, have_filename=0, do_publish=0, do_conf=0, do_noinput=0;
-	int do_append=0;
+	int i, have_filename = 0, do_publish = 0, do_conf = 0, do_noinput = 0;
+	int do_append = 0;
 #ifdef HIP_VPLS
-	int do_sc_out=0;
+	int do_sc_out = 0;
 #endif
 	hi_options opts;
 	xmlDocPtr doc = NULL;
 	xmlNodePtr root_node = NULL;
 	int my_filename_exists = 0;
-	
+
 #ifndef __WIN32__
 	struct stat stbuf;
 
 	snprintf(filename, sizeof(filename), "%s", SYSCONFDIR);
-	if (stat(filename, &stbuf) < 0)
+	if (stat(filename, &stbuf) < 0) {
 		mkdir(filename, 755);
+	}
 #else
 	WORD wVer = MAKEWORD( 2, 2);
 	WSADATA wsaData;
 	HMODULE hLib = LoadLibrary("ADVAPI32.DLL");
-	BOOLEAN (APIENTRY *pfn)(void*, ULONG) = (BOOLEAN (APIENTRY*)(void*,ULONG))GetProcAddress(hLib,"SystemFunction036");
+	BOOLEAN (APIENTRY *pfn)(void*,
+	                        ULONG) =
+	        (BOOLEAN (APIENTRY*)(void*,ULONG))GetProcAddress(
+	                hLib,
+	                "SystemFunction036");
 
 	WSAStartup(wVer, &wsaData);
 #endif /* __WIN32__ */
@@ -719,10 +740,11 @@ int main(int argc, char *argv[])
 	/*
 	 * Set default values
 	 */
-	if (gethostname(basename, 255) < 0)
+	if (gethostname(basename, 255) < 0) {
 		sprintf(basename, "default");
+	}
 	sprintf(filename, "%s/%s", SYSCONFDIR, HIP_MYID_FILENAME);
-	OPT.debug=D_DEFAULT;
+	OPT.debug = D_DEFAULT;
 
 	opts.type = 0;
 	opts.bitsize = 0;
@@ -733,7 +755,7 @@ int main(int argc, char *argv[])
 
 	/*
 	 * Command-line parameters
-	 */	
+	 */
 	argv++, argc--;
 	while (argc > 0) {
 		if (strcmp(*argv, "-v") == 0) {
@@ -747,12 +769,15 @@ int main(int argc, char *argv[])
 			continue;
 		} else if (strcmp(*argv, "-type") == 0) {
 			argv++, argc--;
-			if (strcmp(*argv, "DSA")==0)
+			if (strcmp(*argv, "DSA") == 0) {
 				opts.type = HI_ALG_DSA;
-			else if (strcmp(*argv, "RSA")==0)
+			}
+			else if (strcmp(*argv, "RSA") == 0) {
 				opts.type = HI_ALG_RSA;
-			else
+			}
+			else {
 				printf("Invalid HI type.\n");
+			}
 			argv++, argc--;
 			continue;
 		} else if (strcmp(*argv, "-bits") == 0) {
@@ -764,7 +789,7 @@ int main(int argc, char *argv[])
 			int length;
 			argv++, argc--;
 			sscanf(*argv, "%d", &length);
-			opts.bitsize = length*8;
+			opts.bitsize = length * 8;
 			argv++, argc--;
 			continue;
 		} else if (strcmp(*argv, "-anon") == 0) {
@@ -818,13 +843,14 @@ int main(int argc, char *argv[])
 	if (do_publish) {
 		if (!have_filename) {
 			sprintf(filename, "%s%s%s", HIP_PUB_PREFIX, basename,
-					HIP_PUB_SUFFIX);
+			        HIP_PUB_SUFFIX);
 		}
 		publish_hits(filename);
 		exit(0);
 	} else if (do_conf) {
-		if (!have_filename)
+		if (!have_filename) {
 			sprintf(filename, "%s", HIP_CONF_FILENAME);
+		}
 		generate_conf_file(filename);
 		exit(0);
 	}
@@ -832,15 +858,15 @@ int main(int argc, char *argv[])
 	/* Interactive mode */
 	printf("\nhitgen v%s\n\n", HIP_VERSION);
 	printf("This utility will generate host identities for this machine."
-		"\n\n");
-        /*
-         * The below check for file existence will remove the
-         * "I/O warning : failed to load external entity ..." messages
-         */
-	if (!access(filename, F_OK) ) {
+	       "\n\n");
+	/*
+	 * The below check for file existence will remove the
+	 * "I/O warning : failed to load external entity ..." messages
+	 */
+	if (!access(filename, F_OK)) {
 		if (!do_append) {
 			printf("The file %s already exists. Use the -append "
-				"option to add identities to it.\n", filename);
+			       "option to add identities to it.\n", filename);
 			exit(0);
 		}
 		my_filename_exists = 1;
@@ -848,85 +874,94 @@ int main(int argc, char *argv[])
 	}
 	/* append to existing file */
 	if (my_filename_exists && doc) {
-		printf("The file %s already exists, will append.\n", 
-		  filename);
+		printf("The file %s already exists, will append.\n",
+		       filename);
 		delete_unused_whitespace(doc);
 		root_node = xmlDocGetRootElement(doc);
 		xmlDocSetRootElement(doc, root_node);
-	/* create a new file */
+		/* create a new file */
 	} else {
-		printf("The file %s does not exist; creating new file...\n", 
-		  filename);
+		printf("The file %s does not exist; creating new file...\n",
+		       filename);
 		doc = xmlNewDoc(BAD_CAST "1.0");
 		root_node = xmlNewNode(NULL, BAD_CAST "my_host_identities");
 		xmlDocSetRootElement(doc, root_node);
 	}
 
 	/* DTD support */
-	// dtd = xmlCreateIntSubset(doc,BAD_CAST "root",NULL,BAD_CAST "x.dtd");
-	// xmlNewChild(parent, NsPtr ns, name, content)
-	// 
+	/* dtd = xmlCreateIntSubset(doc,BAD_CAST "root",NULL,BAD_CAST "x.dtd"); */
+	/* xmlNewChild(parent, NsPtr ns, name, content) */
+	/* */
 #ifdef HIP_VPLS
-     if(!do_sc_out){
+	if(!do_sc_out) {
 #endif
 	if (do_noinput) {
 #ifdef __WIN32__
 		if (hLib) {
 			printf("\nUsing SystemFunction036 to seed the random "
-				"number generator.\n");
+			       "number generator.\n");
 			pfn(rnd_seed, sizeof rnd_seed);
-		} else { 
+		} else {
 			printf("\nUsing screen data to seed the random number "
-				"generator.\n");
+			       "generator.\n");
 			/* versions of Windows wihout SystemFunction036 */
 			RAND_screen();
 		}
 #else
 		FILE *f = fopen("/dev/urandom", "r");
 		if (f) {
-			printf("\nUsing /dev/urandom to seed the random number "
-				"generator.\n");
-			if (fread(rnd_seed, sizeof(rnd_seed), 1, f) != 1)
+			printf(
+			        "\nUsing /dev/urandom to seed the random number "
+			        "generator.\n");
+			if (fread(rnd_seed, sizeof(rnd_seed), 1, f) != 1) {
 				printf("Warning: error reading /dev/urandom\n");
+			}
 			fclose(f);
 		} else {
-			printf("\nUsing the system clock to seed the random num"
-				"ber generator.\n");
+			printf(
+			        "\nUsing the system clock to seed the random num"
+			        "ber generator.\n");
 			gettimeofday((struct timeval*)rnd_seed, NULL);
 		}
 #endif
 	} else {
 		printf("\nTo seed the random number generator, ");
 		printf("please type some random text:\n");
-		if (scanf("%s", rnd_seed) < 1)
+		if (scanf("%s", rnd_seed) < 1) {
 			printf("Warning: could not read any input.\n");
+		}
 	}
-	RAND_seed(rnd_seed, sizeof rnd_seed); 
+	RAND_seed(rnd_seed, sizeof rnd_seed);
 #ifdef HIP_VPLS
-     } 
+}
+
 #endif
 
 	if (opts.bitsize) {
 		/* generate only one HI for the specified length */
-		if (!opts.type)
+		if (!opts.type) {
 			opts.type = HI_ALG_DSA;
+		}
 		sprintf(opts.name, "%s-%d", basename, opts.bitsize);
 #ifdef HIP_VPLS
-		if(do_sc_out)
-		  output_HI(root_node, &opts);
+		if(do_sc_out) {
+			output_HI(root_node, &opts);
+		}
 		else
 #endif
 		generate_HI(root_node, &opts);
 	} else {
 		/* generate a HI for each of the default lengths */
-		for (i=0; i < (sizeof(default_sizes)/sizeof(int)); i++) {
-			if (!opts.type)
+		for (i = 0; i < (sizeof(default_sizes) / sizeof(int)); i++) {
+			if (!opts.type) {
 				opts.type = HI_ALG_RSA;
+			}
 			opts.bitsize = default_sizes[i];
 			sprintf(opts.name, "%s-%d", basename, opts.bitsize);
 #ifdef HIP_VPLS
-			if(do_sc_out)
-			  output_HI(root_node, &opts);
+			if(do_sc_out) {
+				output_HI(root_node, &opts);
+			}
 			else
 #endif
 			generate_HI(root_node, &opts);
@@ -939,11 +974,12 @@ int main(int argc, char *argv[])
 
 #ifndef __WIN32__
 	/* Change permissions of my_host_identities to 600 */
-	if (chmod(filename, S_IRUSR | S_IWUSR) < 0)
+	if (chmod(filename, S_IRUSR | S_IWUSR) < 0) {
 		printf("Error setting permissions for '%s'\n", filename);
+	}
 #else
 	WSACleanup();
 #endif
-	return(0); 
+	return(0);
 }
 

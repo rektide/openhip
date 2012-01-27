@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2002-04 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -37,62 +37,62 @@
 #define IPV4_SRC "0xc0000201" /* 192.0.2.1 */
 #define IPV4_DST "0xc0000202" /* 192.0.2.2 */
 
-/* 
- * IPv4 pseudoheader format 
-        0      7 8     15 16    23 24    31 
-        +--------+--------+--------+--------+
-        |          source address           |
-        +--------+--------+--------+--------+
-        |        destination address        |
-        +--------+--------+--------+--------+
-        |  zero  |protocol|       length    |
-        +--------+--------+--------+--------+
-        |                                   | 
-        /                                   /
-        |  <transport layer header/data>    | 
-        \                                   \
-        |                                   |
-        +--------+--------+--------+--------+
-
-length is defined as the length of the
-<transport layer header/data>; in this case,
-it is the length of the whole HIP I1, in bytes
-*/
+/*
+ * IPv4 pseudoheader format
+ *       0      7 8     15 16    23 24    31
+ *+--------+--------+--------+--------+
+ |          source address           |
+ |+--------+--------+--------+--------+
+ |        destination address        |
+ |+--------+--------+--------+--------+
+ |  zero  |protocol|       length    |
+ |+--------+--------+--------+--------+
+ |                                   |
+ |       /                                   /
+ |  <transport layer header/data>    |
+ \                                   \
+ |                                   |
+ |+--------+--------+--------+--------+
+ |
+ |  length is defined as the length of the
+ |  <transport layer header/data>; in this case,
+ |  it is the length of the whole HIP I1, in bytes
+ */
 /*
  * IPv6 pseudoheader format
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                                                               |
-   +                                                               +
-   |                                                               |
-   +                         Source Address                        +
-   |                                                               |
-   +                                                               +
-   |                                                               |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                                                               |
-   +                                                               +
-   |                                                               |
-   +                      Destination Address                      +
-   |                                                               |
-   +                                                               +
-   |                                                               |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                   Upper-Layer Packet Length                   |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                      zero                     |  Next Header  |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
-   The Upper-Layer Packet Length in the pseudo-header is the
-   length of the upper-layer header and data (e.g., TCP header
-   plus TCP data).  Some upper-layer protocols carry their own
-   length information (e.g., the Length field in the UDP header);
-   for such protocols, that is the length used in the pseudo-
-   header.  Other protocols (such as TCP) do not carry their own
-   length information, in which case the length used in the
-   pseudo-header is the Payload Length from the IPv6 header, minus
-   the length of any extension headers present between the IPv6
-   header and the upper-layer header.
-*/
+ *+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                                                               +
+ |                                                               |
+ +                         Source Address                        +
+ |                                                               |
+ +                                                               +
+ |                                                               |
+ |+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                                                               +
+ |                                                               |
+ +                      Destination Address                      +
+ |                                                               |
+ +                                                               +
+ |                                                               |
+ |+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                   Upper-Layer Packet Length                   |
+ |+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                      zero                     |  Next Header  |
+ |+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |
+ |  The Upper-Layer Packet Length in the pseudo-header is the
+ |  length of the upper-layer header and data (e.g., TCP header
+ |  plus TCP data).  Some upper-layer protocols carry their own
+ |  length information (e.g., the Length field in the UDP header);
+ |  for such protocols, that is the length used in the pseudo-
+ |  header.  Other protocols (such as TCP) do not carry their own
+ |  length information, in which case the length used in the
+ |  pseudo-header is the Payload Length from the IPv6 header, minus
+ |  the length of any extension headers present between the IPv6
+ |  header and the upper-layer header.
+ */
 
 
 #if (IPV6)
@@ -125,18 +125,18 @@ typedef struct _hiphdr {
 	__u16 len;
 	__u16 checksum;
 	__u16 control;      /* control                     */
-	__u8  packet_type;  /* packet type                 */
-	__u8  res:4,version:4; /* version, reserved        */
+	__u8 packet_type;   /* packet type                 */
+	__u8 res : 4,version : 4; /* version, reserved        */
 	hip_hit hit_sndr;   /* Sender's Host Identity Tag  */
 	hip_hit hit_rcvr;   /* Receiver's Host Identity Tag*/
 	/* HIP TLV parameters follow ...  */
 } hiphdr;
 #else
 typedef struct _hiphdr {
-	__u8  next_hdr;         /* payload protocol            */
-	__u8  payload_len;      /* payload length              */
-	__u8  packet_type;      /* packet type                 */
-	__u8  res:4,version:4;  /* version, reserved           */
+	__u8 next_hdr;          /* payload protocol            */
+	__u8 payload_len;       /* payload length              */
+	__u8 packet_type;       /* packet type                 */
+	__u8 res : 4,version : 4;  /* version, reserved           */
 	__u16 control;          /* control                     */
 	__u16 checksum;         /* checksum                    */
 	hip_hit hit_sndr;       /* Sender's Host Identity Tag  */
@@ -165,10 +165,10 @@ int main(int argc, char *argv[])
 	char ip_src_char[] = IPV4_SRC;
 	char ip_dst_char[] = IPV4_DST;
 
-	hex_to_bin(hit_sndr_char, hit_sndr, 16); 
-	hex_to_bin(hit_rcvr_char, hit_rcvr, 16); 
-	hex_to_bin(ip_src_char, (char*) &ip_src, 4); 
-	hex_to_bin(ip_dst_char, (char*) &ip_dst, 4); 
+	hex_to_bin(hit_sndr_char, hit_sndr, 16);
+	hex_to_bin(hit_rcvr_char, hit_rcvr, 16);
+	hex_to_bin(ip_src_char, (char*) &ip_src, 4);
+	hex_to_bin(ip_dst_char, (char*) &ip_dst, 4);
 
 #if (HIP_OVER_UDP)
 	/* build the HIP header for I1*/
@@ -218,19 +218,21 @@ int main(int argc, char *argv[])
 #endif
 #endif
 	printf(" and corresponding checksum:\n\t");
-	for (i=0; i< checksummed_size; i++) {
-		if (i%4 == 0 && i != 0) 
+	for (i = 0; i < checksummed_size; i++) {
+		if ((i % 4 == 0) && (i != 0)) {
 			printf("\n\t");
+		}
 		printf("%02x", buff[i]);
 	}
 	printf("\n");
 }
+
 /*
  * function checksum_packet()
  *
  * Calculates the checksum of a HIP packet with pseudo-header
  * src and dst are assumed to be in network byte order already
- * data is assumed to point to start of pseudoheader 
+ * data is assumed to point to start of pseudoheader
  */
 static
 __u16 checksum_packet(char *data, __u32 src, __u32 dst)
@@ -271,39 +273,41 @@ __u16 checksum_packet(char *data, __u32 src, __u32 dst)
 	pseudoh->packet_length = htons(length);
 #endif
 #endif
-  
-	/* 
-	 * this checksum algorithm can be found 
+
+	/*
+	 * this checksum algorithm can be found
 	 * in RFC 1071 section 4.1
 	 */
-    
+
 	/* one's complement sum 16-bit words of data */
 #if (IPV6)
-	count = length + IPV6_PSEUDO_SIZE;    
+	count = length + IPV6_PSEUDO_SIZE;
 #else
-	count = length + IPV4_PSEUDO_SIZE;    
+	count = length + IPV4_PSEUDO_SIZE;
 #endif
 	p = (unsigned short*) data;
-	while (count > 1)  {
+	while (count > 1) {
 		sum += *p++;
 		count -= 2;
 	}
 	/* add left-over byte, if any */
-	if (count > 0)
+	if (count > 0) {
 		sum += (unsigned char)*p;
-    
+	}
+
 	/*  Fold 32-bit sum to 16 bits */
-	while (sum>>16)
+	while (sum >> 16) {
 		sum = (sum & 0xffff) + (sum >> 16);
-    
-	/* take the one's complement of the sum */ 
+	}
+
+	/* take the one's complement of the sum */
 	checksum = ~sum;
-    
-	return checksum;
+
+	return(checksum);
 }
 
 /*
- * Convert character string found in src to binary dst 
+ * Convert character string found in src to binary dst
  * - leaves in network byte order
  */
 static
@@ -315,53 +319,57 @@ int hex_to_bin(char *src, char *dst, int dst_len)
 	int src_len, total, i;
 	unsigned char o;
 
-	if ((!src) || (!dst)) 
+	if ((!src) || (!dst)) {
 		return(-1);
+	}
 	src_len = strlen(src);
-	if (dst_len > src_len) 
+	if (dst_len > src_len) {
 		return(-1);
+	}
 
 	/* chop any '0x' prefix */
-	if ((src[0]=='0') && (src[1]=='x')) {
+	if ((src[0] == '0') && (src[1] == 'x')) {
 		src += 2;
 		src_len -= 2;
 	}
-	
+
 	/* convert requested number of bytes from hex to binary */
 	total = 0;
-	for (i=0; (i < src_len) && (total < dst_len) ; i+=2) {
+	for (i = 0; (i < src_len) && (total < dst_len); i += 2) {
 		/* most significant nibble */
 		c = src[i];
-		/* 
-		 * Normally would use tolower(), but have found problems 
+		/*
+		 * Normally would use tolower(), but have found problems
 		 * with dynamic linking and different glibc versions
-		 */ 
+		 */
 		if ((p = strchr(hex, c)) == NULL) {
 			if ((p = strchr(hexcap, c)) == NULL) {
 				continue;
-			}	
-		}	
-		if ((p-hex) < 0 || (p-hex) > 15) {
+			}
+		}
+		if (((p - hex) < 0) || ((p - hex) > 15)) {
 			fprintf(stderr, "Binary conversion failed %c\n",c);
 			return(-1);
 		}
 		o = (p - hex) << 4;
 		/* least significant nibble */
-		c = src[i+1];
+		c = src[i + 1];
 		if ((p = strchr(hex, c)) == NULL) {
 			if ((p = strchr(hexcap, c)) == NULL) {
 				continue;
-			}	
-		}	
-		if ((p-hex) < 0 || (p-hex) > 15) {
+			}
+		}
+		if (((p - hex) < 0) || ((p - hex) > 15)) {
 			fprintf(stderr, "Binary conversion failed 2 %c", c);
 			return(-1);
 		}
 		o += (p - hex);
 		dst[total] = o;
 		total++;
-		if (total >= src_len) 
+		if (total >= src_len) {
 			total = dst_len;
+		}
 	}
-	return total;
+	return(total);
 }
+

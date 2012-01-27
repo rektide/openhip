@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2002-06 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -35,16 +35,16 @@
 #ifdef __MACOSX__
 #include <netinet/in_systm.h>
 #endif
-#include <netinet/in.h>		/* INADDR_NONE                  */
-#include <netinet/ip.h>		/* INADDR_NONE                  */
+#include <netinet/in.h>         /* INADDR_NONE                  */
+#include <netinet/ip.h>         /* INADDR_NONE                  */
 #endif
 #include <openssl/sha.h>
 #include <openssl/dsa.h>
-#include <openssl/asn1.h>	
+#include <openssl/asn1.h>
 #include <openssl/rand.h>
 #include <sys/types.h>
 #include <errno.h>
-#include <fcntl.h>		/* open()			*/
+#include <fcntl.h>              /* open()			*/
 #ifdef __MACOSX__
 #include <sys/types.h>
 #else
@@ -80,23 +80,28 @@ int hip_status_open()
 
 	if (s_stat)
 #ifdef __WIN32__
-		closesocket(s_stat);
+	{ closesocket(s_stat); }
 
-	if ((s_stat = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))==INVALID_SOCKET)
+	if ((s_stat =
+	             socket(AF_INET, SOCK_DGRAM,
+	                    IPPROTO_UDP)) == INVALID_SOCKET) {
 		return(-1);
+	}
 #else
-		close(s_stat);
-		
-	if ((s_stat = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
+	{ close(s_stat); }
+
+	if ((s_stat = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
 		return(-1);
+	}
 #endif
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	addr.sin_port = htons(STATUS_PORT);
-	
-	if (bind(s_stat, (struct sockaddr*)&addr, sizeof(addr)) < 0)
+
+	if (bind(s_stat, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
 		return(-1);
+	}
 
 	return(0);
 }
@@ -106,29 +111,33 @@ void hip_handle_status_request(__u8 *buff, int len, struct sockaddr *addr)
 	__u16 type;
 	__u32 ip;
 	char out[1500];
-	int outlen=0;
+	int outlen = 0;
 	struct status_tlv *tlv_end;
 
-	/* For security purposes, only allow loopback connections 
+	/* For security purposes, only allow loopback connections
 	 * to status socket
 	 */
-	if (!addr)
+	if (!addr) {
 		return;
+	}
 	if (addr->sa_family == AF_INET) {
 		ip = ntohl(((struct sockaddr_in*)addr)->sin_addr.s_addr);
-		if (!IN_LOOPBACK(ip))
+		if (!IN_LOOPBACK(ip)) {
 			return;
+		}
 	} else {
 		if (!IN6_IS_ADDR_LOOPBACK(
-		    &((struct sockaddr_in6*)addr)->sin6_addr) )
+		            &((struct sockaddr_in6*)addr)->sin6_addr)) {
 			return;
+		}
 	}
 	memcpy(&type, buff, 2);
 	type = ntohs(type);
 
-	if ((type < HIP_STATUS_REQ_MAX) && (len != 4))
+	if ((type < HIP_STATUS_REQ_MAX) && (len != 4)) {
 		return;
-	
+	}
+
 	switch(type) {
 	case HIP_STATUS_REQ_PEERS:
 		outlen = status_dump_hi_list(out, peer_hi_head, TRUE);
@@ -161,8 +170,8 @@ void hip_handle_status_request(__u8 *buff, int len, struct sockaddr *addr)
 		tlv_end = (struct status_tlv*) &out[outlen];
 		tlv_end->tlv_type = htons(HIP_STATUS_REPLY_DONE);
 		tlv_end->tlv_len =  0;
-		outlen += sizeof(struct status_tlv);		
-		len = sendto(s_stat, out, outlen, 0, addr, SALEN(addr));	
+		outlen += sizeof(struct status_tlv);
+		len = sendto(s_stat, out, outlen, 0, addr, SALEN(addr));
 	}
 }
 
@@ -179,12 +188,12 @@ int status_dump_hi_list(char *buff, hi_node *list, int do_addr)
 	struct status_tlv *t = (struct status_tlv*) buff;
 	char *p;
 	hi_node *hi;
-	int total_len=0, len;
+	int total_len = 0, len;
 	__u32 lsi;
 
-	for (hi = list; hi; hi=hi->next) {
+	for (hi = list; hi; hi = hi->next) {
 		len = 0;
-		p = (char *)(t+1);
+		p = (char *)(t + 1);
 		/* HI node */
 		t->tlv_type = htons(HIP_STATUS_REPLY_HI);
 		ADD_ITEM(p, hi->hit, len);
@@ -200,8 +209,8 @@ int status_dump_hi_list(char *buff, hi_node *list, int do_addr)
 		t->tlv_len = htons((__u16)len);
 		len += sizeof(struct status_tlv*);
 		if (do_addr) { /* address list */
-			len += status_dump_addr_list( ((char*)t) + len, 
-					&hi->addrs);
+			len += status_dump_addr_list(((char*)t) + len,
+			                             &hi->addrs);
 		}
 		t = (struct status_tlv*) (((char*)t) + len);
 		total_len += len;
@@ -213,15 +222,15 @@ int status_dump_addr_list(char *buff, sockaddr_list *addrs)
 {
 	struct status_tlv *t = (struct status_tlv*) buff;
 	sockaddr_list *a;
-	char *p = (char*)(t+1);
-	int len=0;
+	char *p = (char*)(t + 1);
+	int len = 0;
 
 	t->tlv_type = htons(HIP_STATUS_REPLY_ADDR);
-	
-	for (a = addrs; a; a=a->next) {
+
+	for (a = addrs; a; a = a->next) {
 		ADD_ITEM(p, a->addr, len)
 	}
-	
+
 	t->tlv_len = htons((__u16)len);
 	len += sizeof(struct status_tlv);
 	return(len);
@@ -232,15 +241,16 @@ int status_dump_assoc(char *buff)
 	struct status_tlv *t = (struct status_tlv*) buff;
 	hip_assoc *a;
 	char *p;
-	int total_len=0, len, i;
+	int total_len = 0, len, i;
 
-	for (i=0; i < max_hip_assoc; i++) {
+	for (i = 0; i < max_hip_assoc; i++) {
 		a = &hip_assoc_table[i];
 		/* skip empty entries */
-		if (a->state == UNASSOCIATED)
+		if (a->state == UNASSOCIATED) {
 			continue;
+		}
 		len = 0;
-		p = (char *)(t+1);
+		p = (char *)(t + 1);
 		t->tlv_type = htons(HIP_STATUS_REPLY_ASSOC);
 		ADD_ITEM(p, a->state, len);
 		ADD_ITEM(p, a->state_time.tv_sec, len);
@@ -251,12 +261,12 @@ int status_dump_assoc(char *buff)
 		ADD_ITEM(p, a->dh_group_id, len);
 		t->tlv_len = htons((__u16)len);
 		len += sizeof(struct status_tlv*);
-		len += status_dump_hi_list( ((char*)t)+len, 
-			 			a->hi, TRUE);
-		len += status_dump_hi_list( ((char*)t)+len, 
-						a->peer_hi, TRUE);
+		len += status_dump_hi_list(((char*)t) + len,
+		                           a->hi, TRUE);
+		len += status_dump_hi_list(((char*)t) + len,
+		                           a->peer_hi, TRUE);
 		/* These items not sent:
-		   cookie, rexmt_cache, opaque, rekey, peer_rekey, keys */
+		 *  cookie, rexmt_cache, opaque, rekey, peer_rekey, keys */
 		t = (struct status_tlv*) (((char*)t) + len);
 		total_len += len;
 	}
@@ -266,7 +276,7 @@ int status_dump_assoc(char *buff)
 int status_dump_opts(char *buff)
 {
 	struct status_tlv *t = (struct status_tlv*) buff;
-	char *p = (char *)(t+1);
+	char *p = (char *)(t + 1);
 	int len = 0;
 	unsigned int opts;
 
@@ -277,11 +287,11 @@ int status_dump_opts(char *buff)
 	opts |= (OPT.debug_R1 == D_VERBOSE) << 1;
 	opts |= (OPT.no_retransmit == TRUE) << 2;
 	opts |= (OPT.opportunistic == TRUE) << 3;
-	opts |= (OPT.permissive == TRUE) << 4;		
+	opts |= (OPT.permissive == TRUE) << 4;
 	ADD_ITEM(p, opts, len);
 
 	t->tlv_len = htons((__u16)len);
-	
+
 	return (len + sizeof(struct status_tlv*));
 }
 
@@ -289,27 +299,33 @@ void status_set_opts(__u8 *buff)
 {
 	unsigned int opts;
 	memcpy(&opts, buff, sizeof(unsigned int));
-	
-	if (opts & 0x0001)
+
+	if (opts & 0x0001) {
 		OPT.debug = D_VERBOSE;
-	else
+	} else {
 		OPT.debug = D_DEFAULT;
-	if ((opts >> 1) & 0x0001)
+	}
+	if ((opts >> 1) & 0x0001) {
 		OPT.debug_R1 = D_VERBOSE;
-	else
+	} else {
 		OPT.debug_R1 = D_QUIET;
-	if ((opts >> 2) & 0x0001)
+	}
+	if ((opts >> 2) & 0x0001) {
 		OPT.no_retransmit = TRUE;
-	else
+	} else {
 		OPT.no_retransmit = FALSE;
-	if ((opts >> 3) & 0x0001)
+	}
+	if ((opts >> 3) & 0x0001) {
 		OPT.opportunistic = TRUE;
-	else
+	} else {
 		OPT.opportunistic = FALSE;
-	if ((opts >> 4) & 0x0001)
+	}
+	if ((opts >> 4) & 0x0001) {
 		OPT.permissive = TRUE;
-	else
+	} else {
 		OPT.permissive = FALSE;
+	}
 
 	log_hipopts();
 }
+

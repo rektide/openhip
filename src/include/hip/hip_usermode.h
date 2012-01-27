@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2002-04 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  *  hip_usermode.h
  *
  *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- * 
+ *
  * Definition of HIP Windows service thread functions.
  *
  */
@@ -23,7 +23,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
-#include <sys/socket.h>	/* struct sockaddr */
+#include <sys/socket.h> /* struct sockaddr */
 #endif
 
 /*
@@ -79,42 +79,42 @@ extern int g_state;
  * Macros from hip.h and elsewhere
  */
 #if 0
-/* get pointer to IP from a sockaddr 
+/* get pointer to IP from a sockaddr
  *    useful for inet_ntop calls     */
-#define SA2IP(x) (((struct sockaddr*)x)->sa_family==AF_INET) ? \
-	(void*)&((struct sockaddr_in*)x)->sin_addr : \
-	(void*)&((struct sockaddr_in6*)x)->sin6_addr
+#define SA2IP(x) (((struct sockaddr*)x)->sa_family == AF_INET) ? \
+        (void*)&((struct sockaddr_in*)x)->sin_addr : \
+        (void*)&((struct sockaddr_in6*)x)->sin6_addr
 /* get socket address length in bytes */
-#define SALEN(x) (((struct sockaddr*)x)->sa_family==AF_INET) ? \
-	sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6)
+#define SALEN(x) (((struct sockaddr*)x)->sa_family == AF_INET) ? \
+        sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6)
 /* get IP address length in bytes */
-#define SAIPLEN(x) (((struct sockaddr*)x)->sa_family==AF_INET) ? 4 : 16
+#define SAIPLEN(x) (((struct sockaddr*)x)->sa_family == AF_INET) ? 4 : 16
 #endif
 #define IS_LSI32(a) ((a & htonl(0xFF000000)) == htonl(0x01000000))
 
 
 /* from linux/include/linux/kernel.h */
 #define NIPQUAD(addr) \
-	((unsigned char *)&addr)[0], \
-	((unsigned char *)&addr)[1], \
-	((unsigned char *)&addr)[2], \
-	((unsigned char *)&addr)[3]
+        ((unsigned char *)&addr)[0], \
+        ((unsigned char *)&addr)[1], \
+        ((unsigned char *)&addr)[2], \
+        ((unsigned char *)&addr)[3]
 
 #define NIP6(addr) \
-	ntohs((addr).s6_addr16[0]), \
-	ntohs((addr).s6_addr16[1]), \
-	ntohs((addr).s6_addr16[2]), \
-	ntohs((addr).s6_addr16[3]), \
-	ntohs((addr).s6_addr16[4]), \
-	ntohs((addr).s6_addr16[5]), \
-	ntohs((addr).s6_addr16[6]), \
-	ntohs((addr).s6_addr16[7])
+        ntohs((addr).s6_addr16[0]), \
+        ntohs((addr).s6_addr16[1]), \
+        ntohs((addr).s6_addr16[2]), \
+        ntohs((addr).s6_addr16[3]), \
+        ntohs((addr).s6_addr16[4]), \
+        ntohs((addr).s6_addr16[5]), \
+        ntohs((addr).s6_addr16[6]), \
+        ntohs((addr).s6_addr16[7])
 
 #define TRUE 1
 #define FALSE 0
 
-/* 
- * Local data types 
+/*
+ * Local data types
  */
 struct ip_esp_hdr {
 	__u32 spi;
@@ -131,7 +131,7 @@ struct eth_hdr {
 	__u8 dst[6];
 	__u8 src[6];
 	__u16 type;
-}__attribute__((packed));
+} __attribute__((packed));
 
 /* ARP header - RFC 826, STD 37 */
 /*
@@ -144,7 +144,7 @@ struct arp_hdr {
 	__u8 ar_hln;
 	__u8 ar_pln;
 	__u16 ar_op;
-}__attribute__((packed));
+} __attribute__((packed));
 
 /*
  * Make our own ARP data struct, so we can add the
@@ -156,7 +156,7 @@ struct arp_req_data {
 	__u32 src_ip;
 	__u8 dst_mac[6];
 	__u32 dst_ip;
-}__attribute__((packed));
+} __attribute__((packed));
 
 #define ARPOP_REQUEST 1
 #define ARPOP_REPLY 2

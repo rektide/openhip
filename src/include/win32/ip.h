@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2005 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  *  ip.h
  *
  *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- * 
+ *
  * Definitions for TCP/IP headers that are missing from Windows.
  *
  */
@@ -23,14 +23,14 @@
 #ifndef _HIP_IP_H_
 #define _HIP_IP_H_
 
-#include <ws2tcpip.h> /* this is required for the struct in6_addr's in 
-			 struct ip6_hdr */
+#include <ws2tcpip.h> /* this is required for the struct in6_addr's in
+                       *  struct ip6_hdr */
 
 #define IPVERSION 4
 struct ip {
-	__u8 ip_hl:4, ip_v:4;	/* MSVC requires these are char */
+	__u8 ip_hl : 4, ip_v : 4;   /* MSVC requires these are char */
 	/*__u32 ip_hl:4;	   This will not work with MSVC.
-	  __u32 ip_v:4;*/
+	 *  __u32 ip_v:4;*/
 	__u8 ip_tos;
 	__u16 ip_len;
 	__u16 ip_id;
@@ -38,7 +38,7 @@ struct ip {
 	__u8 ip_ttl;
 	__u8 ip_p;
 	__u16 ip_sum;
-	union {			/* allows use of struct ip or iphdr*/
+	union {                 /* allows use of struct ip or iphdr*/
 		struct in_addr ip_src;
 		__u32 saddr;
 	};
@@ -54,7 +54,7 @@ struct ip {
 
 struct udphdr {
 /*	__u16 uh_sport;
-	__u16 uh_dport; */
+ *       __u16 uh_dport; */
 	__u16 source;
 	__u16 dest;
 	__u16 uh_ulen;
@@ -63,12 +63,12 @@ struct udphdr {
 
 struct tcphdr {
 /*	__u16 th_sport;
-	__u16 th_dport; */
+ *       __u16 th_dport; */
 	__u16 source;
 	__u16 dest;
 	__u32 th_seq;
 	__u32 th_ack;
-	__u8 th_x2:4, th_off:4;
+	__u8 th_x2 : 4, th_off : 4;
 	__u8 th_flags;
 	__u16 th_win;
 	__u16 check;
@@ -77,22 +77,22 @@ struct tcphdr {
 
 /* from netinet/ip6.h */
 struct ip6_hdr
-  {
-    union
-      {
-	struct ip6_hdrctl
-	  {
-	    __u32 ip6_un1_flow;   /* 4 bits version, 8 bits TC,
-					20 bits flow-ID */
-	    __u16 ip6_un1_plen;   /* payload length */
-	    __u8  ip6_un1_nxt;    /* next header */
-	    __u8  ip6_un1_hlim;   /* hop limit */
-	  } ip6_un1;
-	__u8 ip6_un2_vfc;       /* 4 bits version, top 4 bits tclass */
-      } ip6_ctlun;
-    struct in6_addr ip6_src;      /* source address */
-    struct in6_addr ip6_dst;      /* destination address */
-  };
+{
+	union
+	{
+		struct ip6_hdrctl
+		{
+			__u32 ip6_un1_flow; /* 4 bits version, 8 bits TC,
+			                     *     20 bits flow-ID */
+			__u16 ip6_un1_plen; /* payload length */
+			__u8 ip6_un1_nxt; /* next header */
+			__u8 ip6_un1_hlim; /* hop limit */
+		} ip6_un1;
+		__u8 ip6_un2_vfc; /* 4 bits version, top 4 bits tclass */
+	} ip6_ctlun;
+	struct in6_addr ip6_src;  /* source address */
+	struct in6_addr ip6_dst;  /* destination address */
+};
 
 #define ip6_vfc   ip6_ctlun.ip6_un2_vfc
 #define ip6_flow  ip6_ctlun.ip6_un1.ip6_un1_flow
@@ -103,17 +103,17 @@ struct ip6_hdr
 
 /* from netinet/icmp6.h */
 struct icmp6_hdr
-  {
-    __u8     icmp6_type;   /* type field */
-    __u8     icmp6_code;   /* code field */
-    __u16    icmp6_cksum;  /* checksum field */
-    union
-      {
-	__u32  icmp6_un_data32[1]; /* type-specific field */
-	__u16  icmp6_un_data16[2]; /* type-specific field */
-	__u8   icmp6_un_data8[4];  /* type-specific field */
-      } icmp6_dataun;
-  };
+{
+	__u8 icmp6_type;   /* type field */
+	__u8 icmp6_code;   /* code field */
+	__u16 icmp6_cksum; /* checksum field */
+	union
+	{
+		__u32 icmp6_un_data32[1]; /* type-specific field */
+		__u16 icmp6_un_data16[2]; /* type-specific field */
+		__u8 icmp6_un_data8[4]; /* type-specific field */
+	} icmp6_dataun;
+};
 
 #define icmp6_data32    icmp6_dataun.icmp6_un_data32
 #define icmp6_data16    icmp6_dataun.icmp6_un_data16
@@ -153,11 +153,11 @@ struct icmp6_hdr
 #endif
 
 struct nd_opt_hdr             /* Neighbor discovery option header */
-  {
-    uint8_t  nd_opt_type;
-    uint8_t  nd_opt_len;        /* in units of 8 octets */
-    /* followed by option specific data */
-  };
+{
+	uint8_t nd_opt_type;
+	uint8_t nd_opt_len;     /* in units of 8 octets */
+	/* followed by option specific data */
+};
 
 #define  ND_OPT_SOURCE_LINKADDR       1
 #define  ND_OPT_TARGET_LINKADDR       2

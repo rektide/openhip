@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2002-11 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  *  hip_sadb.h
  *
  *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- * 
+ *
  * the HIP Security Association database
  *
  */
@@ -26,94 +26,94 @@
 #ifdef __WIN32__
 #include <win32/types.h>
 #else
-#include <asm/types.h>		/* __u16, __u32, etc */
+#include <asm/types.h>          /* __u16, __u32, etc */
 #endif /* __WIN32__ */
 #endif
-#include <sys/types.h>		/* for socket.h */
+#include <sys/types.h>          /* for socket.h */
 #ifdef __WIN32__
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
-#include <sys/socket.h>		/* struct sockaddr */
-#include <netinet/in.h>		/* struct sockaddr_in */
+#include <sys/socket.h>         /* struct sockaddr */
+#include <netinet/in.h>         /* struct sockaddr_in */
 #endif /* __WIN32__ */
-#include <openssl/des.h>	/* des_key_schedule */
-#include <openssl/aes.h>	/* aes_key */
-#include <openssl/blowfish.h>	/* bf_key */
+#include <openssl/des.h>        /* des_key_schedule */
+#include <openssl/aes.h>        /* aes_key */
+#include <openssl/blowfish.h>   /* bf_key */
 
 /*
  * Algorithms
  */
-#define SADB_AALG_NONE			0
-#define SADB_AALG_MD5HMAC		2
-#define SADB_AALG_SHA1HMAC		3
-#define SADB_X_AALG_SHA2_256HMAC	5
-#define SADB_X_AALG_SHA2_384HMAC	6
-#define SADB_X_AALG_SHA2_512HMAC	7
-#define SADB_X_AALG_RIPEMD160HMAC	8
-#define SADB_X_AALG_NULL		251
+#define SADB_AALG_NONE                  0
+#define SADB_AALG_MD5HMAC               2
+#define SADB_AALG_SHA1HMAC              3
+#define SADB_X_AALG_SHA2_256HMAC        5
+#define SADB_X_AALG_SHA2_384HMAC        6
+#define SADB_X_AALG_SHA2_512HMAC        7
+#define SADB_X_AALG_RIPEMD160HMAC       8
+#define SADB_X_AALG_NULL                251
 
-#define SADB_EALG_NONE			0
-#define SADB_EALG_DESCBC		2
-#define SADB_EALG_3DESCBC		3
-#define SADB_X_EALG_CASTCBC		6
-#define SADB_X_EALG_BLOWFISHCBC		7
-#define SADB_EALG_NULL			11
-#define SADB_X_EALG_AESCBC		12
-#define SADB_X_EALG_SERPENTCBC		252
-#define SADB_X_EALG_TWOFISHCBC		253
+#define SADB_EALG_NONE                  0
+#define SADB_EALG_DESCBC                2
+#define SADB_EALG_3DESCBC               3
+#define SADB_X_EALG_CASTCBC             6
+#define SADB_X_EALG_BLOWFISHCBC         7
+#define SADB_EALG_NULL                  11
+#define SADB_X_EALG_AESCBC              12
+#define SADB_X_EALG_SERPENTCBC          252
+#define SADB_X_EALG_TWOFISHCBC          253
 
 
 /*
  * definitions
  */
-#define SADB_SIZE 512 
+#define SADB_SIZE 512
 #define LSI4(a) (((struct sockaddr_in*)a)->sin_addr.s_addr)
 #define ESP_SEQNO_MAX (0xFFFFFFFF - 0x20)
 #define check_esp_seqno_overflow(e) e && (e->sequence_hi == 0xFFFFFFFF) && \
-					 (e->sequence >= ESP_SEQNO_MAX)
+        (e->sequence >= ESP_SEQNO_MAX)
 
-/* 
- * HIP Security Association entry 
+/*
+ * HIP Security Association entry
  *
  * Note that this is different than the hip_assoc/hip_assoc_table[] used by
  * the main hipd thread. The SADB is used primarily by the ESP input/output
  * threads (the data plane).
  */
-typedef struct _hip_sadb_entry 
+typedef struct _hip_sadb_entry
 {
 	struct _hip_sadb_entry *next;
-	__u32 spi;			/* primary index into SADB */
-	__u32 spinat;			/* spinat for mobile router */
-	__u32 mode; 	/* ESP mode :  0-default 1-transport 2-tunnel 3-beet */
-	int direction;			/* 1-in/2-out */
-	__u16 hit_magic;		/* for quick checksum calculation */
-	sockaddr_list *src_addrs;	/* source addresses 		*/
-	sockaddr_list *dst_addrs;	/* destination addresses 	*/
+	__u32 spi;                      /* primary index into SADB */
+	__u32 spinat;                   /* spinat for mobile router */
+	__u32 mode;     /* ESP mode :  0-default 1-transport 2-tunnel 3-beet */
+	int direction;                  /* 1-in/2-out */
+	__u16 hit_magic;                /* for quick checksum calculation */
+	sockaddr_list *src_addrs;       /* source addresses             */
+	sockaddr_list *dst_addrs;       /* destination addresses        */
 	struct sockaddr_storage src_hit; /* source HIT */
 	struct sockaddr_storage dst_hit; /* destination HIT */
-	struct sockaddr_storage lsi;	/* peer's IPv4 1.x.x.x LSI */
-	__u32 a_type;			/* crypto parameters 		*/
+	struct sockaddr_storage lsi;    /* peer's IPv4 1.x.x.x LSI */
+	__u32 a_type;                   /* crypto parameters            */
 	__u32 e_type;
 	__u32 a_keylen;
 	__u32 e_keylen;
-	__u8 *a_key;			/* raw crypto keys */
+	__u8 *a_key;                    /* raw crypto keys */
 	__u8 *e_key;
-	__u64 lifetime;			/* seconds until expiration */
-	struct timeval exptime;		/* expiration timestamp */
-	__u64 bytes;			/* bytes tx/rx */
-	__u32 packets;			/* number of packets tx/rx*/
-	__u32 lost;			/* number of packets lost */
-	__u32 dropped;			/* number of packets dropped */
-	struct timeval usetime;		/* last used timestamp */
-	__u32 sequence;			/* outgoing or highest received seq no*/
-	__u32 sequence_hi;		/* high-order bits of 64-bit ESN */
-	__u64 replay_win_max;		/* right side of received window */
-	__u64 replay_win_map;		/* anti-replay bitmap */
+	__u64 lifetime;                 /* seconds until expiration */
+	struct timeval exptime;         /* expiration timestamp */
+	__u64 bytes;                    /* bytes tx/rx */
+	__u32 packets;                  /* number of packets tx/rx*/
+	__u32 lost;                     /* number of packets lost */
+	__u32 dropped;                  /* number of packets dropped */
+	struct timeval usetime;         /* last used timestamp */
+	__u32 sequence;                 /* outgoing or highest received seq no*/
+	__u32 sequence_hi;              /* high-order bits of 64-bit ESN */
+	__u64 replay_win_max;           /* right side of received window */
+	__u64 replay_win_map;           /* anti-replay bitmap */
 	char iv[8];
-	des_key_schedule ks[3];		/* 3-DES keys */
-	AES_KEY *aes_key;		/* AES key */
-	BF_KEY *bf_key;			/* BLOWFISH key */
+	des_key_schedule ks[3];         /* 3-DES keys */
+	AES_KEY *aes_key;               /* AES key */
+	BF_KEY *bf_key;                 /* BLOWFISH key */
 	hip_mutex_t rw_lock;
 } hip_sadb_entry;
 
@@ -149,10 +149,10 @@ typedef struct _hip_lsi_entry
 #define hip_proto_sel_hash(a) (a % PROTO_SEL_SIZE)
 typedef struct _hip_proto_sel_entry
 {
-        struct _hip_proto_sel_entry *next;
-        __u32 selector;         /* upper layer protocol-specific selector */
-        int family;             /* guidance on which address family to use */
-        struct timeval last_used;
+	struct _hip_proto_sel_entry *next;
+	__u32 selector;         /* upper layer protocol-specific selector */
+	int family;             /* guidance on which address family to use */
+	struct timeval last_used;
 } hip_proto_sel_entry;
 
 
@@ -162,18 +162,18 @@ typedef struct _hip_proto_sel_entry
 void hip_sadb_init();
 void hip_sadb_deinit();
 int hip_sadb_add(__u32 mode, int direction,
-    struct sockaddr *src_hit, struct sockaddr *dst_hit,
-    struct sockaddr *src, struct sockaddr *dst,
-    struct sockaddr *src_lsi, struct sockaddr *dst_lsi,
-    __u32 spi, __u32 spinat,
-    __u8 *e_key, __u32 e_type, __u32 e_keylen,
-    __u8 *a_key, __u32 a_type, __u32 a_keylen,
-    __u32 lifetime);
+                 struct sockaddr *src_hit, struct sockaddr *dst_hit,
+                 struct sockaddr *src, struct sockaddr *dst,
+                 struct sockaddr *src_lsi, struct sockaddr *dst_lsi,
+                 __u32 spi, __u32 spinat,
+                 __u8 *e_key, __u32 e_type, __u32 e_keylen,
+                 __u8 *a_key, __u32 a_type, __u32 a_keylen,
+                 __u32 lifetime);
 int hip_sadb_delete(__u32 spi);
 int hip_sadb_add_del_addr(__u32 spi, struct sockaddr *addr, int flags);
 void hip_remove_expired_lsi_entries(struct timeval *now);
-void hip_add_lsi(struct sockaddr *addr, struct sockaddr *lsi4, 
-	struct sockaddr *lsi6);
+void hip_add_lsi(struct sockaddr *addr, struct sockaddr *lsi4,
+                 struct sockaddr *lsi6);
 int buffer_packet(struct sockaddr *lsi, __u8 *data, int len);
 void unbuffer_packets(hip_lsi_entry *entry);
 hip_lsi_entry *hip_lookup_lsi(struct sockaddr *lsi);
@@ -184,15 +184,15 @@ void hip_sadb_expire(struct timeval *now);
 int hip_sadb_get_usage(__u32 spi, __u64 *bytes, struct timeval *usetime);
 int hip_sadb_get_lost(__u32 spi, __u32 *lost);
 void hip_sadb_inc_bytes(hip_sadb_entry *entry, __u64 bytes, struct timeval *now,
-	int lock);
+                        int lock);
 __u32 hip_sadb_inc_loss(hip_sadb_entry *entry, __u32 loss,
-	struct sockaddr *dst);
+                        struct sockaddr *dst);
 void hip_sadb_reset_loss(hip_sadb_entry *entry, struct sockaddr *dst);
 
 int hip_select_family_by_proto(__u32 lsi, __u8 proto, __u8 *header,
-        struct timeval *now);
+                               struct timeval *now);
 int hip_add_proto_sel_entry(__u32 lsi, __u8 proto, __u8 *header, int family,
-        int dir, struct timeval *now);
+                            int dir, struct timeval *now);
 void hip_remove_expired_sel_entries(struct timeval *now);
 void print_sadb();
 

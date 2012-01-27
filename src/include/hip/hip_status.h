@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2005 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  *  hip_status.h
  *
  *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- * 
+ *
  * Status thread definitions.
  * This file is shared by hipd, the Windows service, and status reporting
  * helper apps.
@@ -34,7 +34,7 @@
 /*
  * Types and macros
  */
-struct status_tlv 
+struct status_tlv
 {
 	unsigned short tlv_type;
 	unsigned short tlv_len;
@@ -57,7 +57,7 @@ enum requests {
 };
 
 enum settings {
-	HIP_STATUS_CONFIG_MIN = HIP_STATUS_REQ_MAX,
+	HIP_STATUS_CONFIG_MIN=HIP_STATUS_REQ_MAX,
 	HIP_STATUS_CONFIG_OPTS,
 	HIP_STATUS_CONFIG_MAX
 };
@@ -95,12 +95,12 @@ enum responses {
 
 
 /* Problems with multiple definitions of the arrays below */
-#ifndef __UMH__ 
+#ifndef __UMH__
 
 /*
  * Useful text definitions
  */
-const char enc_alg_texts[7][28] = {   
+const char enc_alg_texts[7][28] = {
 	"",
 	"AES CBC with HMAC SHA1",
 	"3DES CBC with HMAC SHA1",

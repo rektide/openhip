@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2004 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,10 +15,10 @@
  *  hip_service.c
  *
  *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- * 
+ *
  * Portions Copyright (C) 2003 UC Berkeley
  *
- * This contains the main program for the HIP Windows service, 
+ * This contains the main program for the HIP Windows service,
  * and its initialization code. Multiple threads are spawned that
  * perform the actual work.
  */
@@ -34,16 +34,16 @@
 #include <winsvc.h>
 #include <windowsx.h>
 #include <shellapi.h>
-#include <stdio.h>	/* stderr, stdout */
+#include <stdio.h>      /* stderr, stdout */
 #include <winsock2.h>
 #include <iphlpapi.h>
 #include <iprtrmib.h>
 #include <win32/types.h>
-#include <winioctl.h>	/* CTL_CODE */
-#include <process.h>	/* _beginthread() */
-#include <direct.h>	/* _chdir() */
+#include <winioctl.h>   /* CTL_CODE */
+#include <process.h>    /* _beginthread() */
+#include <direct.h>     /* _chdir() */
 #include <openssl/applink.c> /* allow debugging against DLL */
-#include <openssl/rand.h>	/* RAND_seed() */
+#include <openssl/rand.h>       /* RAND_seed() */
 
 #include <hip/hip_service.h>
 #include <hip/hip_version.h>
@@ -51,40 +51,46 @@
 #include <hip/hip_funcs.h>
 #include <hip/hip_sadb.h>
 
-/* 
- * Globals 
+/*
+ * Globals
  */
 CHAR szKey[MAX_PATH];
 extern HANDLE tapfd;
 extern int s_esp, s_esp_udp, s_esp6;
 extern int is_dns_thread_disabled();
 int g_state;
-__u32 get_preferred_lsi(struct sockaddr *addr);	/* from hip_util.c */
+__u32 get_preferred_lsi(struct sockaddr *addr); /* from hip_util.c */
 int str_to_addr(__u8 *data, struct sockaddr *addr); /* from hip_util.c */
 extern int init_esp_input(int family, int type, int proto, int port, char *msg);
 
 /* from winsvc.h */
 SERVICE_STATUS g_srv_status = {
-	SERVICE_WIN32_OWN_PROCESS,	/* dwServiceType */
-	SERVICE_START_PENDING,		/* dwCurrentState */
-	SERVICE_ACCEPT_STOP,		/* dwControlsAccepted */
-	NO_ERROR,			/* dwWin32ExitCode */
-	NO_ERROR,			/* dwServiceSpecificExitCode */
-	0,				/* dwCheckPoint */
-	0				/* dwWaitHint */
+	SERVICE_WIN32_OWN_PROCESS,      /* dwServiceType */
+	SERVICE_START_PENDING,          /* dwCurrentState */
+	SERVICE_ACCEPT_STOP,            /* dwControlsAccepted */
+	NO_ERROR,                       /* dwWin32ExitCode */
+	NO_ERROR,                       /* dwServiceSpecificExitCode */
+	0,                              /* dwCheckPoint */
+	0                               /* dwWaitHint */
 };
 SERVICE_STATUS_HANDLE g_srv_status_handle;
 
 char SERVICE_NAME[255] = "HIP";
 char DISPLAY_NAME[255] = "HIP";
 
-#define ADAPTER_KEY "SYSTEM\\CurrentControlSet\\Control\\Class\\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+#define ADAPTER_KEY \
+        "SYSTEM\\CurrentControlSet\\Control\\Class\\{4D36E972-E325-11CE-BFC1-08002BE10318}"
 
-#define NETWORK_CONNECTIONS_KEY "SYSTEM\\CurrentControlSet\\Control\\Network\\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+#define NETWORK_CONNECTIONS_KEY \
+        "SYSTEM\\CurrentControlSet\\Control\\Network\\{4D36E972-E325-11CE-BFC1-08002BE10318}"
 
-#define REG_INTERFACES_KEY "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces"
+#define REG_INTERFACES_KEY \
+        "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces"
 
-#define TAP_IOCTL_SET_MEDIA_STATUS CTL_CODE (FILE_DEVICE_UNKNOWN, 6, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define TAP_IOCTL_SET_MEDIA_STATUS CTL_CODE (FILE_DEVICE_UNKNOWN, \
+                                             6, \
+                                             METHOD_BUFFERED, \
+                                             FILE_ANY_ACCESS)
 
 #define TAP_COMPONENT_ID "tap0801"
 
@@ -108,7 +114,7 @@ void WINAPI Handler (DWORD ctrl)
 	case SERVICE_CONTROL_INTERROGATE:
 		break;
 	default:
-	    break;
+		break;
 	}
 	SetServiceStatus (g_srv_status_handle, &g_srv_status);
 }
@@ -121,7 +127,7 @@ void strip_filename(char *filename)
 	len = strlen(filename);
 
 	/* strip off filename and get path */
-	for (i = len - 1; i >=0; i--) {
+	for (i = len - 1; i >= 0; i--) {
 		if (filename[i] != '\\') {
 			filename[i] = 0;
 		} else {
@@ -132,13 +138,14 @@ void strip_filename(char *filename)
 	/* convert '\\' to '/' */
 	i = 0;
 	while (filename[i] != 0) {
-		if (filename[i] == '\\')
+		if (filename[i] == '\\') {
 			filename[i] = '/';
+		}
 		i++;
 	}
 }
 
-/* 
+/*
  * init_reg()
  *
  * Open "HKLM\System\CurrentControlSet\Services\HIP"
@@ -157,34 +164,37 @@ void init_reg()
 	int i;
 
 	retCode = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-				"System\\CurrentControlSet\\Services\\",
-				0, KEY_READ, &hKey);
-	if (retCode != ERROR_SUCCESS)
+	                       "System\\CurrentControlSet\\Services\\",
+	                       0, KEY_READ, &hKey);
+	if (retCode != ERROR_SUCCESS) {
 		return;
+	}
 
 	for (i = 0, retCode = ERROR_SUCCESS; retCode == ERROR_SUCCESS; i++) {
 		retCode = RegEnumKey(hKey, i, svcPath, MAX_PATH);
-		if (retCode != ERROR_SUCCESS)
+		if (retCode != ERROR_SUCCESS) {
 			continue;
+		}
 		lstrcpy(szKey, "System\\CurrentControlSet\\Services\\");
 		lstrcat(szKey, svcPath);
 		if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, szKey, 0,
-			KEY_QUERY_VALUE, &hSubKey) != ERROR_SUCCESS)
+		                 KEY_QUERY_VALUE, &hSubKey) != ERROR_SUCCESS) {
 			continue;
+		}
 		dwBufLen = MAX_PATH;
 		rv = RegQueryValueEx(hSubKey, "ImagePath", NULL,
-			&dwKeyType, szImagePath, &dwBufLen);
+		                     &dwKeyType, szImagePath, &dwBufLen);
 
-		if (rv == ERROR_SUCCESS &&
-		    (dwKeyType == REG_SZ || dwKeyType == REG_EXPAND_SZ) &&
-		     dwBufLen) {
+		if ((rv == ERROR_SUCCESS) &&
+		    ((dwKeyType == REG_SZ) || (dwKeyType == REG_EXPAND_SZ)) &&
+		    dwBufLen) {
 			lstrcpy(szBuf, szImagePath);
 			CharLower(szBuf);
 			if (strstr(szBuf, "\\hip.exe") != NULL) {
 				/* XXX in the future, could set status here */
-				/*RegSetValueEx(hSubKey, "ProxyStatus", 0, 
-				                REG_DWORD, (BYTE *) &status,
-						sizeof(status));*/
+				/*RegSetValueEx(hSubKey, "ProxyStatus", 0,
+				 *               REG_DWORD, (BYTE *) &status,
+				 *               sizeof(status));*/
 				break;
 			}
 		}
@@ -193,7 +203,6 @@ void init_reg()
 	RegCloseKey(hKey);
 	return;
 }
-
 
 /* update_status()
  *
@@ -205,18 +214,19 @@ void update_status(DWORD status)
 	HKEY hKey;
 
 	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, szKey, 0,
-	    KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+	                 KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
 		RegSetValueEx(hKey, "ProxyStatus", 0,
-		    REG_DWORD, (BYTE *) &status, sizeof(status));
+		              REG_DWORD, (BYTE *) &status, sizeof(status));
 		RegCloseKey(hKey);
 	}
 	return;
 }
+
 #endif
 
 /*
  * hip_install_service()
- * 
+ *
  * Install the Windows service.
  */
 DWORD hip_install_service()
@@ -227,8 +237,9 @@ DWORD hip_install_service()
 	SC_HANDLE scm = 0;
 	SC_HANDLE srv = 0;
 	int rc = 0;
-	if (!GetModuleFileName(0, path, MAX_PATH))
-		return GetLastError();
+	if (!GetModuleFileName(0, path, MAX_PATH)) {
+		return(GetLastError());
+	}
 
 	if ((cmd = strstr(path, "hip.exe")) == NULL) {
 		printf("The command name is different from 'hip.exe'\n");
@@ -238,13 +249,14 @@ DWORD hip_install_service()
 	sprintf(ImagePath, "\"%s\" -X", path);
 	/* service control manager */
 	scm = OpenSCManager(0, 0, SC_MANAGER_ALL_ACCESS);
-	if (!scm)
-		return GetLastError();
-	
+	if (!scm) {
+		return(GetLastError());
+	}
+
 	/* install the service */
 	srv = CreateService(scm, SERVICE_NAME, DISPLAY_NAME, SERVICE_ALL_ACCESS,
-			SERVICE_WIN32_OWN_PROCESS, SERVICE_DEMAND_START,
-			SERVICE_ERROR_NORMAL, ImagePath, 0, 0, 0, 0, 0);
+	                    SERVICE_WIN32_OWN_PROCESS, SERVICE_DEMAND_START,
+	                    SERVICE_ERROR_NORMAL, ImagePath, 0, 0, 0, 0, 0);
 	/* change last two items - account name, password
 	 * if you do add Cygwin to the user's PATH and not the system's PATH
 	 * (may return ERROR_INVALID_SERVICE_ACCOUNT) */
@@ -252,12 +264,14 @@ DWORD hip_install_service()
 		rc = GetLastError();
 	} else {
 		/* Add a description to the service */
-		SERVICE_DESCRIPTION descr = { "Host Identity Protocol manages identity-based security associations." };
+		SERVICE_DESCRIPTION descr =
+		{
+			"Host Identity Protocol manages identity-based security associations." };
 		ChangeServiceConfig2(srv, SERVICE_CONFIG_DESCRIPTION, &descr);
 		CloseServiceHandle(srv);
 	}
 	CloseServiceHandle(scm);
-	return rc;
+	return(rc);
 }
 
 /*
@@ -270,29 +284,31 @@ DWORD hip_remove_service()
 	SC_HANDLE scm = 0;
 	SC_HANDLE srv = 0;
 	int rc = 0;
-	
+
 	/* service control manager */
 	scm = OpenSCManager(0, 0, SC_MANAGER_ALL_ACCESS);
-	if (!scm)
-		return GetLastError();
+	if (!scm) {
+		return(GetLastError());
+	}
 
 	/* remove the service */
 	srv = OpenService(scm, SERVICE_NAME, DELETE);
-	if (!srv)
+	if (!srv) {
 		rc = GetLastError();
+	}
 	else {
-		if (!DeleteService(srv))
+		if (!DeleteService(srv)) {
 			rc = GetLastError();
+		}
 		CloseServiceHandle(srv);
 	}
 	CloseServiceHandle(scm);
-	return rc;
+	return(rc);
 }
 
-
-/* 
+/*
  * hip_start_service()
- * 
+ *
  * Starts the Windows service
  */
 DWORD hip_start_service()
@@ -303,18 +319,22 @@ DWORD hip_start_service()
 	int rc = 0;
 
 	memset(&st, 0, sizeof (st));
-	if (!(scm = OpenSCManager(0, 0, SC_MANAGER_ALL_ACCESS)))
-		return GetLastError();
+	if (!(scm = OpenSCManager(0, 0, SC_MANAGER_ALL_ACCESS))) {
+		return(GetLastError());
+	}
 
-	if (!(srv = OpenService(scm, SERVICE_NAME, 
-				 SERVICE_START|SERVICE_QUERY_STATUS)))
-		return GetLastError();
+	if (!(srv = OpenService(scm, SERVICE_NAME,
+	                        SERVICE_START | SERVICE_QUERY_STATUS))) {
+		return(GetLastError());
+	}
 
-	if (!StartService(srv, 0, 0))
-		return GetLastError();
+	if (!StartService(srv, 0, 0)) {
+		return(GetLastError());
+	}
 
-	if (!QueryServiceStatus(srv, &st))
-		return GetLastError();
+	if (!QueryServiceStatus(srv, &st)) {
+		return(GetLastError());
+	}
 
 	{
 		DWORD old;
@@ -327,25 +347,30 @@ DWORD hip_start_service()
 				break;
 			}
 		}
-		if (rc)
+		if (rc) {
 			;
-		else if (st.dwCurrentState == SERVICE_RUNNING)
+		}
+		else if (st.dwCurrentState == SERVICE_RUNNING) {
 			printf ("HIP service has been successfully started\n");
-		else
+		}
+		else {
 			printf ("HIP service status is %d\n",
-				(int)st.dwCurrentState);
+			        (int)st.dwCurrentState);
+		}
 	}
 
-	if (srv)
+	if (srv) {
 		CloseServiceHandle (srv);
-	if (scm)
+	}
+	if (scm) {
 		CloseServiceHandle (scm);
-	return rc;
+	}
+	return(rc);
 }
 
 /*
  * hip_stop_service()
- * 
+ *
  * Stops the windows service
  */
 DWORD hip_stop_service()
@@ -356,37 +381,46 @@ DWORD hip_stop_service()
 	int rc = 0;
 
 	memset(&st, 0, sizeof (st));
-	if (!(scm = OpenSCManager (0, 0, SC_MANAGER_ALL_ACCESS)))
+	if (!(scm = OpenSCManager (0, 0, SC_MANAGER_ALL_ACCESS))) {
 		rc = GetLastError ();
-	else if (!(srv = OpenService (scm, SERVICE_NAME, SERVICE_STOP)))
+	}
+	else if (!(srv = OpenService (scm, SERVICE_NAME, SERVICE_STOP))) {
 		rc = GetLastError ();
-	else if (!ControlService (srv, SERVICE_CONTROL_STOP, &st))
+	}
+	else if (!ControlService (srv, SERVICE_CONTROL_STOP, &st)) {
 		rc = GetLastError ();
-	else
+	}
+	else {
 		printf ("HIP service has been stopped\n");
-	if (srv)
+	}
+	if (srv) {
 		CloseServiceHandle (srv);
-	if (scm)
+	}
+	if (scm) {
 		CloseServiceHandle (scm);
-	return rc;
+	}
+	return(rc);
 }
 
 /* this is from TAP-Win32 driver/macinfo.c */
 unsigned char HexStringToDecimalInt (unsigned char p_Character)
 {
-    unsigned char l_Value = 0;
+	unsigned char l_Value = 0;
 
-    if (p_Character >= 'A' && p_Character <= 'F')
-    	l_Value = (p_Character - 'A') + 10;
-    else if (p_Character >= 'a' && p_Character <= 'f')
-    	l_Value = (p_Character - 'a') + 10;
-    else if (p_Character >= '0' && p_Character <= '9')
-    	l_Value = p_Character - '0';
+	if ((p_Character >= 'A') && (p_Character <= 'F')) {
+		l_Value = (p_Character - 'A') + 10;
+	}
+	else if ((p_Character >= 'a') && (p_Character <= 'f')) {
+		l_Value = (p_Character - 'a') + 10;
+	}
+	else if ((p_Character >= '0') && (p_Character <= '9')) {
+		l_Value = p_Character - '0';
+	}
 
-    return l_Value;
+	return(l_Value);
 }
 
-/* Convert first 8 bytes of adapter's GID to a MAC address, 
+/* Convert first 8 bytes of adapter's GID to a MAC address,
  * of the form: 00:FF:{gid}, in network byte order, ready
  * for use in an Ethernet header */
 __u64 gid_to_mac(char *data)
@@ -395,16 +429,17 @@ __u64 gid_to_mac(char *data)
 	unsigned char val;
 	__u64 mac = 0;
 
-	for (i=0; i<8; i += 2) {
-		val = HexStringToDecimalInt(data[i+1]);
+	for (i = 0; i < 8; i += 2) {
+		val = HexStringToDecimalInt(data[i + 1]);
 		val |= (HexStringToDecimalInt(data[i]) << 4);
-		mac |=  val << (24 - (4*i));
+		mac |=  val << (24 - (4 * i));
 	}
 
 	mac &= 0x00FFFFFFFFFF;
 	mac |= 0x00FF00000000;
 	return(hton64(mac) >> 16);
 }
+
 /*
  * print_hip_service_usage()
  *
@@ -445,28 +480,33 @@ HANDLE init_tap()
 
 	printf("init_tap()\n");
 
-	if(RegOpenKeyEx(HKEY_LOCAL_MACHINE, NETWORK_CONNECTIONS_KEY, 0, 
-	    KEY_READ, &key)) {
+	if(RegOpenKeyEx(HKEY_LOCAL_MACHINE, NETWORK_CONNECTIONS_KEY, 0,
+	                KEY_READ, &key)) {
 		printf("Unable to read registry:\n");
-		return NULL;
+		return(NULL);
 	}
 
 	/* find the adapter with .tap suffix */
-	for (enum_index = 0; ; enum_index++) {
+	for (enum_index = 0;; enum_index++) {
 		len = sizeof(devid);
-		if(RegEnumKeyEx(key, enum_index, devid, &len, 
-				0, 0, 0, NULL) != ERROR_SUCCESS) {
+		if(RegEnumKeyEx(key, enum_index, devid, &len,
+		                0, 0, 0, NULL) != ERROR_SUCCESS) {
 			RegCloseKey(key);
 			/* we've hit the end of the network connections list */
 			printf("init_tap(): Couldn't find TAP-Win32 adapter.\n");
-			return NULL;
+			return(NULL);
 		}
 
-		retry_attempts = 0;	
+		retry_attempts = 0;
 init_tap_create_file_retry:
 		sprintf(devname, "\\\\.\\Global\\%s.tap", devid);
-		hTAP32 = CreateFile(devname, GENERIC_WRITE | GENERIC_READ,
-			    0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_SYSTEM, 0);
+		hTAP32 = CreateFile(devname,
+		                    GENERIC_WRITE | GENERIC_READ,
+		                    0,
+		                    0,
+		                    OPEN_EXISTING,
+		                    FILE_ATTRIBUTE_SYSTEM,
+		                    0);
 
 		dw = GetLastError();
 		/* This is the most common error. We are trying to open
@@ -475,11 +515,11 @@ init_tap_create_file_retry:
 		 */
 		if (dw == ERROR_FILE_NOT_FOUND) {
 			continue;
-		/* This error "A device attached to the system is not
-		 * functioning." occurs when we've found the TAP but
-		 * cannot open it. This could be restarting the HIP
-		 * service, so try again.
-		 */
+			/* This error "A device attached to the system is not
+			 * functioning." occurs when we've found the TAP but
+			 * cannot open it. This could be restarting the HIP
+			 * service, so try again.
+			 */
 		} else if (dw == ERROR_GEN_FAILURE) {
 			if (retry_attempts < 3) {
 				/* pause 400ms for device to become ready */
@@ -491,14 +531,14 @@ init_tap_create_file_retry:
 		}
 
 		/* debug
-		FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER|
-				FORMAT_MESSAGE_FROM_SYSTEM, NULL, dw, 
-				MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-				(LPTSTR) &lpMsgBuf, 0, NULL);
-
-		printf("DEBUG: devname %s error %d: %s\n",
-			devname, dw, lpMsgBuf);
-		LocalFree(lpMsgBuf); */
+		 *  FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER|
+		 *               FORMAT_MESSAGE_FROM_SYSTEM, NULL, dw,
+		 *               MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+		 *               (LPTSTR) &lpMsgBuf, 0, NULL);
+		 *
+		 *  printf("DEBUG: devname %s error %d: %s\n",
+		 *       devname, dw, lpMsgBuf);
+		 *  LocalFree(lpMsgBuf); */
 
 		/* dw == NO_ERROR */
 		if(hTAP32 != INVALID_HANDLE_VALUE) {
@@ -507,55 +547,57 @@ init_tap_create_file_retry:
 			break;
 		}
 	}
-	
-	/* Get the MAC address of the TAP-Win32 
-	 * which is of the form 00:FF:{GID} 
+
+	/* Get the MAC address of the TAP-Win32
+	 * which is of the form 00:FF:{GID}
 	 */
-	g_tap_mac = gid_to_mac(devid+1);
-	
+	g_tap_mac = gid_to_mac(devid + 1);
+
 	if (check_and_set_tun_address(devid, 1) < 0) {
 		printf("TAP-Win32 setup failed.\n");
-		return NULL;
+		return(NULL);
 	}
 
 	/* Open TAP-Win32 device */
-	hTAP32 = CreateFile(devname, GENERIC_WRITE|GENERIC_READ, 0, 0,
-		    OPEN_EXISTING, 
-		    FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED, 0);
+	hTAP32 = CreateFile(devname, GENERIC_WRITE | GENERIC_READ, 0, 0,
+	                    OPEN_EXISTING,
+	                    FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED, 0);
 	if (hTAP32 == INVALID_HANDLE_VALUE) {
 		printf("Could not open Windows tap device\n");
-		return NULL;
+		return(NULL);
 	}
 
 	/* set TAP-32 status to connected */
 	if (!DeviceIoControl (hTAP32, TAP_IOCTL_SET_MEDIA_STATUS,
-			&status, sizeof (status),
-			&status, sizeof (status), &len, NULL)) {
+	                      &status, sizeof (status),
+	                      &status, sizeof (status), &len, NULL)) {
 		printf("failed to set TAP-Win32 status as 'connected'.\n");
-		return NULL;
+		return(NULL);
 	}
-	
+
 	Sleep(10);
 
 	/* set NameServer address on TAP-Win32 adapter to 1.x.x.x */
 	sprintf (path, "%s\\%s", REG_INTERFACES_KEY, devid);
 	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, path, 0,
-			 KEY_WRITE, &interface_key) != ERROR_SUCCESS) {
+	                 KEY_WRITE, &interface_key) != ERROR_SUCCESS) {
 		printf("Error opening registry key: %s", path);
-		return NULL;
+		return(NULL);
 	}
 
 	memset(&dns, 0, sizeof(struct sockaddr_in));
 	dns.sin_family = AF_INET;
-	if (is_dns_thread_disabled())
+	if (is_dns_thread_disabled()) {
 		memset(SA2IP(&dns), 0, 4);
-	else
+	}
+	else {
 		get_preferred_lsi(SA(&dns));
+	}
 	addr_string = inet_ntoa(dns.sin_addr);
 	if (RegSetValueEx(interface_key, "NameServer", 0, REG_SZ,
-			addr_string, strlen(addr_string)) != ERROR_SUCCESS) {
+	                  addr_string, strlen(addr_string)) != ERROR_SUCCESS) {
 		printf("Changing TAP-Win32 adapter's NameServer failed\n");
-		return NULL;
+		return(NULL);
 	}
 	RegCloseKey(interface_key);
 
@@ -566,12 +608,12 @@ init_tap_create_file_retry:
 	CreateIpForwardEntry(&route);
 
 	/* add 2001:10::/28 HIT to TAP-Win32 */
-	// TODO
-	// IPv6 may not be installed
-	// equivalent of netsh interface ipv6 add address 2001:007x:xxxx ...
-	//
-	
-	return hTAP32;
+	/* TODO */
+	/* IPv6 may not be installed */
+	/* equivalent of netsh interface ipv6 add address 2001:007x:xxxx ... */
+	/* */
+
+	return(hTAP32);
 }
 
 /*
@@ -586,8 +628,8 @@ int check_and_set_tun_address(char *devid, int do_msgbox)
 	long len;
 	struct sockaddr_storage lsi;
 
-	/* 
-	 * Get the preferred LSI from hipd, from XML file 
+	/*
+	 * Get the preferred LSI from hipd, from XML file
 	 */
 	memset(&lsi, 0, sizeof(struct sockaddr_storage));
 	lsi.ss_family = AF_INET;
@@ -602,129 +644,134 @@ int check_and_set_tun_address(char *devid, int do_msgbox)
 	}
 
 	/*
-	 * Check registry values for 
+	 * Check registry values for
 	 * IPAddress, SubnetMask, and EnableDHCP
 	 */
 	sprintf (path, "%s\\%s", REG_INTERFACES_KEY, devid);
 	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &interface_key)
-		!= ERROR_SUCCESS) {
+	    != ERROR_SUCCESS) {
 		printf("Error opening registry key: %s", path);
 		return(-1);
 	}
 	dwBufLen = sizeof(value);
 	if (RegQueryValueEx(interface_key, "IPAddress", NULL, &dwKeyType,
-		value, &dwBufLen) != ERROR_SUCCESS) {
+	                    value, &dwBufLen) != ERROR_SUCCESS) {
 		printf("Unable to read IP address, doing setup.\n");
 		need_setup = 1;
 	}
-	if ((dwKeyType != REG_MULTI_SZ) || 
-	    (strncmp(value, sLSI, strlen(sLSI)+2) != 0)) {
+	if ((dwKeyType != REG_MULTI_SZ) ||
+	    (strncmp(value, sLSI, strlen(sLSI) + 2) != 0)) {
 		need_setup = 1;
 	}
 	dwBufLen = sizeof(value);
 	if (RegQueryValueEx(interface_key, "SubnetMask", NULL, &dwKeyType,
-		value, &dwBufLen) != ERROR_SUCCESS) {
+	                    value, &dwBufLen) != ERROR_SUCCESS) {
 		printf("Unable to read network mask, doing setup.\n");
 		need_setup = 1;
 	}
-	if ((dwKeyType != REG_MULTI_SZ) || 
+	if ((dwKeyType != REG_MULTI_SZ) ||
 	    (strncmp(value, "255.0.0.0\0\0", 11) != 0)) {
 		need_setup = 1;
 	}
 	dwBufLen = sizeof(dwVal);
 	if (RegQueryValueEx(interface_key, "EnableDHCP", NULL, &dwKeyType,
-		(LPBYTE)&dwVal, &dwBufLen) != ERROR_SUCCESS) {
+	                    (LPBYTE)&dwVal, &dwBufLen) != ERROR_SUCCESS) {
 		printf("Unable to read DHCP setting, doing setup.\n");
 		need_setup = 1;
 	}
 	if ((dwKeyType != REG_DWORD) || (dwVal != 0x0)) {
 		need_setup = 1;
 	}
-			
+
 	RegCloseKey(interface_key);
-	if (!need_setup)
+	if (!need_setup) {
 		return(0);
+	}
 
 	/* Used to prompt user for setup, but now it is important that
 	 * the TAP address be set to the preferred LSI.
 	 */
 	printf("Configuring the TAP-Win32 adapter.\n");
 #if 0
-	if (do_msgbox && (MessageBox(NULL, 
-	    "Your TAP-Win32 interface needs to be setup to run HIP for Windows, shall I do that for you?",
-		       "HIP for Windows", 
-		       MB_YESNO|MB_ICONQUESTION) != IDYES))
+	if (do_msgbox && (MessageBox(NULL,
+	                             "Your TAP-Win32 interface needs to be setup to run HIP for Windows, shall I do that for you?",
+	                             "HIP for Windows",
+	                             MB_YESNO | MB_ICONQUESTION) != IDYES)) {
 		return(-1);
+	}
 #endif
-	
-	/* 
-	 * Write the new values to the registry 
+
+	/*
+	 * Write the new values to the registry
 	 */
 	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, path, 0,
-			 KEY_WRITE, &interface_key) != ERROR_SUCCESS) {
+	                 KEY_WRITE, &interface_key) != ERROR_SUCCESS) {
 		printf("Error opening registry key: %s", path);
 		return(-1);
 	}
 	if (RegSetValueEx(interface_key, "IPAddress", 0, REG_MULTI_SZ,
-		sLSI, strlen(sLSI)+2) != ERROR_SUCCESS) {
+	                  sLSI, strlen(sLSI) + 2) != ERROR_SUCCESS) {
 		printf("Changing TAP-Win32 adapter's IP address failed\n");
 		return(-1);
 	}
 	if (RegSetValueEx(interface_key, "SubnetMask", 0, REG_MULTI_SZ,
-		"255.0.0.0\0\0", strlen("255.0.0.0")+2) != ERROR_SUCCESS) {
+	                  "255.0.0.0\0\0",
+	                  strlen("255.0.0.0") + 2) != ERROR_SUCCESS) {
 		printf("Changing TAP-Win32 adapter's IP mask failed\n");
 		return(-1);
 	}
 	dwVal = 0x0;
 	if (RegSetValueEx(interface_key, "EnableDHCP", 0, REG_DWORD,
-		(LPBYTE)&dwVal, sizeof(dwVal)) != ERROR_SUCCESS) {
+	                  (LPBYTE)&dwVal, sizeof(dwVal)) != ERROR_SUCCESS) {
 		printf("Changing TAP-Win32 adapter's DHCP setting failed\n");
 		return(-1);
 	}
 	RegCloseKey(interface_key);
 
-	/* 
-	 * Set TAP MTU to 1400 
+	/*
+	 * Set TAP MTU to 1400
 	 */
-	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, ADAPTER_KEY, 0, 
-			 KEY_READ, &key) != ERROR_SUCCESS) {
+	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, ADAPTER_KEY, 0,
+	                 KEY_READ, &key) != ERROR_SUCCESS) {
 		printf("Error opening registry key: %s", ADAPTER_KEY);
 		return(-1);
 	}
 	/* find the adapter with TAP_COMPONENT_ID (tap0801) */
-	for (enum_index = 0; ; enum_index++) {
+	for (enum_index = 0;; enum_index++) {
 		len = sizeof(value);
-		if(RegEnumKeyEx(key, enum_index, value, &len, 
-				0, 0, 0, NULL) != ERROR_SUCCESS) {
+		if(RegEnumKeyEx(key, enum_index, value, &len,
+		                0, 0, 0, NULL) != ERROR_SUCCESS) {
 			RegCloseKey(key);
 			return(0); /* silently exit if not found */
 		}
 		sprintf(path, "%s\\%s", ADAPTER_KEY, value);
-		if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, path, 0, KEY_READ, 
-				&interface_key) != ERROR_SUCCESS)
+		if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, path, 0, KEY_READ,
+		                 &interface_key) != ERROR_SUCCESS) {
 			continue;
+		}
 		dwBufLen = sizeof(value);
-		if (RegQueryValueEx(interface_key, "ComponentId", NULL, 
-			    &dwKeyType, value, &dwBufLen) != ERROR_SUCCESS) {
+		if (RegQueryValueEx(interface_key, "ComponentId", NULL,
+		                    &dwKeyType, value,
+		                    &dwBufLen) != ERROR_SUCCESS) {
 			RegCloseKey(interface_key);
 			continue;
 		}
 		RegCloseKey(interface_key);
-		if ((dwKeyType != REG_SZ) || 
-		    (strncmp(value, TAP_COMPONENT_ID, 
-			     strlen(TAP_COMPONENT_ID)) != 0)) {
+		if ((dwKeyType != REG_SZ) ||
+		    (strncmp(value, TAP_COMPONENT_ID,
+		             strlen(TAP_COMPONENT_ID)) != 0)) {
 			continue;
 		}
-		break;	
+		break;
 	}
 
-	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, path, 0, KEY_WRITE, 
-			&interface_key) != ERROR_SUCCESS) {
+	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, path, 0, KEY_WRITE,
+	                 &interface_key) != ERROR_SUCCESS) {
 		printf("Unable to set TAP MTU.\n");
 		return(0); /* non-fatal */
 	}
 	if (RegSetValueEx(interface_key, "MTU", 0, REG_SZ,
-			"1400", strlen("1400")) != ERROR_SUCCESS) {
+	                  "1400", strlen("1400")) != ERROR_SUCCESS) {
 		printf("Changing TAP-Win32 MTU failed.\n");
 	}
 	RegCloseKey(interface_key);
@@ -746,38 +793,44 @@ int setup_tap()
 
 	printf("setup_tap: ");
 
-	if(RegOpenKeyEx(HKEY_LOCAL_MACHINE, NETWORK_CONNECTIONS_KEY, 0, 
-	    KEY_READ, &key)) {
+	if(RegOpenKeyEx(HKEY_LOCAL_MACHINE, NETWORK_CONNECTIONS_KEY, 0,
+	                KEY_READ, &key)) {
 		printf("Unable to read registry:\n");
 		return(-1);
 	}
 
 	/* find the adapter with .tap suffix */
-	for (enum_index = 0; ; enum_index++) {
+	for (enum_index = 0;; enum_index++) {
 		len = sizeof(devid);
-		if(RegEnumKeyEx(key, enum_index, devid, &len, 
-				0, 0, 0, NULL) != ERROR_SUCCESS) {
+		if(RegEnumKeyEx(key, enum_index, devid, &len,
+		                0, 0, 0, NULL) != ERROR_SUCCESS) {
 			DWORD dw;
 			LPVOID lpMsgBuf;
 			dw = GetLastError();
 
 			RegCloseKey(key);
-			printf("setup_tap(): Couldn't find TAP-Win32 adapter.\n");
-			
-			FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER|
-				FORMAT_MESSAGE_FROM_SYSTEM, NULL, dw, 
-				MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-				(LPTSTR) &lpMsgBuf, 0, NULL);
+			printf(
+			        "setup_tap(): Couldn't find TAP-Win32 adapter.\n");
+
+			FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER |
+			               FORMAT_MESSAGE_FROM_SYSTEM, NULL, dw,
+			               MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			               (LPTSTR) &lpMsgBuf, 0, NULL);
 			printf("Failed with error %d: %s\n", dw, lpMsgBuf);
 			LocalFree(lpMsgBuf);;
 
 			return(-1);
 		}
-	
+
 		sprintf(devname, "\\\\.\\Global\\%s.tap", devid);
-		hTAP32 = CreateFile(devname, GENERIC_WRITE | GENERIC_READ,
-			    0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_SYSTEM, 0);
-		
+		hTAP32 = CreateFile(devname,
+		                    GENERIC_WRITE | GENERIC_READ,
+		                    0,
+		                    0,
+		                    OPEN_EXISTING,
+		                    FILE_ATTRIBUTE_SYSTEM,
+		                    0);
+
 		if(hTAP32 != INVALID_HANDLE_VALUE) {
 			RegCloseKey(key);
 			CloseHandle(hTAP32);
@@ -805,17 +858,19 @@ void init_hip(DWORD ac, char **av)
 	int err;
 	char hipd_args[255];
 	int i;
-	
+
 	printf("init_hip()\n");
 
 	/* get arguments for hipd */
 	memset(hipd_args, 0, sizeof(hipd_args));
-	if (ac > 0)
+	if (ac > 0) {
 		ac--, av++;
+	}
 	i = 0;
 	while (ac > 0) {
-		if (i > 0) /* add a space between parameters */
+		if (i > 0) { /* add a space between parameters */
 			hipd_args[i++] = ' ';
+		}
 		sprintf(&hipd_args[i], "%s", *av);
 		i += strlen(*av);
 		av++, ac--;
@@ -832,7 +887,7 @@ void init_hip(DWORD ac, char **av)
 	init_crypto();
 	hip_sadb_init();
 	g_state = 0;
-	
+
 	/*
 	 * Kernel helpers
 	 */
@@ -853,8 +908,8 @@ void init_hip(DWORD ac, char **av)
 		exit(-1);
 	}
 
-	/* 
-	 * tap device 
+	/*
+	 * tap device
 	 */
 	if ((tapfd = init_tap())) {
 		printf("Initialized TAP device.\n");
@@ -868,20 +923,20 @@ void init_hip(DWORD ac, char **av)
 		exit(-1);
 	}
 
-	/* 
-	 * ESP and DNS handlers 
+	/*
+	 * ESP and DNS handlers
 	 */
 	if (!(esp_output_thrd = _beginthread(hip_esp_output, 0, NULL))) {
 		printf("Error creating ESP output thread.\n");
 		exit(-1);
 	}
-	if ((s_esp = init_esp_input(AF_INET, SOCK_RAW, IPPROTO_ESP, 0, 
-				    "IPv4 ESP")) < 0) {
+	if ((s_esp = init_esp_input(AF_INET, SOCK_RAW, IPPROTO_ESP, 0,
+	                            "IPv4 ESP")) < 0) {
 		printf("Error creating IPv4 ESP input socket.\n");
 		exit(-1);
 	}
 	if ((s_esp_udp = init_esp_input(AF_INET, SOCK_RAW, IPPROTO_UDP,
-					HIP_UDP_PORT, "IPv4 UDP")) < 0) {
+	                                HIP_UDP_PORT, "IPv4 UDP")) < 0) {
 		printf("Error creating IPv4 UDP input socket.\n");
 		exit(-1);
 	}
@@ -909,8 +964,9 @@ void WINAPI ServiceMain (DWORD ac, char **av)
 {
 	char path[MAX_PATH];
 	g_srv_status_handle = RegisterServiceCtrlHandler(SERVICE_NAME, Handler);
-	if (!g_srv_status_handle)
+	if (!g_srv_status_handle) {
 		return;
+	}
 
 	g_srv_status.dwCurrentState = SERVICE_START_PENDING;
 	g_srv_status.dwCheckPoint = 0;
@@ -918,16 +974,19 @@ void WINAPI ServiceMain (DWORD ac, char **av)
 	SetServiceStatus (g_srv_status_handle, &g_srv_status);
 
 	/* initialization process */
-	if (!GetModuleFileName (0, path, MAX_PATH))
+	if (!GetModuleFileName (0, path, MAX_PATH)) {
 		return;
+	}
 
 	strip_filename(path);
 	_chdir(path);
 
-	if (freopen("hip_ipsec_error.log", "a", stderr) == NULL)
+	if (freopen("hip_ipsec_error.log", "a", stderr) == NULL) {
 		return;
-	if (freopen("hip_ipsec.log", "a", stdout) == NULL)
+	}
+	if (freopen("hip_ipsec.log", "a", stdout) == NULL) {
 		return;
+	}
 	init_reg();
 	init_hip(ac, av);
 
@@ -948,10 +1007,10 @@ void WINAPI ServiceMain (DWORD ac, char **av)
 			Sleep(1000);
 			/* TODO: any HIP status updating here */
 			/*ret = hip_check_status();
-			if (ret >= 0 && ret != status) {
-				status = ret;
-				update_status(status);
-			}*/
+			 *  if (ret >= 0 && ret != status) {
+			 *       status = ret;
+			 *       update_status(status);
+			 *  }*/
 			break;
 		}
 	}
@@ -959,7 +1018,6 @@ void WINAPI ServiceMain (DWORD ac, char **av)
 	WSACleanup();
 	hip_sadb_deinit();
 }
-
 
 /*
  * main()
@@ -996,25 +1054,26 @@ int main (int argc, char **argv)
 			DWORD dw;
 			TCHAR szBuf[80];
 			LPVOID lpMsgBuf;
-			SERVICE_TABLE_ENTRY ent[] = { 
-			    { SERVICE_NAME, ServiceMain }, { 0, 0 }, };
+			SERVICE_TABLE_ENTRY ent[] = {
+				{ SERVICE_NAME, ServiceMain }, { 0, 0 },
+			};
 			StartServiceCtrlDispatcher (ent);
 			dw = GetLastError();
-			FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER|
-				FORMAT_MESSAGE_FROM_SYSTEM, NULL, dw, 
-				MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-				(LPTSTR) &lpMsgBuf, 0, NULL);
+			FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER |
+			               FORMAT_MESSAGE_FROM_SYSTEM, NULL, dw,
+			               MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			               (LPTSTR) &lpMsgBuf, 0, NULL);
 			wsprintf(szBuf, "Failed with error %d: %s",
-					dw, lpMsgBuf);
+			         dw, lpMsgBuf);
 			/* Insert errors that we don't care about here. */
 			if (dw != ERROR_IO_PENDING) {
 				MessageBox(NULL, szBuf, "HIP Error", MB_OK);
 			}
 			LocalFree(lpMsgBuf);
 			exit(0);
-		/* Add new hipd option flags here: */
+			/* Add new hipd option flags here: */
 		} else if (strstr("-a-d-conf-e-g-i3-m-nr-o-p-q-r1-t-u-v",
-				*argv)) {
+		                  *argv)) {
 			argv--, argc++;
 			goto start_hip;
 		} else {
@@ -1024,11 +1083,11 @@ int main (int argc, char **argv)
 		/* print error */
 		if (rc) {
 			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-					FORMAT_MESSAGE_FROM_SYSTEM |
-					FORMAT_MESSAGE_IGNORE_INSERTS,
-					NULL, rc, MAKELANGID(LANG_NEUTRAL, 
-					 SUBLANG_DEFAULT),
-					(LPTSTR) &error_buf, 0, NULL);
+			              FORMAT_MESSAGE_FROM_SYSTEM |
+			              FORMAT_MESSAGE_IGNORE_INSERTS,
+			              NULL, rc, MAKELANGID(LANG_NEUTRAL,
+			                                   SUBLANG_DEFAULT),
+			              (LPTSTR) &error_buf, 0, NULL);
 			printf("%s\n", error_buf);
 		}
 		return(0);

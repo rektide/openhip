@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2005-06 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,32 +15,32 @@
  *  hip_status.c
  *
  *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- * 
+ *
  * Status thread
  *
  */
 
-#include <stdio.h>		/* printf() */
+#include <stdio.h>              /* printf() */
 #ifdef __WIN32__
 #include <win32/types.h>
 #else
 #include <unistd.h>
-#include <pthread.h>		/* phread_exit() */
-#include <sys/uio.h>		/* iovec */
+#include <pthread.h>            /* phread_exit() */
+#include <sys/uio.h>            /* iovec */
 #endif
-#include <string.h>		/* strerror() */
-#include <errno.h>		/* errno */
+#include <string.h>             /* strerror() */
+#include <errno.h>              /* errno */
 #include <hip/hip_service.h>
 #include <hip/hip_types.h>
-#include <hip/hip_sadb.h>		/* access to SADB */
+#include <hip/hip_sadb.h>               /* access to SADB */
 #include <hip/hip_status.h>
-#include <hip/hip_funcs.h>	/* pthread_mutex_lock() */
+#include <hip/hip_funcs.h>      /* pthread_mutex_lock() */
 
 #ifdef HIP_VPLS
 #include <utime.h>
 #endif
 
-/* 
+/*
  * Local function declarations
  */
 void handle_status_request(int type, char *buff, int *len);
@@ -74,11 +74,11 @@ void *hip_status(void *arg)
 	struct status_tlv *req;
 
 #ifdef HIP_VPLS
-        time_t last_time, now_time;
+	time_t last_time, now_time;
 
-        last_time = time(NULL);
-        printf("hip_status() thread (tid %d pid %d) started...\n",
-                        (unsigned)pthread_self(), getpid());
+	last_time = time(NULL);
+	printf("hip_status() thread (tid %d pid %d) started...\n",
+	       (unsigned)pthread_self(), getpid());
 #else
 	printf("hip_status() thread started...\n");
 #endif
@@ -88,7 +88,7 @@ void *hip_status(void *arg)
 #ifdef __WIN32__
 		return;
 #else
-		return NULL;
+		return(NULL);
 #endif
 	}
 
@@ -103,10 +103,10 @@ void *hip_status(void *arg)
 #ifdef __WIN32__
 		return;
 #else
-		return NULL;
+		return(NULL);
 #endif
 	}
-	
+
 	while(g_state == 0) {
 		FD_ZERO(&read_fdset);
 		FD_SET((unsigned)s, &read_fdset);
@@ -114,31 +114,36 @@ void *hip_status(void *arg)
 		timeout.tv_usec = 0;
 
 #ifdef HIP_VPLS
-                now_time = time(NULL);
-                if (now_time - last_time > 60) {
-                        printf("hip_status() heartbeat\n");
-                        last_time = now_time;
-                        utime("/usr/local/etc/hip/heartbeat_hip_status", NULL);
-                }
+		now_time = time(NULL);
+		if (now_time - last_time > 60) {
+			printf("hip_status() heartbeat\n");
+			last_time = now_time;
+			utime("/usr/local/etc/hip/heartbeat_hip_status", NULL);
+		}
 #endif
 
-		if ((err = select(s+1, &read_fdset, NULL,NULL, &timeout) < 0)) {
-			if (errno == EINTR)
+		if ((err =
+		             select(s + 1, &read_fdset, NULL,NULL,
+		                    &timeout) < 0)) {
+			if (errno == EINTR) {
 				continue;
+			}
 			printf("Status thread: select() error: %s.\n",
-				strerror(errno));
+			       strerror(errno));
 		} else if (FD_ISSET(s, &read_fdset)) {
 			memset(buff, 0, sizeof(buff));
 			from_len = sizeof(struct sockaddr_storage);
-			if ((err = recvfrom(s, buff, sizeof(buff), 0, 
-						from, &from_len)) < 0) {
-				if (err != -EINTR)
+			if ((err = recvfrom(s, buff, sizeof(buff), 0,
+			                    from, &from_len)) < 0) {
+				if (err != -EINTR) {
 					printf("Status thread: recvfrom error:"
-						" %s\n", strerror(errno));
+					       " %s\n", strerror(errno));
+				}
 				continue;
 			}
-			if (err < sizeof(struct status_tlv))
+			if (err < sizeof(struct status_tlv)) {
 				continue;
+			}
 			req = (struct status_tlv*)buff;
 			len = sizeof(buff);
 			handle_status_request(ntohs(req->tlv_type), buff, &len);
@@ -162,51 +167,51 @@ void *hip_status(void *arg)
  */
 void handle_status_request(int type, char *buff, int *len)
 {
-	int tlv_len=0;
+	int tlv_len = 0;
 	struct status_tlv *t = (struct status_tlv*) buff;
 	__u32 spi, *spi_p;
 
 	switch(type) {
-		case STAT_THREADS:
-			t->tlv_type = htons(HIP_STATUS_REPLY_STRING);
-			t->tlv_len = htons(40);
-			t++;
-			sprintf((char*)t,
-				"Thread info not implemented yet.\n");
-			tlv_len = 40;
-			break;
-		case STAT_SADB:
-			/* read any SPI parameter */
-			spi = 0;
-			if (ntohs(t->tlv_len) == sizeof(__u32)) {
-				spi_p =(__u32*)&buff[sizeof(struct status_tlv)];
-				spi = ntohl(*spi_p);
-			}
-			dump_sadb(buff, &tlv_len, spi);
-			break;
-		case STAT_DST:
-			dump_dst_entries(buff, &tlv_len);
-			break;
-		case STAT_LSI:
-			dump_lsi_entries(buff, &tlv_len);
-			break;
-		case STAT_ALL_SPI:
-			dump_all_spi(buff, &tlv_len);
-			break;
-		case STAT_MIN:
-		case STAT_MAX:
-		default:
-			printf("<Status thread: replying with error (%d)>",
-				type);
-			t->tlv_type = htons(HIP_STATUS_REPLY_ERROR);
-			t->tlv_len = 0;
-			t++;
-			break;
+	case STAT_THREADS:
+		t->tlv_type = htons(HIP_STATUS_REPLY_STRING);
+		t->tlv_len = htons(40);
+		t++;
+		sprintf((char*)t,
+		        "Thread info not implemented yet.\n");
+		tlv_len = 40;
+		break;
+	case STAT_SADB:
+		/* read any SPI parameter */
+		spi = 0;
+		if (ntohs(t->tlv_len) == sizeof(__u32)) {
+			spi_p = (__u32*)&buff[sizeof(struct status_tlv)];
+			spi = ntohl(*spi_p);
+		}
+		dump_sadb(buff, &tlv_len, spi);
+		break;
+	case STAT_DST:
+		dump_dst_entries(buff, &tlv_len);
+		break;
+	case STAT_LSI:
+		dump_lsi_entries(buff, &tlv_len);
+		break;
+	case STAT_ALL_SPI:
+		dump_all_spi(buff, &tlv_len);
+		break;
+	case STAT_MIN:
+	case STAT_MAX:
+	default:
+		printf("<Status thread: replying with error (%d)>",
+		       type);
+		t->tlv_type = htons(HIP_STATUS_REPLY_ERROR);
+		t->tlv_len = 0;
+		t++;
+		break;
 	}
 	t = (struct status_tlv*) ((char*)t + tlv_len);
 	t->tlv_type = htons(HIP_STATUS_REPLY_DONE);
 	t->tlv_len = 0;
-	t++;			
+	t++;
 	*len = (char*)t - buff;
 }
 
@@ -216,8 +221,9 @@ extern hip_mutex_t hip_sadb_locks[SADB_SIZE];
 int sockaddr_list_length(sockaddr_list *l)
 {
 	int count = 0;
-	for(; l; l=l->next)
+	for(; l; l = l->next) {
 		count++;
+	}
 	return(count);
 }
 
@@ -225,18 +231,20 @@ void dump_sadb(char *buff, int *tlv_len, __u32 spi)
 {
 	hip_sadb_entry *entry;
 	struct status_tlv *t = (struct status_tlv*)buff;
-	int i=0, len=0, n;
+	int i = 0, len = 0, n;
 	char *p;
 	sockaddr_list *l;
 
-	if (spi > 0)
+	if (spi > 0) {
 		i = sadb_hashfn(spi);
+	}
 
 	for (; i < SADB_SIZE; i++) {
 		pthread_mutex_lock(&hip_sadb_locks[i]);
-		for (	entry = hip_sadb[i]; entry; entry = entry->next ) {
-			if ((spi > 0) && (entry->spi != spi))
+		for (entry = hip_sadb[i]; entry; entry = entry->next) {
+			if ((spi > 0) && (entry->spi != spi)) {
 				continue;
+			}
 			pthread_mutex_lock(&entry->rw_lock);
 			t->tlv_type = htons(HIP_STATUS_REPLY_SADB);
 			t->tlv_len = 0;
@@ -255,37 +263,41 @@ void dump_sadb(char *buff, int *tlv_len, __u32 spi)
 			ADD_ITEM(p, entry->bytes, len);
 			ADD_ITEM(p, entry->sequence, len);
 			/*ADD_ITEM(p, entry->replay_win, len);
-			ADD_ITEM(p, entry->replay_map, len);
-			ADD_ITEM(p, entry->iv, len);*/
+			 *  ADD_ITEM(p, entry->replay_map, len);
+			 *  ADD_ITEM(p, entry->iv, len);*/
 			n = sockaddr_list_length(entry->src_addrs);
 			ADD_ITEM(p, n, len);
 			n = sockaddr_list_length(entry->dst_addrs);
 			ADD_ITEM(p, n, len);
 			t->tlv_len = htons((__u16)len);
 			t = (struct status_tlv *)(p + len);
-			
+
 			/* addresses */
 			t->tlv_type = htons(HIP_STATUS_REPLY_ADDR);
 			t->tlv_len = 0;
 			p = (char *)(t + 1);
-			len = 0;			
-			for (l = entry->src_addrs; l; l=l->next)
+			len = 0;
+			for (l = entry->src_addrs; l; l = l->next) {
 				ADD_ITEM(p, l->addr, len);
-			for (l = entry->dst_addrs; l; l=l->next)
+			}
+			for (l = entry->dst_addrs; l; l = l->next) {
 				ADD_ITEM(p, l->addr, len);
+			}
 			/* TODO: add NAT variables here */
 			t->tlv_len = htons((__u16)len);
 			t = (struct status_tlv *)(p + len);
 			pthread_mutex_unlock(&entry->rw_lock);
 			/* buffer size check */
-			if (((char *)t - buff) > (STATBUFSIZE - len))
+			if (((char *)t - buff) > (STATBUFSIZE - len)) {
 				break;
+			}
 		}
 		pthread_mutex_unlock(&hip_sadb_locks[i]);
 		/* buffer size check */
-		if (((char *)t - buff) > (STATBUFSIZE - len))
+		if (((char *)t - buff) > (STATBUFSIZE - len)) {
 			break;
-		
+		}
+
 	}
 	*tlv_len = (char*)t - buff;
 }
@@ -300,9 +312,9 @@ void dump_dst_entries(char *buff, int *tlv_len)
 	int i, len;
 	char *p;
 
-	for (i=0; i < SADB_SIZE; i++) {
+	for (i = 0; i < SADB_SIZE; i++) {
 		pthread_mutex_lock(&hip_sadb_dst_locks[i]);
-		for (	entry = hip_sadb_dst[i]; entry; entry = entry->next) {
+		for (entry = hip_sadb_dst[i]; entry; entry = entry->next) {
 			pthread_mutex_lock(&entry->rw_lock);
 			t->tlv_type = htons(HIP_STATUS_REPLY_DST_ENTRY);
 			t->tlv_len = 0;
@@ -327,20 +339,20 @@ void dump_lsi_entries(char *buff, int *tlv_len)
 	int len;
 	char *p;
 
-	for (l = lsi_temp; l; l=l->next) {
-			t->tlv_type = htons(HIP_STATUS_REPLY_LSI_ENTRY);
-			t->tlv_len = 0;
-			p = (char *)(t + 1);
-			len = 0;
-			ADD_ITEM(p, l->addr, len);
-			ADD_ITEM(p, l->lsi4, len);
-			ADD_ITEM(p, l->lsi6, len);
-			ADD_ITEM(p, l->num_packets, len);
-			ADD_ITEM(p, l->next_packet, len);
-			ADD_ITEM(p, l->send_packets, len);
-			ADD_ITEM(p, l->creation_time.tv_sec, len);
-			t->tlv_len = htons((__u16)len);
-			t = (struct status_tlv *)(p + len);
+	for (l = lsi_temp; l; l = l->next) {
+		t->tlv_type = htons(HIP_STATUS_REPLY_LSI_ENTRY);
+		t->tlv_len = 0;
+		p = (char *)(t + 1);
+		len = 0;
+		ADD_ITEM(p, l->addr, len);
+		ADD_ITEM(p, l->lsi4, len);
+		ADD_ITEM(p, l->lsi6, len);
+		ADD_ITEM(p, l->num_packets, len);
+		ADD_ITEM(p, l->next_packet, len);
+		ADD_ITEM(p, l->send_packets, len);
+		ADD_ITEM(p, l->creation_time.tv_sec, len);
+		t->tlv_len = htons((__u16)len);
+		t = (struct status_tlv *)(p + len);
 	}
 
 	*tlv_len = (char*)t - buff;
@@ -354,17 +366,17 @@ void dump_all_spi(char *buff, int *tlv_len)
 	int i, len;
 	char *p;
 
-	for (i=0; i < SADB_SIZE; i++) {
-		for (	entry = hip_sadb[i]; entry; entry=entry->next ) {
+	for (i = 0; i < SADB_SIZE; i++) {
+		for (entry = hip_sadb[i]; entry; entry = entry->next) {
 			t->tlv_type = htons(HIP_STATUS_REPLY_ALL_SPI);
 			t->tlv_len = 0;
 			p = (char *)(t + 1);
 			len = 0;
 			ADD_ITEM(p, entry->spi, len);
 			t->tlv_len = htons((__u16)len);
-                        t = (struct status_tlv *)(p + len);
+			t = (struct status_tlv *)(p + len);
 		}
-		
+
 	}
 	*tlv_len = (char*)t - buff;
 }

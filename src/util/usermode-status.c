@@ -44,39 +44,40 @@ typedef struct _cent {
 	int code;
 } cent;
 
-cent commands[] = { 	{ "threads", STAT_THREADS },
-			{ "sadb", STAT_SADB },
-			{ "dst", STAT_DST },
-			{ "lsi", STAT_LSI },
-			{ "peers", STAT_PEERS },
-			{ "ids", STAT_IDS },
-			{ "spi", STAT_ALL_SPI },
-			{ 0, STAT_MAX},
-		};
+cent commands[] = { { "threads", STAT_THREADS },
+		    { "sadb", STAT_SADB },
+		    { "dst", STAT_DST },
+		    { "lsi", STAT_LSI },
+		    { "peers", STAT_PEERS },
+		    { "ids", STAT_IDS },
+		    { "spi", STAT_ALL_SPI },
+		    { 0, STAT_MAX },};
 
 void parse_cmd(char *buf, char *cmd, char *parm)
 {
-    int i, len;
-    
-    parm[0] = '\0';
-    cmd[0] = '\0';
-    len = strlen(buf);
-    for (i = 0; i < len; i++) {
-	if (buf[i] == '\n')
-		buf[i]='\0';
-    }
-	  
-    len = strlen(buf);
-    for (i = 0; i < len; i++) {
-	if (buf[i] == ' ') {
-		cmd[i] = '\0';
-		if(i<len)
-			strcpy(parm, &buf[i+1]);
-	   	return;
+	int i, len;
+
+	parm[0] = '\0';
+	cmd[0] = '\0';
+	len = strlen(buf);
+	for (i = 0; i < len; i++) {
+		if (buf[i] == '\n') {
+			buf[i] = '\0';
+		}
 	}
-	cmd[i] = buf[i];
-    }
-    cmd[i] = '\0';
+
+	len = strlen(buf);
+	for (i = 0; i < len; i++) {
+		if (buf[i] == ' ') {
+			cmd[i] = '\0';
+			if(i < len) {
+				strcpy(parm, &buf[i + 1]);
+			}
+			return;
+		}
+		cmd[i] = buf[i];
+	}
+	cmd[i] = '\0';
 }
 
 int main(int argc, char **argv)
@@ -111,7 +112,7 @@ int main(int argc, char **argv)
 
 	done = 0;
 
-	print_help();	
+	print_help();
 
 	while (!done) {
 		memset(cmd, 0, sizeof(cmd));
@@ -120,19 +121,20 @@ int main(int argc, char **argv)
 			done = 1;
 			continue;
 		}
-	        parse_cmd(cmd_buf, cmd, parm);
-		
+		parse_cmd(cmd_buf, cmd, parm);
+
 		/* handle exit */
-		if ((strncmp(cmd, "quit", 4)==0)||(strncmp(cmd, "exit", 4)==0)){
+		if ((strncmp(cmd, "quit",
+		             4) == 0) || (strncmp(cmd, "exit", 4) == 0)) {
 			done = 1;
 			continue;
-		} else if (strncmp(cmd, "help", 4)==0) {
+		} else if (strncmp(cmd, "help", 4) == 0) {
 			print_help();
 			continue;
 		} else if (cmd[0] == '\0') {
 			continue;
 		}
-		
+
 		if ((status_code = cmd_to_code(cmd)) < 0) {
 			printf("Syntax error.\n");
 			continue;
@@ -142,7 +144,7 @@ int main(int argc, char **argv)
 		request->tlv_len = 0;
 
 		/* optional spi parameter */
-	        if (status_code == STAT_SADB && strlen(parm) > 0) {
+		if ((status_code == STAT_SADB) && (strlen(parm) > 0)) {
 			parm_ptr32 = (__u32*)&buff[sizeof(struct status_tlv)];
 			*parm_ptr32 = htonl((__u32)(strtoul(parm, NULL, 0)));
 			request->tlv_len = htons(sizeof(__u32));
@@ -150,18 +152,19 @@ int main(int argc, char **argv)
 
 		len = sizeof(struct status_tlv) + ntohs(request->tlv_len);
 
-		if ((len = sendto(s, buff, len, 0, (struct sockaddr*)&addr, 
-			sizeof(addr))) < 0) {
+		if ((len = sendto(s, buff, len, 0, (struct sockaddr*)&addr,
+		                  sizeof(addr))) < 0) {
 			printf("Error contacting status thread.\n");
 			continue;
 		} else {
 			len = sizeof(buff);
-			if (read_response(s, buff, &len, 2) < 0)
+			if (read_response(s, buff, &len, 2) < 0) {
 				continue;
+			}
 			print_header(status_code);
 			parse_response(buff, len);
 		}
-		
+
 	}
 #ifdef __WIN32__
 	closesocket(s);
@@ -170,28 +173,29 @@ int main(int argc, char **argv)
 #endif
 
 	return(0);
-	
+
 }
 
-int cmd_to_code(char *cmd) 
+int cmd_to_code(char *cmd)
 {
 	int i;
-	for (i=0; commands[i].code < STAT_MAX; i++) {
-		if (strncmp(cmd, commands[i].command, 
-			    strlen(commands[i].command))==0)
+	for (i = 0; commands[i].code < STAT_MAX; i++) {
+		if (strncmp(cmd, commands[i].command,
+		            strlen(commands[i].command)) == 0) {
 			return(commands[i].code);
+		}
 	}
 	return(-1);
 }
 
 void print_help()
 {
-	int i, width=0;
+	int i, width = 0;
 	printf("Available commands:\n");
-	for (i=0; commands[i].code < STAT_MAX; i++) {
+	for (i = 0; commands[i].code < STAT_MAX; i++) {
 		printf("%s ", commands[i].command);
 		width += strlen(commands[i].command);
-		if (width > 70) printf("\n");
+		if (width > 70) { printf("\n"); }
 	}
 	printf("\n");
 }
@@ -201,15 +205,16 @@ int read_response(int s, char *buff, int *len, int time)
 	struct timeval timeout;
 	fd_set read_fdset;
 	int err;
-	
+
 	FD_ZERO(&read_fdset);
 	FD_SET((unsigned)s, &read_fdset);
 	timeout.tv_sec = time;
 	timeout.tv_usec = 0;
 
-	if ((err = select(s+1, &read_fdset, NULL, NULL, &timeout) < 0)) {
-		if (errno != EINTR)
+	if ((err = select(s + 1, &read_fdset, NULL, NULL, &timeout) < 0)) {
+		if (errno != EINTR) {
 			printf("status select() error: %s\n", strerror(errno));
+		}
 		return(-1);
 	} else if (FD_ISSET(s, &read_fdset)) {
 #ifdef __WIN32__
@@ -257,11 +262,12 @@ void print_ipv6(struct sockaddr_storage *addr)
 {
 	int i;
 	unsigned int *p;
-	if (!addr)
+	if (!addr) {
 		return;
+	}
 	p = (unsigned int *) &((struct sockaddr_in6 *)(addr))->sin6_addr;
-	for (i = 0; i < 4 ; i++) {
-		printf("%x", htonl(p[i]) );
+	for (i = 0; i < 4; i++) {
+		printf("%x", htonl(p[i]));
 	}
 }
 
@@ -271,14 +277,14 @@ void print_ipv6(struct sockaddr_storage *addr)
 int parse_response(char *buff, int len)
 {
 	struct status_tlv *r;
-	int done = 0, tlv_len, count=0, bytes, num_src=0;
+	int done = 0, tlv_len, count = 0, bytes, num_src = 0;
 	__u16 *p16;
 	__u32 *p32, ip;
 	__u64 *p64;
 	struct sockaddr_storage *pss;
 
 	r = (struct status_tlv*) buff;
-	
+
 	while (!done) {
 		tlv_len = ntohs(r->tlv_len);
 		switch (ntohs(r->tlv_type)) {
@@ -286,18 +292,18 @@ int parse_response(char *buff, int len)
 			printf("error with request\n");
 			return(-1);
 		case HIP_STATUS_REPLY_STRING:
-			printf("%s\n", (char*)(r+1));
+			printf("%s\n", (char*)(r + 1));
 			break;
 		case HIP_STATUS_REPLY_SADB:
-			PRINTPTR(__u32, "\tSPI: 0x%x ", p32, (r+1));
-			printf("%s ", (*p32 == 1) ? "incoming" : 
-					(*p32 == 2) ? "outgoing" : "??");
-			PRINTPTR(__u16, "hit_magic=0x%d ", p16, (p32+1));
+			PRINTPTR(__u32, "\tSPI: 0x%x ", p32, (r + 1));
+			printf("%s ", (*p32 == 1) ? "incoming" :
+			       (*p32 == 2) ? "outgoing" : "??");
+			PRINTPTR(__u16, "hit_magic=0x%d ", p16, (p32 + 1));
 			PRINTPTR(__u32, "mode=%d ", p32, p16);
 			pss = (struct sockaddr_storage*) p32;
 			ip = htonl(((struct sockaddr_in*)pss)->sin_addr.s_addr);
 			printf("LSI: %u.%u.%u.%u\n", NIPQUAD(ip));
-			PRINTPTR(__u32, "\ta_type=%d ", p32, (pss+1));
+			PRINTPTR(__u32, "\ta_type=%d ", p32, (pss + 1));
 			PRINTPTR(__u32, "e_type=%d ", p32, p32);
 			PRINTPTR(__u32, "a_keylen=%d ", p32, p32);
 			PRINTPTR(__u32, "e_keylen=%d ", p32, p32);
@@ -305,7 +311,7 @@ int parse_response(char *buff, int len)
 			PRINTPTR(__u64, "\tbytes=%lld ", p64, p64);
 			PRINTPTR(__u32, "seq=%d ", p32, p64);
 			/*PRINTPTR(__u32, "replay_win=%d ", p32, p32);
-			PRINTPTR(__u32, "replay_map=%d ", p32, p32);*/
+			 *  PRINTPTR(__u32, "replay_map=%d ", p32, p32);*/
 			/*iv*/
 			/* save number of addresses */
 			num_src = *p32;
@@ -314,13 +320,16 @@ int parse_response(char *buff, int len)
 			break;
 		case HIP_STATUS_REPLY_ADDR:
 			count = 0;
-			pss = (struct sockaddr_storage*) (r+1);
+			pss = (struct sockaddr_storage*) (r + 1);
 			printf("\tsrc: ");
-			for (bytes = tlv_len; bytes > 0; 
-				bytes -= sizeof(struct sockaddr_storage)) {
-				if (count == num_src)
+			for (bytes = tlv_len; bytes > 0;
+			     bytes -= sizeof(struct sockaddr_storage)) {
+				if (count == num_src) {
 					printf(" dst: ");
-				ip=((struct sockaddr_in*)pss)->sin_addr.s_addr;
+				}
+				ip =
+				        ((struct sockaddr_in*)pss)->sin_addr.
+				        s_addr;
 				printf("%u.%u.%u.%u ", NIPQUAD(ip));
 				count++;
 				pss++;
@@ -328,19 +337,21 @@ int parse_response(char *buff, int len)
 			printf("\n\n");
 			break;
 		case HIP_STATUS_REPLY_DST_ENTRY:
-			pss = (struct sockaddr_storage*) (r+1);
+			pss = (struct sockaddr_storage*) (r + 1);
 			if (pss->ss_family == AF_INET) {
-			    ip = ((struct sockaddr_in*)pss)->sin_addr.s_addr;
-			    printf("\taddr: %u.%u.%u.%u  ", NIPQUAD(ip));
+				ip =
+				        ((struct sockaddr_in*)pss)->sin_addr.
+				        s_addr;
+				printf("\taddr: %u.%u.%u.%u  ", NIPQUAD(ip));
 			} else {
-			    printf("\taddr: ");
-			    print_ipv6(pss);
-			    printf("  ");
+				printf("\taddr: ");
+				print_ipv6(pss);
+				printf("  ");
 			}
-			PRINTPTR(__u32, "spi=0x%x\n", p32, (pss+1));
+			PRINTPTR(__u32, "spi=0x%x\n", p32, (pss + 1));
 			break;
 		case HIP_STATUS_REPLY_LSI_ENTRY:
-			pss = (struct sockaddr_storage*) (r+1);
+			pss = (struct sockaddr_storage*) (r + 1);
 			ip = ((struct sockaddr_in*)pss)->sin_addr.s_addr;
 			printf("\taddr: %u.%u.%u.%u ", NIPQUAD(ip));
 			pss++;
@@ -350,13 +361,13 @@ int parse_response(char *buff, int len)
 			printf("lsi6: ");
 			print_ipv6(pss);
 			printf("\n ");
-			PRINTPTR(__u32, "\tnum_pkt=%d ", p32, (pss+1));
+			PRINTPTR(__u32, "\tnum_pkt=%d ", p32, (pss + 1));
 			PRINTPTR(__u32, "next_pkt=%d ", p32, p32);
 			PRINTPTR(__u32, "send_pkt=%d ", p32, p32);
 			PRINTPTR(__u32, "time=%d\n", p32, p32);
 			break;
 		case HIP_STATUS_REPLY_ALL_SPI:
-			PRINTPTR(__u32, "  SPI: 0x%x\n", p32, (r+1));
+			PRINTPTR(__u32, "  SPI: 0x%x\n", p32, (r + 1));
 			break;
 		case HIP_STATUS_REPLY_DONE:
 			done = 1;
@@ -364,16 +375,17 @@ int parse_response(char *buff, int len)
 		case HIP_STATUS_REPLY_MIN:
 		case HIP_STATUS_REPLY_MAX:
 		default:
-			printf("error reading response (%d)\n", 
-				ntohs(r->tlv_type));
+			printf("error reading response (%d)\n",
+			       ntohs(r->tlv_type));
 			return(-1);
 		}
-		r = (struct status_tlv *) ((char*)(r+1) + tlv_len);
-		if ((char*)r > buff+len) {
+		r = (struct status_tlv *) ((char*)(r + 1) + tlv_len);
+		if ((char*)r > buff + len) {
 			printf("response has wrong length: %d\n", tlv_len);
 			return(-1);
 		}
-			
+
 	}
 	return(0);
 }
+

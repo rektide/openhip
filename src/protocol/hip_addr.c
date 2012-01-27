@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2002-06 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -22,7 +22,7 @@
  */
 /*
  * XXX this needs to be cleaned up and split into platform specific parts
- * equivalent Mac file is in ../mac/hip_mac.c 
+ * equivalent Mac file is in ../mac/hip_mac.c
  */
 
 #ifndef __WIN32__
@@ -45,32 +45,33 @@
 #endif
 #include <unistd.h>
 #include <sys/time.h>
-#include <netinet/in.h>		/* INADDR_NONE                  */
-#include <netinet/ip.h>		/* INADDR_NONE                  */
-#include <sys/uio.h>		/* iovec			*/
-#include <pthread.h>		/* pthreads support		*/
+#include <netinet/in.h>         /* INADDR_NONE                  */
+#include <netinet/ip.h>         /* INADDR_NONE                  */
+#include <sys/uio.h>            /* iovec			*/
+#include <pthread.h>            /* pthreads support		*/
 #endif
 #include <ctype.h>
 #include <openssl/sha.h>
 #include <openssl/dsa.h>
-#include <openssl/asn1.h>	
+#include <openssl/asn1.h>
 #include <openssl/rand.h>
 #include <sys/types.h>
 #include <errno.h>
-#include <fcntl.h>		/* open()			*/
+#include <fcntl.h>              /* open()			*/
 #include <libxml/tree.h> /* all XML stuff		*/
 
 #ifdef USE_LINUX_NETLINK
 #include <netinet/ip6.h>
-#include <linux/netlink.h>	/* get_my_addresses() support	*/
-#include <linux/rtnetlink.h>	/* get_my_addresses() support	*/
-#include <linux/if.h>		/* set_link_params() support	*/
-#include <sys/ioctl.h>		/* set_link_params() support	*/
+#include <linux/netlink.h>      /* get_my_addresses() support	*/
+#include <linux/rtnetlink.h>    /* get_my_addresses() support	*/
+#include <linux/if.h>           /* set_link_params() support	*/
+#include <sys/ioctl.h>          /* set_link_params() support	*/
 #else
 #ifdef __WIN32__
-#include <windows.h>		/* Windows registry access */
+#include <windows.h>            /* Windows registry access */
 #define __FUNCTION__ "debug"
-#define REG_INTERFACES_KEY "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces"
+#define REG_INTERFACES_KEY \
+        "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces"
 #include <win32/netlink.h>
 #endif
 #endif
@@ -88,7 +89,7 @@
 extern unsigned int if_nametoindex (__const char *__ifname) __THROW;
 #endif
 
-/* instead of including the entire netlink library here, 
+/* instead of including the entire netlink library here,
  * we just implement partial functionality
  */
 
@@ -99,9 +100,9 @@ int nl_sequence_number = 0;
 int read_netlink_response();
 void handle_local_address_change(int add,struct sockaddr *newaddr,int if_index);
 void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
-    int if_index);
+                             int if_index);
 void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
-    int if_index);
+                             int if_index);
 void make_address_active(sockaddr_list *item);
 int set_preferred_address_in_list(struct sockaddr *addr);
 
@@ -117,22 +118,26 @@ int set_preferred_address_in_list(struct sockaddr *addr);
  */
 int hip_netlink_open()
 {
-#ifdef USE_LINUX_NETLINK 
+#ifdef USE_LINUX_NETLINK
 	struct sockaddr_nl local;
-	
-	if (s_net)
+
+	if (s_net) {
 		close(s_net);
-	if ((s_net = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE)) < 0)
+	}
+	if ((s_net = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE)) < 0) {
 		return(-1);
+	}
 
 	memset(&local, 0, sizeof(local));
 	local.nl_family = AF_NETLINK;
 	/* subscribe to link, IPv4/IPv6 address notifications */
-	local.nl_groups = (RTMGRP_LINK| RTMGRP_IPV4_IFADDR| RTMGRP_IPV6_IFADDR);
-	
-	if (bind(s_net, (struct sockaddr *)&local, sizeof(local)) < 0)
+	local.nl_groups =
+	        (RTMGRP_LINK | RTMGRP_IPV4_IFADDR | RTMGRP_IPV6_IFADDR);
+
+	if (bind(s_net, (struct sockaddr *)&local, sizeof(local)) < 0) {
 		return(-1);
-	
+	}
+
 	nl_sequence_number = time(NULL);
 #else
 	while (netlsp[1] < 0) {
@@ -143,7 +148,7 @@ int hip_netlink_open()
 	return(0);
 }
 
-/* 
+/*
  * function get_my_addresses()
  *
  * Use the Netlink interface to retrieve a list of addresses for this
@@ -164,11 +169,11 @@ int get_my_addresses()
 
 	/* netlink packet */
 	struct {
-		struct nlmsghdr	n;
+		struct nlmsghdr n;
 		struct rtgenmsg g;
 	} req;
 
-#ifdef USE_LINUX_NETLINK 
+#ifdef USE_LINUX_NETLINK
 	struct iovec iov = { buf, sizeof(buf) };
 	/* message response */
 	struct msghdr msg = {
@@ -196,10 +201,10 @@ int get_my_addresses()
 	memset(&req, 0, sizeof(req));
 	req.n.nlmsg_len = sizeof(req);
 	req.n.nlmsg_type = RTM_GETADDR;
-	req.n.nlmsg_flags = NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST;
+	req.n.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
 	req.n.nlmsg_pid = 0;
 	req.n.nlmsg_seq = ++nl_sequence_number;
-	req.g.rtgen_family = 0;//AF_PACKET;//AF_UNSPEC;
+	req.g.rtgen_family = 0; /* AF_PACKET;//AF_UNSPEC; */
 
 	/* send request */
 	memset(&nladdr, 0, sizeof(nladdr));
@@ -210,15 +215,15 @@ int get_my_addresses()
 	}
 #else
 	nladdr.nl_family = AF_NETLINK;
-	if (sendto(s_net, (void*)&req, sizeof(req), 0, 
-		(struct sockaddr*)&nladdr,sizeof(nladdr)) < 0) {
+	if (sendto(s_net, (void*)&req, sizeof(req), 0,
+	           (struct sockaddr*)&nladdr,sizeof(nladdr)) < 0) {
 		log_(WARN, "Netlink: sentdo() error: %s\n", strerror(errno));
 		return(-1);
 	}
 #endif
 
 	log_(NORM, "Local addresses: ");
-	
+
 	/* receiving loop 1
 	 * call recvmsg() repeatedly until we get a message
 	 * with the NLMSG_DONE flag set
@@ -229,15 +234,15 @@ int get_my_addresses()
 #ifndef USE_LINUX_NETLINK
 		/* note that this will block forever if no response */
 #ifdef __WIN32__
-		if ((status = recv(s_net, buf, sizeof(buf), 0))< 0) {
+		if ((status = recv(s_net, buf, sizeof(buf), 0)) < 0) {
 #else
-		if ((status = read(s_net, buf, sizeof(buf)))< 0) {
+		if ((status = read(s_net, buf, sizeof(buf))) < 0) {
 #endif /* __WIN32__ */
 #else
 		if ((status = recvmsg(s_net, &msg, 0)) < 0) {
 #endif /* USE_LINUX_NETLINK */
 			log_(WARN, "Netlink: recvmsg() error!\nerror: %s\n",
-			    strerror(errno));
+			     strerror(errno));
 			return(-1);
 		}
 
@@ -248,7 +253,7 @@ int get_my_addresses()
 		while (NLMSG_OK(h, (__u32)status)) {
 			int len;
 			struct ifaddrmsg *ifa;
-			struct rtattr *rta, *tb[IFA_MAX+1];
+			struct rtattr *rta, *tb[IFA_MAX + 1];
 
 			memset(tb, 0, sizeof(tb));
 			/* exit this loop on end or error
@@ -274,42 +279,48 @@ int get_my_addresses()
 			/* parse list of attributes into table
 			 * (same as parse_rtattr()) */
 			while (RTA_OK(rta, len)) {
-				if (rta->rta_type <= IFA_MAX)
+				if (rta->rta_type <= IFA_MAX) {
 					tb[rta->rta_type] = rta;
+				}
 				rta = RTA_NEXT(rta,len);
 			}
 			/* fix tb entry for inet6 */
-			if (!tb[IFA_LOCAL]) 
+			if (!tb[IFA_LOCAL]) {
 				tb[IFA_LOCAL] = tb[IFA_ADDRESS];
-			if (!tb[IFA_ADDRESS])
+			}
+			if (!tb[IFA_ADDRESS]) {
 				tb[IFA_ADDRESS] = tb[IFA_LOCAL];
+			}
 
 			/* save the addresses we care about */
 			if (tb[IFA_LOCAL]) {
 				addr->sa_family = ifa->ifa_family;
 				memcpy(SA2IP(addr), RTA_DATA(tb[IFA_LOCAL]),
-				    RTA_PAYLOAD(tb[IFA_LOCAL]));
+				       RTA_PAYLOAD(tb[IFA_LOCAL]));
 				la = add_address_to_list(&my_addr_head, addr,
-				    ifa->ifa_index);
+				                         ifa->ifa_index);
 				la->status = ACTIVE;
 				log_(NORM, "(%d)%s ", ifa->ifa_index,
-				    logaddr(addr));
+				     logaddr(addr));
 			}
 			h = NLMSG_NEXT(h, status);
 		} /* end while(NLMSG_OK) - loop 2 */
-	} /* end while(!done) - loop 1 */ 
-	
+	} /* end while(!done) - loop 1 */
+
 	/* in Windows, we have no mechanism yet for reading IPv6 addrs
-	 * for now, get local IPv6 addresses from my_host_identities file 
+	 * for now, get local IPv6 addresses from my_host_identities file
 	 */
-	for (hi = my_hi_head; hi; hi=hi->next) {
-		for (l = &hi->addrs; l; l=l->next) {
+	for (hi = my_hi_head; hi; hi = hi->next) {
+		for (l = &hi->addrs; l; l = l->next) {
 			if (l->addr.ss_family == AF_INET6) {
-				la = add_address_to_list(&my_addr_head, 
-						(struct sockaddr*)&l->addr, 0);
+				la = add_address_to_list(
+				        &my_addr_head,
+				        (struct sockaddr*)&l->
+				        addr,
+				        0);
 				la->status = ACTIVE;
 				log_(NORM, "(0)%s ",
-				    logaddr((struct sockaddr*)&l->addr));
+				     logaddr((struct sockaddr*)&l->addr));
 			}
 		}
 	}
@@ -346,99 +357,109 @@ int select_preferred_address()
 	CHAR szAddr[64];
 
 	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, REG_INTERFACES_KEY, 0,
-			 KEY_READ, &key)) {
+	                 KEY_READ, &key)) {
 		log_(WARN, "Unable to read interfaces from registry\n");
 		return(-1);
 	}
 
 	preferred_selected = FALSE;
 
-	for(i=0; ; i++) { /* for each device */
+	for(i = 0;; i++) { /* for each device */
 		len = sizeof(devid);
 		if (RegEnumKeyEx(key, i, devid, &len, 0, 0, 0, NULL)) {
 			/* RegCloseKey(key); key is closed later */
 			break;
 		}
 		sprintf(path, "%s\\%s", REG_INTERFACES_KEY, devid);
-		if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, path, 0, 
-				 KEY_READ, &key_if))
+		if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, path, 0,
+		                 KEY_READ, &key_if)) {
 			continue;
+		}
 
 		value = 0;
 		len = sizeof(value);
-		if (RegQueryValueEx(key_if, "EnableDHCP", 0, &type, 
-				    (LPBYTE)&value, &len)) {
+		if (RegQueryValueEx(key_if, "EnableDHCP", 0, &type,
+		                    (LPBYTE)&value, &len)) {
 			RegCloseKey(key_if);
 			continue;
 		}
-		
-		if (value == 1)
+
+		if (value == 1) {
 			sprintf(path, "DhcpIpAddress");
-		else
+		}
+		else {
 			sprintf(path, "IpAddress");
+		}
 
 		len = sizeof(szAddr);
-		if (RegQueryValueEx(key_if, path, 0, &type, 
-			    (LPBYTE)&szAddr, &len)) {
+		if (RegQueryValueEx(key_if, path, 0, &type,
+		                    (LPBYTE)&szAddr, &len)) {
 			RegCloseKey(key_if);
 			continue;
 		}
-		if (strncmp(szAddr, "0.0.0.0", 7)==0) {
+		if (strncmp(szAddr, "0.0.0.0", 7) == 0) {
 			RegCloseKey(key_if);
 			continue;
 		}
-		if (strncmp(szAddr, "169.254", 7)==0) {
+		if (strncmp(szAddr, "169.254", 7) == 0) {
 			RegCloseKey(key_if);
 			continue;
 		}
 		memset(addr, 0, sizeof(struct sockaddr_storage));
-		addr->sa_family = AF_INET; 
+		addr->sa_family = AF_INET;
 		str_to_addr(szAddr, addr);
 		/* check and skip any ignored address from conf file */
 		if (HCNF.ignored_addr.ss_family &&
 		    (addr->sa_family == HCNF.ignored_addr.ss_family) &&
-		    (memcmp(SA2IP(addr), SA2IP(&HCNF.ignored_addr), 
-			    SAIPLEN(addr))==0)) {
+		    (memcmp(SA2IP(addr), SA2IP(&HCNF.ignored_addr),
+		            SAIPLEN(addr)) == 0)) {
 			continue;
 		}
 		/* check for preferred address from conf file */
 		if (HCNF.preferred.ss_family &&
 		    (addr->sa_family == HCNF.preferred.ss_family) &&
-		    (memcmp(SA2IP(addr), SA2IP(&HCNF.preferred), 
-			    SAIPLEN(addr))==0)) {
-			preferred_selected=set_preferred_address_in_list(addr);
-			if (preferred_selected)
+		    (memcmp(SA2IP(addr), SA2IP(&HCNF.preferred),
+		            SAIPLEN(addr)) == 0)) {
+			preferred_selected = set_preferred_address_in_list(addr);
+			if (preferred_selected) {
 				break;
+			}
 		}
 		/* this eliminates addresses from disconnected interfaces */
-		if (!is_my_address(addr))
+		if (!is_my_address(addr)) {
 			continue;
+		}
 		/* formerly was used to populate my_addr_head: */
 		/* add_address_to_list(&my_addr_head, addr, i+1); */
-		if (value==1)
+		if (value == 1) {
 			sprintf(path, "DhcpDefaultGateway");
-		else
+		}
+		else {
 			sprintf(path, "DefaultGateway");
+		}
 		len = sizeof(szAddr);
 		mark_preferred = 0;
 		/* check for preferred from conf file */
-		if (HCNF.preferred.ss_family && 
+		if (HCNF.preferred.ss_family &&
 		    (addr->sa_family == HCNF.preferred.ss_family) &&
-		    (memcmp(SA2IP(addr), SA2IP(&HCNF.preferred), 
-			    SAIPLEN(addr))==0)) {
+		    (memcmp(SA2IP(addr), SA2IP(&HCNF.preferred),
+		            SAIPLEN(addr)) == 0)) {
 			mark_preferred = 1;
 
-		/* set preferred=TRUE if default gateway is present */
+			/* set preferred=TRUE if default gateway is present */
 		} else if (!RegQueryValueEx(key_if, path, 0, &type,
-			   (LPBYTE)&szAddr, &len) && (strlen(szAddr) > 0)) {
+		                            (LPBYTE)&szAddr,
+		                            &len) && (strlen(szAddr) > 0)) {
 			mark_preferred = 1;
 		}
 		RegCloseKey(key_if);
-		if (!mark_preferred)
+		if (!mark_preferred) {
 			continue;
+		}
 		preferred_selected = set_preferred_address_in_list(addr);
-		if (preferred_selected)
+		if (preferred_selected) {
 			break;
+		}
 	} /* for (i...) */
 	RegCloseKey(key);
 #else /* USE_LINUX_NETLINK */
@@ -446,90 +467,107 @@ int select_preferred_address()
 	/* XXX TODO: dump routing table and choose addr w/default route. */
 #ifdef HIP_VPLS
 	log_(NORM,"VPLS primary master interface = %s\n",
-		HCNF.master_interface);
+	     HCNF.master_interface);
 	log_(NORM,"VPLS secondary master interface = %s\n",
-		HCNF.master_interface2);
+	     HCNF.master_interface2);
 	ifindex1 = ifindex2 = -1;
-	if (HCNF.master_interface)
+	if (HCNF.master_interface) {
 		ifindex1 = if_nametoindex(HCNF.master_interface);
-	if (HCNF.master_interface2)
+	}
+	if (HCNF.master_interface2) {
 		ifindex2 = if_nametoindex(HCNF.master_interface2);
+	}
 #endif
 	preferred_selected = FALSE;
 #endif /* USE_LINUX_NELINK */
 	preferred_iface_index = -1;
-	if (HCNF.preferred_iface)
+	if (HCNF.preferred_iface) {
 		preferred_iface_index = devname_to_index(HCNF.preferred_iface,
-							 NULL);
+		                                         NULL);
+	}
 
 	/* first check for preferred from conf file */
 	if ((HCNF.preferred.ss_family) || (preferred_iface_index != -1)) {
-		for (l = my_addr_head; l; l=l->next) {
+		for (l = my_addr_head; l; l = l->next) {
 #ifdef HIP_VPLS
 			/* Not on primary master interface */
-			if (l->if_index != ifindex1)
+			if (l->if_index != ifindex1) {
 				continue;
+			}
 #endif
-		    /* check and skip any ignored address from conf file */
-		    if (HCNF.ignored_addr.ss_family &&
-			(l->addr.ss_family == HCNF.ignored_addr.ss_family) &&
-			(memcmp(SA2IP(&l->addr), SA2IP(&HCNF.ignored_addr), 
-			    SAIPLEN(&l->addr))==0)) {
+			/* check and skip any ignored address from conf file */
+			if (HCNF.ignored_addr.ss_family &&
+			    (l->addr.ss_family ==
+			     HCNF.ignored_addr.ss_family) &&
+			    (memcmp(SA2IP(&l->addr), SA2IP(&HCNF.ignored_addr),
+			            SAIPLEN(&l->addr)) == 0)) {
 				continue;
-		    }
-		    /* preferred address takes priority */
-		    if ((l->addr.ss_family==HCNF.preferred.ss_family) &&
-			(memcmp(SA2IP(&l->addr), SA2IP(&HCNF.preferred), 
-				SAIPLEN(&l->addr))==0)) {
-			l->preferred = TRUE;
-			log_(NORM, "%s selected as the", logaddr(SA(&l->addr)));
-			log_(NORM, " preferred address (conf).\n");
-			preferred_selected = TRUE;
-			break;
-		    /* preferred interface next priority */
-		    } else if ((preferred_iface_index > 0) && 
-				(preferred_iface_index == l->if_index)) {
-			if (l->addr.ss_family != AF_INET)
-				continue;
-			if (IN_LOOP(&l->addr))
-				continue;
-			ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
-			if (IS_LSI32(ip))
-				continue;
-			l->preferred = TRUE;
-			log_(NORM, "%s selected as the", logaddr(SA(&l->addr)));
-			log_(NORM, " preferred address (conf iface).\n");
-			preferred_selected = TRUE;
-			break;
-		    }
+			}
+			/* preferred address takes priority */
+			if ((l->addr.ss_family == HCNF.preferred.ss_family) &&
+			    (memcmp(SA2IP(&l->addr), SA2IP(&HCNF.preferred),
+			            SAIPLEN(&l->addr)) == 0)) {
+				l->preferred = TRUE;
+				log_(NORM, "%s selected as the",
+				     logaddr(SA(&l->addr)));
+				log_(NORM, " preferred address (conf).\n");
+				preferred_selected = TRUE;
+				break;
+				/* preferred interface next priority */
+			} else if ((preferred_iface_index > 0) &&
+			           (preferred_iface_index == l->if_index)) {
+				if (l->addr.ss_family != AF_INET) {
+					continue;
+				}
+				if (IN_LOOP(&l->addr)) {
+					continue;
+				}
+				ip =
+				        ((struct sockaddr_in*)&l->addr)->
+				        sin_addr.s_addr;
+				if (IS_LSI32(ip)) {
+					continue;
+				}
+				l->preferred = TRUE;
+				log_(NORM, "%s selected as the",
+				     logaddr(SA(&l->addr)));
+				log_(NORM, " preferred address (conf iface).\n");
+				preferred_selected = TRUE;
+				break;
+			}
 		}
 	}
 	/* when a preferred address has not been found yet, choose
 	 * the first IPv4 address that is not a loopback address
 	 */
 	if (!preferred_selected) {
-		for (l = my_addr_head; l; l=l->next) {
+		for (l = my_addr_head; l; l = l->next) {
 			/* apply few criteria and pick first address */
-			if (l->addr.ss_family != AF_INET)
+			if (l->addr.ss_family != AF_INET) {
 				continue;
-			if (IN_LOOP(&l->addr))
+			}
+			if (IN_LOOP(&l->addr)) {
 				continue;
+			}
 #ifdef HIP_VPLS
 			/* Not on primary master interface */
-			if (l->if_index != ifindex1)
+			if (l->if_index != ifindex1) {
 				continue;
+			}
 #endif
 			/* check and skip any ignored address from conf file */
 			if (HCNF.ignored_addr.ss_family &&
-			  (l->addr.ss_family == HCNF.ignored_addr.ss_family) &&
-			  (memcmp(SA2IP(&l->addr), SA2IP(&HCNF.ignored_addr), 
-			    SAIPLEN(&l->addr))==0)) {
+			    (l->addr.ss_family ==
+			     HCNF.ignored_addr.ss_family) &&
+			    (memcmp(SA2IP(&l->addr), SA2IP(&HCNF.ignored_addr),
+			            SAIPLEN(&l->addr)) == 0)) {
 				continue;
-		        }
+			}
 			ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
 			/* LSI or autoconf addr */
-			if ((IS_LSI32(ip)) || ((ip & 0xFFFF) == 0xFEA9))
+			if ((IS_LSI32(ip)) || ((ip & 0xFFFF) == 0xFEA9)) {
 				continue;
+			}
 			l->preferred = TRUE;
 			log_(NORM, "%s selected as the ",logaddr(SA(&l->addr)));
 			log_(NORM, "preferred address (first in list).\n");
@@ -540,21 +578,25 @@ int select_preferred_address()
 #ifdef HIP_VPLS
 	/* Did not find an address on the primary master interface */
 	if (!preferred_selected && !l) {
-		for (l = my_addr_head; l; l=l->next) {
+		for (l = my_addr_head; l; l = l->next) {
 			/* apply few criteria */
-			if (l->addr.ss_family != AF_INET)
+			if (l->addr.ss_family != AF_INET) {
 				continue;
-			if (IN_LOOP(&l->addr))
+			}
+			if (IN_LOOP(&l->addr)) {
 				continue;
+			}
 
 			/* Not on secondary master interface */
-			if (l->if_index != ifindex2)
+			if (l->if_index != ifindex2) {
 				continue;
+			}
 
 			ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
 			/* LSI or autoconf addr */
-			if ((IS_LSI32(ip)) || ((ip & 0xFFFF) == 0xFEA9))
+			if ((IS_LSI32(ip)) || ((ip & 0xFFFF) == 0xFEA9)) {
 				continue;
+			}
 			l->preferred = TRUE;
 			log_(NORM, "%s selected as the ",logaddr(SA(&l->addr)));
 			log_(NORM, "preferred address (first in list).\n");
@@ -562,29 +604,32 @@ int select_preferred_address()
 		}
 	}
 	/* Publish IP of master interface */
-	if (l)
+	if (l) {
 		hipcfg_setUnderlayIpAddress(logaddr(SA(&l->addr)));
+	}
 #endif
 
 	return(0);
 }
 
-int set_preferred_address_in_list(struct sockaddr *addr) 
+int set_preferred_address_in_list(struct sockaddr *addr)
 {
 	sockaddr_list *l;
 	__u32 ip;
 
-	for (l = my_addr_head; l; l=l->next) {
-		if (addr->sa_family != l->addr.ss_family)
+	for (l = my_addr_head; l; l = l->next) {
+		if (addr->sa_family != l->addr.ss_family) {
 			continue;
-	        ip = ((struct sockaddr_in*) &l->addr)->sin_addr.s_addr;
+		}
+		ip = ((struct sockaddr_in*) &l->addr)->sin_addr.s_addr;
 		if ((addr->sa_family == AF_INET) &&
-		    (IN_LOOP(&l->addr) || (IS_LSI32(ip))))
+		    (IN_LOOP(&l->addr) || (IS_LSI32(ip)))) {
 			continue;
-		if (memcmp(SA2IP(&l->addr), SA2IP(addr), SAIPLEN(addr))==0) {
+		}
+		if (memcmp(SA2IP(&l->addr), SA2IP(addr), SAIPLEN(addr)) == 0) {
 			l->preferred = TRUE;
 			log_(NORM, "%s selected as the preferred address.\n",
-				logaddr(addr));
+			     logaddr(addr));
 			return(TRUE);
 		}
 	} /* for (l...) */
@@ -592,18 +637,17 @@ int set_preferred_address_in_list(struct sockaddr *addr)
 	return(FALSE);
 }
 
-
 /*
  * function add_address_to_iface()
  *
  * in:		addr = address
- * 		plen = prefix length, the length of the address mask
+ *              plen = prefix length, the length of the address mask
  *		dev = name of the device
  * Add an address to an interface.
  */
 int add_address_to_iface(struct sockaddr *addr, int plen, int if_index)
 {
-	int err=0;
+	int err = 0;
 #ifdef USE_LINUX_NETLINK
 	struct sockaddr_nl nladdr;
 	struct sockaddr_storage ss_addr;
@@ -614,7 +658,7 @@ int add_address_to_iface(struct sockaddr *addr, int plen, int if_index)
 
 	/* netlink packet */
 	struct {
-		struct nlmsghdr	n;
+		struct nlmsghdr n;
 		struct ifaddrmsg a;
 		char buf[512];
 	} req;
@@ -624,14 +668,14 @@ int add_address_to_iface(struct sockaddr *addr, int plen, int if_index)
 	memset(&req, 0, len);
 	req.n.nlmsg_len = len;
 	req.n.nlmsg_type = RTM_NEWADDR;
-	req.n.nlmsg_flags = NLM_F_REQUEST;//NLM_F_ROOT|NLM_F_MATCH
+	req.n.nlmsg_flags = NLM_F_REQUEST; /* NLM_F_ROOT|NLM_F_MATCH */
 	req.n.nlmsg_pid = 0;
 	req.n.nlmsg_seq = ++nl_sequence_number;
 	req.a.ifa_family = addr->sa_family;
 	req.a.ifa_prefixlen = plen;
 	req.a.ifa_flags = 0;
-	req.a.ifa_scope = (addr->sa_family == AF_INET) ? RT_SCOPE_HOST : 
-							 RT_SCOPE_UNIVERSE;
+	req.a.ifa_scope = (addr->sa_family == AF_INET) ? RT_SCOPE_HOST :
+	                  RT_SCOPE_UNIVERSE;
 	req.a.ifa_index = if_index;
 
 	rta = IFA_RTA(&req.a);
@@ -645,16 +689,16 @@ int add_address_to_iface(struct sockaddr *addr, int plen, int if_index)
 	memcpy(RTA_DATA(rta), SA2IP(addr), SAIPLEN(addr));
 
 	log_(NORM, "Adding address %s to interface %d.\n",
-		logaddr(addr), if_index);
+	     logaddr(addr), if_index);
 	/* add broadcast address only for IPv4 */
 	if (addr->sa_family == AF_INET) {
 		/* create the broadcast address */
 		brd_addr->sa_family = AF_INET;
-		brd_ip =ntohl(((struct sockaddr_in*)addr)->sin_addr.s_addr);
+		brd_ip = ntohl(((struct sockaddr_in*)addr)->sin_addr.s_addr);
 		mask = 0xFFFFFFFFL;
 		mask = mask >> plen;
 		brd_ip |= mask;
-		((struct sockaddr_in*)brd_addr)->sin_addr.s_addr =htonl(brd_ip);
+		((struct sockaddr_in*)brd_addr)->sin_addr.s_addr = htonl(brd_ip);
 
 		/* add it to the message */
 		rta = RTA_NEXT(rta, len);
@@ -666,8 +710,8 @@ int add_address_to_iface(struct sockaddr *addr, int plen, int if_index)
 	/* send request */
 	memset(&nladdr, 0, sizeof(nladdr));
 	nladdr.nl_family = AF_NETLINK;
-	if (sendto(s_net, (void*)&req, sizeof(req), 0, 
-		(struct sockaddr*)&nladdr,sizeof(nladdr)) < 0) {
+	if (sendto(s_net, (void*)&req, sizeof(req), 0,
+	           (struct sockaddr*)&nladdr,sizeof(nladdr)) < 0) {
 		log_(WARN, "Netlink: sentdo() error: %s\n", strerror(errno));
 		return(-1);
 	}
@@ -682,13 +726,13 @@ int add_address_to_iface(struct sockaddr *addr, int plen, int if_index)
  *
  * Uses ioctl(), not rtnetlink, just like ip command.
  * equivalent of:
- * 	"/sbin/ip link set hip0 mtu 1400"
- * 	"/sbin/ip link set hip0 up"
+ *      "/sbin/ip link set hip0 mtu 1400"
+ *      "/sbin/ip link set hip0 up"
  * (see iproute2 source file ip/iplink.c)
  */
 int set_link_params(char *dev, int mtu)
 {
-	int err=0;
+	int err = 0;
 #ifdef USE_LINUX_NETLINK
 	int fd;
 	struct ifreq ifr;
@@ -696,7 +740,7 @@ int set_link_params(char *dev, int mtu)
 
 	if ((fd = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
 		log_(WARN, "set_link_up(): socket error: %s\n",
-			strerror(errno));
+		     strerror(errno));
 		return(-1);
 	}
 
@@ -704,14 +748,14 @@ int set_link_params(char *dev, int mtu)
 	memset(&ifr, 0, sizeof(ifr));
 	strncpy(ifr.ifr_name, dev, IFNAMSIZ);
 	ifr.ifr_mtu = mtu;
-	
+
 	err = ioctl(fd, SIOCSIFMTU, &ifr);
 	if (err) {
 		log_(WARN, "set_link_params(): SIOCSIFMTU error: %s\n",
-			strerror(errno));
+		     strerror(errno));
 		/* non-fatal error */
 	}
-	
+
 	/* set link to UP */
 	memset(&ifr, 0, sizeof(ifr));
 	strncpy(ifr.ifr_name, dev, IFNAMSIZ);
@@ -719,21 +763,22 @@ int set_link_params(char *dev, int mtu)
 	err = ioctl(fd, SIOCGIFFLAGS, &ifr); /* get flags */
 	if (err) {
 		log_(WARN, "set_link_up(): SIOCGIFFLAGS error: %s\n",
-			strerror(errno));
+		     strerror(errno));
 		close(fd);
 		return(-1);
 	}
 
 	flags = mask = IFF_UP;
-	if ((ifr.ifr_flags^flags)&mask) { /* modify flags */
+	if ((ifr.ifr_flags ^ flags) & mask) { /* modify flags */
 		ifr.ifr_flags &= ~mask;
-		ifr.ifr_flags |= mask&flags;
+		ifr.ifr_flags |= mask & flags;
 		err = ioctl(fd, SIOCSIFFLAGS, &ifr);
-		if (err)
+		if (err) {
 			log_(WARN, "set_link_up(): SIOCSIFFLAGS error: %s\n",
-				strerror(errno));
+			     strerror(errno));
+		}
 	}
-	
+
 	close(fd);
 #endif
 	return(err);
@@ -771,19 +816,19 @@ int devname_to_index(char *dev, __u64 *mac)
 	/* send a link dump message */
 	req.n.nlmsg_len = sizeof(req);
 	req.n.nlmsg_type = RTM_GETLINK;
-	req.n.nlmsg_flags = NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST;
+	req.n.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
 	req.n.nlmsg_pid = 0;
 	req.n.nlmsg_seq = ++nl_sequence_number;
 	req.g.rtgen_family = AF_UNSPEC;
 
 	memset(&nladdr, 0, sizeof(nladdr));
 	nladdr.nl_family = AF_NETLINK;
-	if (sendto(s_net, (void*)&req, sizeof(req), 0, 
-		(struct sockaddr*)&nladdr,sizeof(nladdr)) < 0) {
+	if (sendto(s_net, (void*)&req, sizeof(req), 0,
+	           (struct sockaddr*)&nladdr,sizeof(nladdr)) < 0) {
 		log_(WARN, "Netlink: sentdo() error: %s\n", strerror(errno));
 		return(-1);
 	}
-	
+
 	/* receiving loop 1
 	 * call recvmsg() repeatedly until we get a message
 	 * with the NLMSG_DONE flag set
@@ -792,7 +837,7 @@ int devname_to_index(char *dev, __u64 *mac)
 	while(!done) {
 		if ((status = recvmsg(s_net, &msg, 0)) < 0) {
 			log_(WARN, "Netlink: recvmsg() error!\nerror: %s\n",
-			    strerror(errno));
+			     strerror(errno));
 			return(-1);
 		}
 
@@ -803,7 +848,7 @@ int devname_to_index(char *dev, __u64 *mac)
 		while (NLMSG_OK(h, status)) {
 			int len;
 			struct ifinfomsg *ifi;
-			struct rtattr *rta, *tb[IFLA_MAX+1];
+			struct rtattr *rta, *tb[IFLA_MAX + 1];
 
 			memset(tb, 0, sizeof(tb));
 			/* exit this loop on end or error
@@ -823,8 +868,9 @@ int devname_to_index(char *dev, __u64 *mac)
 			/* parse list of attributes into table
 			 * (same as parse_rtattr()) */
 			while (RTA_OK(rta, len)) {
-				if (rta->rta_type <= IFLA_MAX)
+				if (rta->rta_type <= IFLA_MAX) {
 					tb[rta->rta_type] = rta;
+				}
 				rta = RTA_NEXT(rta,len);
 			}
 			/* Retrieve interface name and MAC address
@@ -833,15 +879,16 @@ int devname_to_index(char *dev, __u64 *mac)
 			if (RTA_DATA(tb[IFLA_IFNAME]) && tb[IFLA_ADDRESS] &&
 			    (strcmp(dev, RTA_DATA(tb[IFLA_IFNAME])) == 0)) {
 				len = RTA_PAYLOAD(tb[IFLA_ADDRESS]);
-				if (len > 8) len = 8;
-				if (mac)
+				if (len > 8) { len = 8; }
+				if (mac) {
 					memcpy(mac, RTA_DATA(tb[IFLA_ADDRESS]),
-						len);
+					       len);
+				}
 				ifindex = (ifi->ifi_index);
 			}
 			h = NLMSG_NEXT(h, status);
 		} /* end while(NLMSG_OK) - loop 2 */
-	} /* end while(!done) - loop 1 */ 
+	} /* end while(!done) - loop 1 */
 
 	/* no match on dev name */
 #endif
@@ -856,7 +903,7 @@ int devname_to_index(char *dev, __u64 *mac)
  */
 int read_netlink_response()
 {
-	int err=0;
+	int err = 0;
 #ifdef USE_LINUX_NETLINK
 	struct sockaddr_nl nladdr;
 	struct nlmsghdr *h;
@@ -879,7 +926,7 @@ int read_netlink_response()
 	while (!done) {
 		if ((status = recvmsg(s_net, &msg, 0)) < 0) {
 			log_(WARN, "Netlink: recvmsg() error!\nerror: %s\n",
-			    strerror(errno));
+			     strerror(errno));
 			return(-1);
 		}
 
@@ -891,12 +938,13 @@ int read_netlink_response()
 			/* exit this loop on end or error
 			 */
 			if ((h->nlmsg_flags & NLM_F_MULTI) &&
-			    h->nlmsg_type == NLMSG_DONE) {
+			    (h->nlmsg_type == NLMSG_DONE)) {
 				done = TRUE;
 				break;
 			}
 			if (!(h->nlmsg_flags & NLM_F_MULTI) &&
-			    h->nlmsg_type == RTM_NEWADDR) { /* add types here */
+			    (h->nlmsg_type == RTM_NEWADDR)) { /* add types here
+				                               **/
 				done = TRUE;
 				break;
 			}
@@ -910,7 +958,7 @@ int read_netlink_response()
 			 */
 			h = NLMSG_NEXT(h, status);
 		} /* end while(NLMSG_OK) - loop 2 */
-	} /* end while(!done) - loop 1 */ 
+	} /* end while(!done) - loop 1 */
 
 #endif
 	return(err);
@@ -925,20 +973,21 @@ int read_netlink_response()
  * Make a sockaddr and add it to a list.
  */
 sockaddr_list *add_address_to_list(sockaddr_list **list, struct sockaddr *addr,
-    int ifi)
+                                   int ifi)
 {
 	sockaddr_list *item, *new_item, *last_item;
 
 	/* make a new sockaddr_list element */
 	new_item = (sockaddr_list*) malloc(sizeof(sockaddr_list));
-	if (!new_item)
-		return NULL;
+	if (!new_item) {
+		return(NULL);
+	}
 	memset(new_item, 0, sizeof(sockaddr_list));
 	memcpy(&new_item->addr, addr, SALEN(addr));
 	new_item->if_index = ifi;
 	new_item->status = UNVERIFIED;
 	new_item->next = NULL;
-	
+
 	/* append element to list */
 	if (*list) {
 		for(item = *list; item; item = item->next) {
@@ -946,7 +995,8 @@ sockaddr_list *add_address_to_list(sockaddr_list **list, struct sockaddr *addr,
 			if ((item->if_index == new_item->if_index) &&
 			    (item->addr.ss_family == new_item->addr.ss_family)
 			    && (!memcmp(SA2IP(&item->addr),
-				 SA2IP(&new_item->addr), SAIPLEN(addr)))) {
+			                SA2IP(&new_item->addr),
+			                SAIPLEN(addr)))) {
 				free(new_item);
 				return(item);
 			}
@@ -966,13 +1016,14 @@ sockaddr_list *add_address_to_list(sockaddr_list **list, struct sockaddr *addr,
  * with if_index (when len==0).
  */
 void delete_address_from_list(sockaddr_list **list, struct sockaddr *addr,
-    int ifi)
+                              int ifi)
 {
 	sockaddr_list *item, *prev;
 	int remove;
 
-	if (!*list) /* no list */
+	if (!*list) { /* no list */
 		return;
+	}
 
 	remove = FALSE;
 	prev = NULL;
@@ -980,13 +1031,14 @@ void delete_address_from_list(sockaddr_list **list, struct sockaddr *addr,
 	while (item) {
 		/* remove from list if if_index matches */
 		if (!addr) {
-			if (item->if_index == ifi)
+			if (item->if_index == ifi) {
 				remove = TRUE;
-		/* remove from list if address matches */
+			}
+			/* remove from list if address matches */
 		} else {
 			if ((item->addr.ss_family == addr->sa_family) &&
 			    (memcmp(SA2IP(&item->addr), SA2IP(addr),
-				    SAIPLEN(addr))==0)) {
+			            SAIPLEN(addr)) == 0)) {
 				/* address match */
 				remove = TRUE;
 			}
@@ -1009,14 +1061,14 @@ void delete_address_from_list(sockaddr_list **list, struct sockaddr *addr,
 	}
 }
 
-
 void delete_address_entry_from_list(sockaddr_list **list, sockaddr_list *entry)
 {
 	sockaddr_list *item, *prev;
 
-	if (!*list) /* no list */
+	if (!*list) { /* no list */
 		return;
-	
+	}
+
 	prev = NULL;
 	item = *list;
 	while (item) {
@@ -1042,31 +1094,32 @@ void delete_address_entry_from_list(sockaddr_list **list, sockaddr_list *entry)
 /*
  * function is_my_address()
  *
- * Returns the interface index if supplied address is found in my_addr_head, 
+ * Returns the interface index if supplied address is found in my_addr_head,
  * FALSE (0) otherwise. (The interface index is never zero.)
  */
 int is_my_address(struct sockaddr *addr)
 {
 	sockaddr_list *l;
 
-	for (l = my_addr_head; l; l=l->next) {
-		if (addr->sa_family != l->addr.ss_family)
+	for (l = my_addr_head; l; l = l->next) {
+		if (addr->sa_family != l->addr.ss_family) {
 			continue;
-		if (memcmp(SA2IP(&l->addr), SA2IP(addr), SAIPLEN(addr))==0) {
+		}
+		if (memcmp(SA2IP(&l->addr), SA2IP(addr), SAIPLEN(addr)) == 0) {
 			/* address match */
 			return(l->if_index);
 		}
 	}
-	return FALSE;
+	return(FALSE);
 }
 
 void print_addr_list(sockaddr_list *list)
 {
 	sockaddr_list *l;
 	log_(NORM, "Address list: [");
-	for (l = list; l; l=l->next) {
+	for (l = list; l; l = l->next) {
 		log_(NORM, "(%d)%s, ", l->if_index,
-		    logaddr((struct sockaddr*)&l->addr));
+		     logaddr((struct sockaddr*)&l->addr));
 	}
 	log_(NORM, "]\n");
 }
@@ -1083,12 +1136,12 @@ int hip_handle_netlink(char *data, int length)
 	struct nlmsghdr *msg;
 	struct ifinfomsg *ifinfo; /* link layer specific message */
 	struct ifaddrmsg *ifa; /* interface address message */
-	struct rtattr *rta, *tb[IFA_MAX+1];
+	struct rtattr *rta, *tb[IFA_MAX + 1];
 	int len, is_add, retval = 0;
 	struct sockaddr_storage ss_addr;
 	struct sockaddr *addr;
 	sockaddr_list *l;
-	
+
 	addr = (struct sockaddr*) &ss_addr;
 
 	for (msg = (struct nlmsghdr*)data; NLMSG_OK(msg, (__u32)length);
@@ -1100,7 +1153,7 @@ int hip_handle_netlink(char *data, int length)
 		case RTM_DELLINK:
 			ifinfo = (struct ifinfomsg*)NLMSG_DATA(msg);
 			delete_address_from_list(&my_addr_head, NULL,
-			    ifinfo->ifi_index);
+			                         ifinfo->ifi_index);
 			break;
 		/* Add or delete address from my_addr_head */
 		case RTM_NEWADDR:
@@ -1109,47 +1162,58 @@ int hip_handle_netlink(char *data, int length)
 			rta = IFA_RTA(ifa);
 			len = msg->nlmsg_len - NLMSG_LENGTH(sizeof(*ifa));
 			if ((ifa->ifa_family != AF_INET) &&
-			    (ifa->ifa_family != AF_INET6))
+			    (ifa->ifa_family != AF_INET6)) {
 				break;
+			}
 
 			memset(tb, 0, sizeof(tb));
 			memset(addr, 0, sizeof(struct sockaddr_storage));
-			is_add = (msg->nlmsg_type==RTM_NEWADDR);
-			
+			is_add = (msg->nlmsg_type == RTM_NEWADDR);
+
 			/* parse list of attributes into table
 			 * (same as parse_rtattr()) */
 			while (RTA_OK(rta, len)) {
-				if (rta->rta_type <= IFA_MAX)
+				if (rta->rta_type <= IFA_MAX) {
 					tb[rta->rta_type] = rta;
+				}
 				rta = RTA_NEXT(rta,len);
 			}
 			/* fix tb entry for inet6 */
-			if (!tb[IFA_LOCAL]) 
+			if (!tb[IFA_LOCAL]) {
 				tb[IFA_LOCAL] = tb[IFA_ADDRESS];
-			if (!tb[IFA_ADDRESS])
+			}
+			if (!tb[IFA_ADDRESS]) {
 				tb[IFA_ADDRESS] = tb[IFA_LOCAL];
+			}
 
-			if (!tb[IFA_LOCAL])
+			if (!tb[IFA_LOCAL]) {
 				break;
+			}
 			addr->sa_family = ifa->ifa_family;
-			memcpy(	SA2IP(addr), RTA_DATA(tb[IFA_LOCAL]),
-				RTA_PAYLOAD(tb[IFA_LOCAL]) );
+			memcpy( SA2IP(addr), RTA_DATA(tb[IFA_LOCAL]),
+			        RTA_PAYLOAD(tb[IFA_LOCAL]));
 
 			if ((addr->sa_family == AF_INET6) &&
 			    (IN6_IS_ADDR_LINKLOCAL(SA2IP6(addr)) ||
 			     IN6_IS_ADDR_SITELOCAL(SA2IP6(addr)) ||
-			     IN6_IS_ADDR_MULTICAST(SA2IP6(addr))))
+			     IN6_IS_ADDR_MULTICAST(SA2IP6(addr)))) {
 				break;
-			if (IS_LSI(addr))
+			}
+			if (IS_LSI(addr)) {
 				break;
+			}
 
-			log_(NORM, "Address %s: (%d)%s \n", (is_add) ? "added" :
-			    "deleted", ifa->ifa_index, logaddr(addr));
+			log_(NORM,
+			     "Address %s: (%d)%s \n",
+			     (is_add) ? "added" :
+			     "deleted",
+			     ifa->ifa_index,
+			     logaddr(addr));
 
 			/* update our global address list */
 			if (is_add) {
 				l = add_address_to_list(&my_addr_head, addr,
-							ifa->ifa_index);
+				                        ifa->ifa_index);
 				l->status = ACTIVE;
 				/* Need to select_preferred_address() and
 				 * publish_my_hits() here, but the address
@@ -1158,25 +1222,26 @@ int hip_handle_netlink(char *data, int length)
 				retval = 1;
 			} else {
 				delete_address_from_list(&my_addr_head, addr,
-				    ifa->ifa_index);
+				                         ifa->ifa_index);
 			}
 
 			/* update each SA, handle HIP readdressing */
 			handle_local_address_change(is_add, addr,
-						    ifa->ifa_index);
-			
+			                            ifa->ifa_index);
+
 			break;
 		default:
 			break;
 		}
 	}
-	return retval;
+	return(retval);
 }
+
 #endif /* !__MACOSX__ */
 
 /*
  * handle_local_address_change()
- * 
+ *
  * Handle adding/deleting addresses to/from HIP associations, performing
  * readdress when needed. (readdress occurs after a preferred has been deleted)
  */
@@ -1185,15 +1250,17 @@ void handle_local_address_change(int add, struct sockaddr *newaddr,int if_index)
 	int i;
 	hip_assoc *hip_a;
 
-	if (!VALID_FAM(newaddr))
+	if (!VALID_FAM(newaddr)) {
 		return;
+	}
 
 	/* add/delete on all */
-	for (i=0; i < max_hip_assoc; i++) {
+	for (i = 0; i < max_hip_assoc; i++) {
 		hip_a = &hip_assoc_table[i];
 		/* perform basic check of association */
-		if ((hip_a->state==0) || !hip_a->hi || !hip_a->peer_hi)
+		if ((hip_a->state == 0) || !hip_a->hi || !hip_a->peer_hi) {
 			continue;
+		}
 		/* add or delete from list in hip_a; both functions will check
 		 * if the address already exists */
 		if (add) {
@@ -1203,8 +1270,9 @@ void handle_local_address_change(int add, struct sockaddr *newaddr,int if_index)
 		}
 	}
 #ifdef MOBILE_ROUTER
-	if (OPT.mr)
+	if (OPT.mr) {
 		hip_mr_handle_address_change(add, newaddr, if_index);
+	}
 #endif
 }
 
@@ -1213,26 +1281,26 @@ void handle_local_address_change(int add, struct sockaddr *newaddr,int if_index)
  *
  * Perform readdressing tasks due to local address changes.
  */
-void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr, 
-    int if_index)
+void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
+                           int if_index)
 {
 	struct sockaddr *oldaddr = HIPA_SRC(hip_a);
 
 	log_(NORMT, "Readdressing association with %s (%s) from ",
-		hip_a->peer_hi->name, logaddr(HIPA_DST(hip_a)));
+	     hip_a->peer_hi->name, logaddr(HIPA_DST(hip_a)));
 	log_(NORM, "%s to ", logaddr(oldaddr));
 	log_(NORM, "%s.\n", logaddr(newaddr));
 	if (hip_a->state != ESTABLISHED) {
 		log_(NORMT, "NOT readdressing association since state=%d\n",
-			hip_a->state);
+		     hip_a->state);
 		return;
 	}
-	log_hipa_fromto(QOUT, "Update initiated (readdress)", 
-			hip_a, FALSE, TRUE);
+	log_hipa_fromto(QOUT, "Update initiated (readdress)",
+	                hip_a, FALSE, TRUE);
 
 	rebuild_sa(hip_a, newaddr, 0, FALSE, FALSE);
 	rebuild_sa(hip_a, newaddr, 0, TRUE, FALSE);
-	
+
 	/* replace the old preferred address */
 	memcpy(&hip_a->hi->addrs.addr, newaddr, SALEN(newaddr));
 	hip_a->hi->addrs.if_index = if_index;
@@ -1242,15 +1310,17 @@ void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
 
 	/* must send ESP_INFO with new UPDATE message */
 	if (!hip_a->rekey) {
-		if (build_rekey(hip_a) < 0)
+		if (build_rekey(hip_a) < 0) {
 			log_(WARN, "readdress_association() had problem buildi"
-				"ng a new rekey structure for ESP_INFO\n");
+			     "ng a new rekey structure for ESP_INFO\n");
+		}
 	}
 
 	/* inform peer of new preferred address */
-	if (hip_send_update(hip_a, newaddr, NULL, NULL) < 0)
+	if (hip_send_update(hip_a, newaddr, NULL, NULL) < 0) {
 		log_(WARN, "Problem sending UPDATE(REA) for %s!\n",
-		    logaddr(newaddr));
+		     logaddr(newaddr));
+	}
 }
 
 /*
@@ -1259,26 +1329,26 @@ void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
  * Perform readdressing tasks due to local address changes with change
  * in address family.
  */
-void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr, 
-    struct sockaddr *newdstaddr, int if_index)
+void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
+                              struct sockaddr *newdstaddr, int if_index)
 {
 	struct sockaddr *oldaddr = HIPA_SRC(hip_a);
 
 	log_(NORMT, "Readdressing association with %s (%s) from ",
-		hip_a->peer_hi->name, logaddr(HIPA_DST(hip_a)));
+	     hip_a->peer_hi->name, logaddr(HIPA_DST(hip_a)));
 	log_(NORM, "%s to ", logaddr(oldaddr));
 	log_(NORM, "%s.\n", logaddr(newsrcaddr));
 	if (hip_a->state != ESTABLISHED) {
 		log_(NORMT, "NOT readdressing association since state=%d\n",
-			hip_a->state);
+		     hip_a->state);
 		return;
 	}
-	log_hipa_fromto(QOUT, "Update initiated (readdress)", 
-			hip_a, FALSE, TRUE);
+	log_hipa_fromto(QOUT, "Update initiated (readdress)",
+	                hip_a, FALSE, TRUE);
 
 	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, FALSE);
 	rebuild_sa_x2(hip_a, newsrcaddr, newdstaddr, 0, TRUE);
-	
+
 	/* replace the old preferred address */
 	memcpy(&hip_a->hi->addrs.addr, newsrcaddr, SALEN(newsrcaddr));
 	hip_a->hi->addrs.if_index = if_index;
@@ -1289,24 +1359,27 @@ void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
 	/* Also with peer address? */
 	memcpy(&hip_a->peer_hi->addrs.addr, newdstaddr, SALEN(newdstaddr));
 	hip_a->peer_hi->addrs.if_index = if_index;
-	hip_a->peer_hi->addrs.lifetime = 0; /* XXX need to copy from somewhere? */
+	hip_a->peer_hi->addrs.lifetime = 0; /* XXX need to copy from somewhere?
+	                                     **/
 	hip_a->peer_hi->addrs.preferred = TRUE;
 	make_address_active(&hip_a->peer_hi->addrs);
 
 	/* must send ESP_INFO with new UPDATE message */
 	if (!hip_a->rekey) {
-		if (build_rekey(hip_a) < 0)
+		if (build_rekey(hip_a) < 0) {
 			log_(WARN, "readdress_association() had problem buildi"
-				"ng a new rekey structure for ESP_INFO\n");
+			     "ng a new rekey structure for ESP_INFO\n");
+		}
 	}
 
 	/* inform peer of new preferred address */
-	if (hip_send_update(hip_a, newsrcaddr, NULL, NULL) < 0)
+	if (hip_send_update(hip_a, newsrcaddr, NULL, NULL) < 0) {
 		log_(WARN, "Problem sending UPDATE(REA) for %s!\n",
-		    logaddr(newsrcaddr));
+		     logaddr(newsrcaddr));
+	}
 }
 
-/* 
+/*
  * association_add_address()
  *
  * An address has been added to this interface, so add it
@@ -1314,7 +1387,7 @@ void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
  * If the preferred address was deleted, make this the new
  * preferred address and perform readdressing procedures. */
 void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
-    int if_index)
+                             int if_index)
 {
 	sockaddr_list *list, *l;
 	struct sockaddr *oldaddr;
@@ -1322,15 +1395,15 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 	int ifindex1, ifindex2;
 #endif
 
-	/* 
+	/*
 	 * If preferred address is deleted, do readdress and replace it
 	 */
 	if (hip_a->hi->addrs.status == DELETED) {
 		oldaddr = HIPA_SRC(hip_a);
 		/* make sure ports are the same, for UDP encapsulation */
 		if (oldaddr->sa_family == AF_INET) {
-			((struct sockaddr_in*)newaddr)->sin_port = 
-				((struct sockaddr_in*)oldaddr)->sin_port;
+			((struct sockaddr_in*)newaddr)->sin_port =
+			        ((struct sockaddr_in*)oldaddr)->sin_port;
 			/* TODO: IPv6 UDP support here */
 		}
 		if (!memcmp(oldaddr, newaddr, SALEN(newaddr))) {
@@ -1340,15 +1413,16 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 		}
 		/* perform readdress */
 		readdress_association(hip_a, newaddr, if_index);
-	/* 
-	 * Add the new address to the end of the list (or unmark deleted status)
-	 */
+		/*
+		 * Add the new address to the end of the list (or unmark deleted
+		 *status)
+		 */
 	} else {
 		/* set UDP port, as we do in hip_handle_acquire() if UDP
 		 * encapsulation is enabled */
 		if (hip_a->udp) {
-			((struct sockaddr_in *)newaddr)->sin_port = 
-							htons(HIP_UDP_PORT);
+			((struct sockaddr_in *)newaddr)->sin_port =
+			        htons(HIP_UDP_PORT);
 			/* TODO: IPv6 UDP support here */
 		}
 		list = &hip_a->hi->addrs;
@@ -1356,114 +1430,133 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 		/* If the new address is on master_interface and it is not
 		 * the current interface, switch to the new address */
 		ifindex1 = ifindex2 = -1;
-		if (HCNF.master_interface)
+		if (HCNF.master_interface) {
 			ifindex1 = if_nametoindex(HCNF.master_interface);
-		if (HCNF.master_interface2)
+		}
+		if (HCNF.master_interface2) {
 			ifindex2 = if_nametoindex(HCNF.master_interface2);
-		if (if_index == ifindex1 && list->if_index == ifindex2) {
+		}
+		if ((if_index == ifindex1) && (list->if_index == ifindex2)) {
 			readdress_association(hip_a, newaddr, if_index);
 		} else {
 #endif
-			/* this function checks if the address already exists */
-			l = add_address_to_list(&list, newaddr, if_index);
-			make_address_active(l);
-			/* flag that extra address has not been sent to peer */
-			l->status = UNVERIFIED;
+		/* this function checks if the address already exists */
+		l = add_address_to_list(&list, newaddr, if_index);
+		make_address_active(l);
+		/* flag that extra address has not been sent to peer */
+		l->status = UNVERIFIED;
 #ifdef HIP_VPLS
-		}
+	}
 #endif
 	}
 }
 
-/* 
+/*
  * association_del_address()
  *
- * An address has been deleted from this interface, mark its status as DELETED. 
+ * An address has been deleted from this interface, mark its status as DELETED.
  * Try to perform readdressing if the preferred has been deleted.
  */
 void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
-    int if_index)
+                             int if_index)
 {
 	sockaddr_list *l, *deleted, *list, *new_af = NULL;
 
 	/* Search this hip_a address list for deleted */
 	list = &hip_a->hi->addrs;
-	for (l = list; l; l=l->next) {
-		if (newaddr->sa_family != l->addr.ss_family)
+	for (l = list; l; l = l->next) {
+		if (newaddr->sa_family != l->addr.ss_family) {
 			continue;
-		if (!memcmp(SA2IP(&l->addr), SA2IP(newaddr), SAIPLEN(&l->addr)))
+		}
+		if (!memcmp(SA2IP(&l->addr), SA2IP(newaddr),
+		            SAIPLEN(&l->addr))) {
 			break;
+		}
 	}
-	
-	if (!l) /* Deleted address not found, do nothing. */
+
+	if (!l) { /* Deleted address not found, do nothing. */
 		return;
+	}
 
 	/* Deleted address exists in this association. */
 	l->status = DELETED;
 	deleted = l;
-	if (deleted != list)  /* not the preferred address, exit */ 
+	if (deleted != list) { /* not the preferred address, exit */
 		return;
+	}
 	/* XXX inform peer via UPDATE? */
 
-	/* 
-	 * Preferred address has been deleted, 
+	/*
+	 * Preferred address has been deleted,
 	 * so switch to another address if possible.
 	 */
 	l = NULL;
-	for (l = list->next; l; l=l->next) { /* look for same family */
-		if (l->status == DELETED)
+	for (l = list->next; l; l = l->next) { /* look for same family */
+		if (l->status == DELETED) {
 			continue;
+		}
 		if (newaddr->sa_family != l->addr.ss_family) {
-			if (!new_af)
+			if (!new_af) {
 				new_af = l;
+			}
 			continue;
-		} else
+		} else {
 			break;
+		}
 	}
 	/* Switch to the next address in the list. */
 	if (l) {
 		readdress_association(hip_a, SA(&l->addr), l->if_index);
 		delete_address_entry_from_list(&list, l);
 		return;
-	/* No address with same address family in hip_a list. 
-	 * We need to look further in the system-wide my_addr_head
-	 * list, after select_preferred_address() is called...  */
+		/* No address with same address family in hip_a list.
+		 * We need to look further in the system-wide my_addr_head
+		 * list, after select_preferred_address() is called...  */
 	} else {
 		log_(NORM, "Selecting a new preferred address since none " \
-			   "available in association...\n");
+		     "available in association...\n");
 		select_preferred_address();
-		for (l = my_addr_head; l; l=l->next) {
+		for (l = my_addr_head; l; l = l->next) {
 			if (newaddr->sa_family != l->addr.ss_family) {
-				if (!new_af)
+				if (!new_af) {
 					new_af = l;
+				}
 				continue;
 			}
-			if (l->preferred) /* find the preferred */
+			if (l->preferred) { /* find the preferred */
 				break;
+			}
 		}
 		/* is the system-wide preferred address different? */
 		if (l && memcmp(SA2IP(&deleted->addr), SA2IP(&l->addr),
-			        SAIPLEN(&l->addr))) {
+		                SAIPLEN(&l->addr))) {
 			/* new preferred selected */
-			readdress_association(hip_a, SA(&l->addr), 
-					      l->if_index);
+			readdress_association(hip_a, SA(&l->addr),
+			                      l->if_index);
 			delete_address_entry_from_list(&list, l);
 		} else if (new_af) {
 			log_(NORMT, "Found new address family %s.\n",
-				    logaddr((struct sockaddr*)&new_af->addr));
-			for (l = &hip_a->peer_hi->addrs; l; l = l->next)
-				if (new_af->addr.ss_family == l->addr.ss_family)
+			     logaddr((struct sockaddr*)&new_af->addr));
+			for (l = &hip_a->peer_hi->addrs; l; l = l->next) {
+				if (new_af->addr.ss_family ==
+				    l->addr.ss_family) {
 					break;
-				if (l) {
-					log_(NORMT, "Found peer address of new address family %s.\n",
-						logaddr((struct sockaddr*)&l->addr));
-					readdress_association_x2(hip_a, SA(&new_af->addr), SA(&l->addr),
-						if_index);
-					delete_address_entry_from_list(&list, new_af);
 				}
+			}
+			if (l) {
+				log_(
+				        NORMT,
+				        "Found peer address of new address family %s.\n",
+				        logaddr((struct sockaddr*)&l->addr));
+				readdress_association_x2(hip_a,
+				                         SA(&new_af->addr),
+				                         SA(&l->addr),
+				                         if_index);
+				delete_address_entry_from_list(&list, new_af);
+			}
 		} else {
 			log_(NORMT, "Preferred address deleted, but could not" \
-				    " find a suitable replacement.\n");
+			     " find a suitable replacement.\n");
 		}
 	}
 
@@ -1474,8 +1567,9 @@ void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,
  */
 void make_address_active(sockaddr_list *item)
 {
-	if (!item)
+	if (!item) {
 		return;
+	}
 	item->status = ACTIVE;
 	gettimeofday(&item->creation_time, NULL);
 }
@@ -1483,22 +1577,27 @@ void make_address_active(sockaddr_list *item)
 /*
  * update the address of a peer in the peer_hi_head list
  */
-int update_peer_list_address(const hip_hit peer_hit, struct sockaddr *old_addr, struct sockaddr *new_addr)
+int update_peer_list_address(const hip_hit peer_hit,
+                             struct sockaddr *old_addr,
+                             struct sockaddr *new_addr)
 {
 	sockaddr_list *l;
 	hi_node *peer_hi = find_host_identity(peer_hi_head, peer_hit);
-	if (!peer_hi)
+	if (!peer_hi) {
 		return(-1);
-	if (!new_addr)
+	}
+	if (!new_addr) {
 		return(-1);
+	}
 
 	l = &peer_hi->addrs;
 	/* remove old address, if any specified */
-	if (old_addr) /* or should we just flag deleted? */
+	if (old_addr) { /* or should we just flag deleted? */
 		delete_address_from_list(&l, old_addr, 0);
+	}
 	/* add the new address */
 	l = add_address_to_list(&l, new_addr, 0);
-	return ( l ? 0 : -1 );
+	return (l ? 0 : -1);
 }
 
 /*
@@ -1513,8 +1612,9 @@ int add_other_addresses_to_hi(hi_node *hi, int mine)
 {
 	sockaddr_list *l, *tolist, *fromlist, *item;
 
-	if (hits_equal(hi->hit, zero_hit))
+	if (hits_equal(hi->hit, zero_hit)) {
 		return(-1);
+	}
 
 	/*
 	 * Determine to and from lists.
@@ -1533,31 +1633,36 @@ int add_other_addresses_to_hi(hi_node *hi, int mine)
 	}
 	tolist = &hi->addrs;
 
-	/* 
+	/*
 	 * Add non-local addresses to the address list.
 	 */
 	for (l = fromlist; l; l = l->next) {
-		if (IS_LSI(&l->addr))
+		if (IS_LSI(&l->addr)) {
 			continue;
+		}
 		/* skip local and multicast addresses */
 		if ((l->addr.ss_family == AF_INET6) &&
-			(IN6_IS_ADDR_LINKLOCAL(SA2IP6(&l->addr)) ||
-			 IN6_IS_ADDR_SITELOCAL(SA2IP6(&l->addr)) ||
-			 IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr)) ||
-			 IN6_IS_ADDR_LOOPBACK(SA2IP6(&l->addr)) ))
+		    (IN6_IS_ADDR_LINKLOCAL(SA2IP6(&l->addr)) ||
+		     IN6_IS_ADDR_SITELOCAL(SA2IP6(&l->addr)) ||
+		     IN6_IS_ADDR_MULTICAST(SA2IP6(&l->addr)) ||
+		     IN6_IS_ADDR_LOOPBACK(SA2IP6(&l->addr)))) {
 			continue;
+		}
 		if ((l->addr.ss_family == AF_INET) &&
-			(IN_LOOP(&l->addr)))
+		    (IN_LOOP(&l->addr))) {
 			continue;
+		}
 		/* if (l->if_index != tolist->if_index)
-			continue;
-		*/
-		if (mine)
+		 *       continue;
+		 */
+		if (mine) {
 			log_(NORM, "Adding address %s to association.\n",
-				logaddr(SA(&l->addr)));
+			     logaddr(SA(&l->addr)));
+		}
 		item = add_address_to_list(&tolist, SA(&l->addr), l->if_index);
-		if (mine && item) /* flag address has not been sent to peer */
+		if (mine && item) { /* flag address has not been sent to peer */
 			item->status = UNVERIFIED;
+		}
 	}
 	return(0);
 }
