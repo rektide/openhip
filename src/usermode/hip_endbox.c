@@ -222,7 +222,7 @@ int endbox_ipv4_packet_check(struct ip *iph, struct sockaddr *lsi,
 
 	if (!IN_MULTICAST(ntohl(iph->ip_dst.s_addr)) &&
 	    (((ntohl(iph->ip_dst.s_addr)) & 0x000000FF) != 0x000000FF)) {
-		if(!is_valid_packet(iph->ip_src.s_addr, iph->ip_dst.s_addr)) {
+		if (!is_valid_packet(iph->ip_src.s_addr, iph->ip_dst.s_addr)) {
 			return(-1);
 		}
 
@@ -231,13 +231,13 @@ int endbox_ipv4_packet_check(struct ip *iph, struct sockaddr *lsi,
 		legacy_host_p->sa_family = AF_INET;
 		LSI4(legacy_host_p) = iph->ip_dst.s_addr;
 		eb_p->sa_family = AF_INET;
-		if(!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)) {
+		if (!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)) {
 			lsi->sa_family = AF_INET;
 			LSI4(lsi) = ntohl(LSI4(eb_p));
 		}
 		(*packet_count)++;
 	} else {
-		if(!is_valid_packet(iph->ip_src.s_addr, 0)) {
+		if (!is_valid_packet(iph->ip_src.s_addr, 0)) {
 			return(-1);
 		}
 		(*packet_count)++;
@@ -259,7 +259,7 @@ int endbox_arp_packet_check(struct arp_hdr *arph, struct sockaddr *lsi,
 	    (ntohs(arph->ar_pro) == 0x0800) &&   /* IPv4 */
 	    (arph->ar_hln == 6) && (arph->ar_pln == 4)) {
 		arp_req = (struct arp_req_data*)(arph + 1);
-		if(!is_valid_packet(arp_req->src_ip, arp_req->dst_ip)) {
+		if (!is_valid_packet(arp_req->src_ip, arp_req->dst_ip)) {
 			return(-1);
 		}
 		legacy_host_p = SA(&legacy_host_ss);
@@ -267,7 +267,7 @@ int endbox_arp_packet_check(struct arp_hdr *arph, struct sockaddr *lsi,
 		legacy_host_p->sa_family = AF_INET;
 		LSI4(legacy_host_p) = arp_req->dst_ip;
 		eb_p->sa_family = AF_INET;
-		if(!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)) {
+		if (!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)) {
 			lsi->sa_family = AF_INET;
 			LSI4(lsi) = ntohl(LSI4(eb_p));
 		}

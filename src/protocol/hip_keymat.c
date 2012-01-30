@@ -257,7 +257,7 @@ int draw_keys(hip_assoc *hip_a, int draw_hip_keys, int keymat_index)
 	/* draw keys from the keymat */
 	for (; k < max; k++) {
 		/* decide what type/length of key to use */
-		switch(k) {
+		switch (k) {
 		case GL_HIP_ENCRYPTION_KEY:     /* ENCRYPTED payload keys */
 		case LG_HIP_ENCRYPTION_KEY:
 			key_type = hip_a->hip_transform;
@@ -393,7 +393,7 @@ int enc_iv_len(int suite_id)
 
 int transform_to_ealg(int transform)
 {
-	switch(transform) {
+	switch (transform) {
 	case ESP_AES_CBC_HMAC_SHA1:             /* AES-CBC enc */
 		return(SADB_X_EALG_AESCBC);
 	case ESP_3DES_CBC_HMAC_SHA1:            /* 3DES-CBC enc */
@@ -411,7 +411,7 @@ int transform_to_ealg(int transform)
 
 int transform_to_aalg(int transform)
 {
-	switch(transform) {
+	switch (transform) {
 	case ESP_AES_CBC_HMAC_SHA1:             /* HMAC-SHA1 auth */
 	case ESP_3DES_CBC_HMAC_SHA1:
 	case ESP_BLOWFISH_CBC_HMAC_SHA1:

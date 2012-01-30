@@ -1305,7 +1305,7 @@ parse_response_exit:
 char *hip_xmlrpc_resp_to_str(int code)
 {
 	static char ret[16];
-	switch(code) {
+	switch (code) {
 	case 0:
 		sprintf(ret, "success");
 		break;
@@ -1404,12 +1404,15 @@ void delete_address_from_list(sockaddr_list **list, struct sockaddr *addr,
 {
 	return;
 }
+
 void unuse_dh_entry(DH *dh) {
 	return;
 }
+
 int flush_hip_associations() {
 	return(0);
 }
+
 int g_state;
 
 int main(int argc, char **argv)

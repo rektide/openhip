@@ -339,7 +339,7 @@ int hip_sadb_add(__u32 mode, int direction,
 			 * While that could be done here, instead we decrease
 			 * the timeout of hip_esp_input so it is done later.
 			 * Otherwise, experience shows a race condition where
-			 * the first unbuffered packet arrives at the peer 
+			 * the first unbuffered packet arrives at the peer
 			 * before its SAs are built. */
 			g_read_usec = 200000;
 		}
@@ -522,7 +522,7 @@ int hip_sadb_delete_entry(hip_sadb_entry *entry, int unlink)
 void free_addr_list(sockaddr_list *a)
 {
 	sockaddr_list *a_next;
-	while(a) {
+	while (a) {
 		a_next = a->next;
 		free(a);
 		a = a_next;

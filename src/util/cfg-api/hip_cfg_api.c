@@ -50,14 +50,14 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 {
 	void *module;
 	module = dlopen(dlname, RTLD_NOW);
-	if(!module) {
+	if (!module) {
 		fprintf(stderr, "Open %s error: %s\n", dlname, dlerror());
 		return(-1);
 	}
 	printf("loading %s succeed.\n", dlname);
 
 	hipcfg_init_p = dlsym(module, hipcfg_init_fn);
-	if(hipcfg_init_p == NULL)
+	if (hipcfg_init_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",
@@ -68,7 +68,7 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 	printf("loading %s succeed.\n", hipcfg_init_fn);
 
 	hipcfg_close_p = dlsym(module, hipcfg_close_fn);
-	if(hipcfg_close_p == NULL)
+	if (hipcfg_close_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",
@@ -91,7 +91,7 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 	printf("loading %s succeed.\n", hipcfg_setUnderlayIpAddress_fn);
 
 	hipcfg_allowed_peers_p = dlsym(module, hipcfg_allowed_peers_fn);
-	if(hipcfg_allowed_peers_p == NULL)
+	if (hipcfg_allowed_peers_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",
@@ -102,7 +102,7 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 	printf("loading %s succeed.\n",  hipcfg_allowed_peers_fn);
 
 	hipcfg_peers_allowed_p = dlsym(module, hipcfg_peers_allowed_fn);
-	if(hipcfg_peers_allowed_p == NULL)
+	if (hipcfg_peers_allowed_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",
@@ -114,7 +114,7 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 
 	hipcfg_getEndboxByLegacyNode_p = dlsym(module,
 	                                       hipcfg_getEndboxByLegacyNode_fn);
-	if(hipcfg_getEndboxByLegacyNode_p == NULL)
+	if (hipcfg_getEndboxByLegacyNode_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",
@@ -125,7 +125,7 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 	printf("loading %s succeed.\n", hipcfg_getEndboxByLegacyNode_fn);
 
 	hipcfg_getLlipByEndbox_p = dlsym(module, hipcfg_getLlipByEndbox_fn);
-	if(hipcfg_getLlipByEndbox_p == NULL)
+	if (hipcfg_getLlipByEndbox_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",
@@ -138,7 +138,7 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 	hipcfg_getLegacyNodesByEndbox_p = dlsym(
 	        module,
 	        hipcfg_getLegacyNodesByEndbox_fn);
-	if(hipcfg_getLegacyNodesByEndbox_p == NULL)
+	if (hipcfg_getLegacyNodesByEndbox_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",
@@ -149,7 +149,7 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 	printf("loading %s succeed.\n", hipcfg_getLegacyNodesByEndbox_fn);
 
 	hipcfg_verifyCert_p = dlsym(module, hipcfg_verifyCert_fn);
-	if(hipcfg_verifyCert_p == NULL)
+	if (hipcfg_verifyCert_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",
@@ -159,7 +159,7 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 	}
 
 	hipcfg_getLocalCertUrl_p = dlsym(module, hipcfg_getLocalCertUrl_fn);
-	if(hipcfg_getLocalCertUrl_p == NULL)
+	if (hipcfg_getLocalCertUrl_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",
@@ -169,7 +169,7 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 	}
 
 	hipcfg_postLocalCert_p = dlsym(module, hipcfg_postLocalCert_fn);
-	if(hipcfg_postLocalCert_p == NULL)
+	if (hipcfg_postLocalCert_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",
@@ -180,7 +180,7 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 	printf("loading %s succeed.\n", hipcfg_verifyCert_fn);
 
 	hipcfg_getMyHostId_p = dlsym(module, hipcfg_getMyHostId_fn);
-	if(hipcfg_getMyHostId_p == NULL)
+	if (hipcfg_getMyHostId_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",
@@ -191,7 +191,7 @@ int hipcfg_init(char *dlname, struct hip_conf *hc)
 	printf("loading %s succeed.\n", hipcfg_getMyHostId_fn);
 
 	hipcfg_getPeerNodes_p = dlsym(module, hipcfg_getPeerNodes_fn);
-	if(hipcfg_getPeerNodes_p == NULL)
+	if (hipcfg_getPeerNodes_p == NULL)
 	{
 		fprintf(stderr,
 		        "error loading function %s: %s\n",

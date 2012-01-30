@@ -91,7 +91,7 @@ void *hip_netlink(void *arg)
 	pTable = NULL;
 	pTableOld = NULL;
 
-	while(g_state == 0) {
+	while (g_state == 0) {
 		readIpAddrTable(&pTable);
 		if (!pTableOld) { /* first loop, set pTableOld */
 			pTableOld = pTable;
@@ -369,7 +369,7 @@ int sendIpAddrTable(PMIB_IPADDRTABLE pTable)
 	*p_addr = g_tap_lsi;
 	msg = NLMSG_NEXT(msg, status);
 	/* step through IP address table and add to netlink dump message */
-	for(i = 0; i < (int)pTable->dwNumEntries; i++) {
+	for (i = 0; i < (int)pTable->dwNumEntries; i++) {
 		/* omit 0.0.0.0; (1.0.0.1 is needed for ACQUIRE mechanism) */
 		if (pTable->table[i].dwAddr == 0) {
 			continue;

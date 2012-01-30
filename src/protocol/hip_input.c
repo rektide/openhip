@@ -398,7 +398,7 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 			}
 		}
 #ifdef HIP_VPLS
-		if(!hipcfg_allowed_peers(hiti, hitr)) {
+		if (!hipcfg_allowed_peers(hiti, hitr)) {
 			log_(NORMT,"ACL denied for HIP peer\n");
 			return(-1);
 		}
@@ -569,7 +569,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 			continue;
 		}
 		if (!sig_verified) { /* skip all parameters until sig verified
-			              **/
+			              */
 			location += tlv_length_to_parameter_length(length);
 			continue;
 		}
@@ -744,7 +744,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 		}
 		location += tlv_length_to_parameter_length(length);
 	}
-	if(HCNF.peer_certificate_required && !valid_cert) {
+	if (HCNF.peer_certificate_required && !valid_cert) {
 		hip_send_notify(hip_a, NOTIFY_AUTHENTICATION_FAILED, NULL, 0);
 		return(-1);
 	}
@@ -879,7 +879,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
 		type = ntohs(tlv->type);
 		length = ntohs(tlv->length);
 		/* check if hip_a has been initalized*/
-		if((type > PARAM_SOLUTION) && !hip_a) {
+		if ((type > PARAM_SOLUTION) && !hip_a) {
 			log_(NORM,
 			     "I2 packet does not contain puzzle solution.\n");
 			return(-1);
@@ -1337,7 +1337,7 @@ I2_ERROR:
 		}
 		location += tlv_length_to_parameter_length(length);
 	}
-	if(HCNF.peer_certificate_required && !valid_cert) {
+	if (HCNF.peer_certificate_required && !valid_cert) {
 		hip_send_notify(hip_a, NOTIFY_AUTHENTICATION_FAILED, NULL, 0);
 		return(-1);
 	}
@@ -1456,7 +1456,7 @@ int hip_handle_I2(__u8 *buff, hip_assoc *hip_a_existing,
 		last_I2_spi = hip_a->spi_out; /* remember that this I2 put us
 		                               *  into R2_SENT */
 		draw_keys(hip_a, FALSE, hip_a->keymat_index); /* draw ESP keys
-		                                               **/
+		                                               */
 		set_state(hip_a, R2_SENT);
 		log_(NORM, "Sent R2 (%d bytes)\n", err);
 
@@ -2623,7 +2623,7 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 		keymat_index = 0;
 		compute_keymat(hip_a);
 		/* 2. set new keymat_index to 0, or choose lowest keymat index
-		 **/
+		 */
 	} else {
 		if (hip_a->rekey->keymat_index <
 		    hip_a->peer_rekey->keymat_index) {
@@ -2825,7 +2825,7 @@ int hip_handle_close(__u8 *buff, hip_assoc *hip_a)
 		     hip_a->state);
 		return(-1);
 		/* CLOSE is only accepted in states ESTABLISHED, CLOSING, CLOSED
-		 **/
+		*/
 	} else if (!is_ack && (hip_a->state != ESTABLISHED) &&
 	           (hip_a->state != CLOSING) && (hip_a->state != CLOSED) &&
 	           (hip_a->state != R2_SENT)) {
@@ -2841,7 +2841,7 @@ int hip_handle_close(__u8 *buff, hip_assoc *hip_a)
 	}
 	clear_retransmissions(hip_a);
 #ifdef __MACOSX__
-	if(hip_a->ipfw_rule > 0) {
+	if (hip_a->ipfw_rule > 0) {
 		del_divert_rule(hip_a->ipfw_rule);
 		hip_a->ipfw_rule = 0;
 	}
@@ -2986,7 +2986,7 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
 	/* clear_retransmissions(hip_a); */
 	log_(WARN, "Received NOTIFY from %s: ", logaddr(HIPA_SRC(hip_a)));
 
-	switch(code) {
+	switch (code) {
 	case NOTIFY_UNSUPPORTED_CRITICAL_PARAMETER_TYPE:
 		log_(NORM, "Unsupported critical parameter type.\n");
 		break;
@@ -3371,8 +3371,8 @@ int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp)
 		/* continue to read the transforms... */
 	}
 
-	for(; (transforms_left > 0); transform_id_packet++,
-	    transforms_left--) {
+	for (; (transforms_left > 0); transform_id_packet++,
+	     transforms_left--) {
 		transform_id = ntohs(*transform_id_packet);
 
 		if ((transform_id <= RESERVED) ||
@@ -3506,7 +3506,7 @@ int handle_cert(hip_assoc *hip_a, const __u8 *data)
 
 	hi_node *peer_hi;
 	peer_hi = hip_a->peer_hi;
-	if(!peer_hi) {
+	if (!peer_hi) {
 		return(-1);
 	}
 	memset(cert_buf, '\0', sizeof(cert_buf));
@@ -3515,7 +3515,7 @@ int handle_cert(hip_assoc *hip_a, const __u8 *data)
 	memcpy(cert_buf, cert->certificate, len);
 #ifdef HIP_VPLS
 	len = hipcfg_verifyCert(cert_buf, peer_hi->hit);
-	if(len == 1) {
+	if (len == 1) {
 		log_(NORM, "validated certificate with url: %s\n", cert_buf);
 		return(0);
 	}
@@ -3985,7 +3985,7 @@ int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *src_new,
 	}
 
 	if (hip_sadb_add(hip_a->udp ? 3 : 0, direction,
-                         src_hit, dst_hit, src_new, dst_new,
+	                 src_hit, dst_hit, src_new, dst_new,
 	                 src_lsi, dst_lsi,
 	                 (newspi > 0) ? newspi : spi,
 	                 hip_a->spi_nat,
@@ -4124,7 +4124,7 @@ int check_tlv_length(int type, int length)
 	}
 
 	/* some parameters have fixed lengths, enforce them */
-	switch(type) {
+	switch (type) {
 	case PARAM_R1_COUNTER:
 	case PARAM_PUZZLE:
 		return(length == 12);

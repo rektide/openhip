@@ -286,7 +286,7 @@ void hip_dsa_free(DSA *dsa)
 {
 	struct dsa_entry *dsai;
 
-	if(!HCNF.use_smartcard) {
+	if (!HCNF.use_smartcard) {
 		DSA_free(dsa);
 		return;
 	}
@@ -875,7 +875,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
 			hip_a->peer_hi->rvs_cond = stored_hi->rvs_cond;
 			hip_a->peer_hi->rvs_count = stored_hi->rvs_count;
 			hip_a->peer_hi->rvs_addrs = stored_hi->rvs_addrs;
-			if(stored_hi->copies == NULL) {
+			if (stored_hi->copies == NULL) {
 				stored_hi->copies = malloc(sizeof(int));
 				*(stored_hi->copies) = 1;
 			}
@@ -1012,9 +1012,9 @@ void free_hi_node(hi_node *hi)
 		hip_rsa_free(hi->rsa);
 	}
 	pthread_mutex_destroy(&hi->addrs_mutex);
-	if(hi->copies != NULL) {
+	if (hi->copies != NULL) {
 		(*(hi->copies))--;
-		if(*(hi->copies) == 0) { /* Last instance of this node */
+		if (*(hi->copies) == 0) { /* Last instance of this node */
 			free(hi->rvs_count);
 			free(hi->copies);
 			free(hi->rvs_addrs);
@@ -1298,7 +1298,7 @@ int add_rvs_hostname_to_node(hi_node *hi, char *dnsName) {
 	int i = 0, len;
 
 	/* Calculate current size of list */
-	while(hi->rvs_hostnames[i] != NULL) {
+	while (hi->rvs_hostnames[i] != NULL) {
 		/*printf("     Pos %d: %s\n", i, hi->rvs_hostnames[i]);*/
 		i++;
 	}
@@ -1352,13 +1352,13 @@ void *background_resolve(void *arg) {
 	/* Start critical section */
 	pthread_mutex_lock(hi->rvs_mutex);
 
-	for(aux = res; aux != NULL; aux = aux->ai_next) {
+	for (aux = res; aux != NULL; aux = aux->ai_next) {
 		add_address_to_list(hi->rvs_addrs, aux->ai_addr, 0);
 		print_rvs_addr_list(*(hi->rvs_addrs));
 	}
 
 	(*(hi->rvs_count))--;
-	if(*(hi->rvs_count) == 0) {
+	if (*(hi->rvs_count) == 0) {
 		log_(NORM, "*** RESOLVE OF ALL RVS FINISHED!! ***\n");
 		pthread_cond_broadcast(hi->rvs_cond);
 	} else {
@@ -1446,7 +1446,7 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 			return(0);
 		}
 		if (ntohs(dnsans->ans_type) != HIP_RR_TYPE) { /* not HIP record
-			                                       **/
+			                                       */
 			continue;
 		}
 		/* parse the HIP record */
@@ -1501,9 +1501,9 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 			while (remainingBytes > 0) {
 				dnsLen = strnlen((char*) p, remainingBytes) + 1;
 				memcpy(dnsName, p + 1, dnsLen - 1); /* First
-				                                     *char is
-				                                     *metadata
-				                                     **/
+				                                     * char is
+				                                     * metadata
+				                                     */
 				j = 0;
 				for (; j < dnsLen - 2; j++) {
 					if (dnsName[j] < 22) {
@@ -1511,12 +1511,8 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 					}
 				}
 				fprintf(stderr, "RVS: %s\n", dnsName);
-				add_rvs_hostname_to_node(hi, dnsName); /* Add
-				                                        *hostanmes
-				                                        *to
-				                                        *hi_node
-				                                        *struct
-				                                        **/
+				/* Add hostanmes to hi_node struct */
+				add_rvs_hostname_to_node(hi, dnsName); 
 				rvsCount++;
 				p += dnsLen;
 				remainingBytes -= dnsLen;
@@ -1524,17 +1520,18 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 
 			/* TODO: handle pthread_t values correctly (IF NEEDED)
 			 *       Dynamic thread ID creation would need a
-			 *non-blocking pthread_join
+			 *       non-blocking pthread_join
 			 *       to liberate the memory reserved for the IDs...
 			 *       Note: pthread_create does not accept NULL as a
-			 *first argument,
+			 *       first argument,
 			 *       unlike other implementations found online (QNX)
 			 */
 
 #ifndef HITGEN
-			if(rvsCount > 0) {
+			if (rvsCount > 0) {
 				*(hi->rvs_count) += rvsCount;
-				for(k = 0; hi->rvs_hostnames[k] != NULL; k++) {
+				for (k = 0; hi->rvs_hostnames[k] != NULL;
+				     k++) {
 					printf("  %d: %s\n",
 					       k,
 					       hi->rvs_hostnames[k]);
@@ -2860,7 +2857,7 @@ void log_(int level, char *fmt, ...)
 	char timestr[26];
 	struct timeval now;
 
-	switch(level) {
+	switch (level) {
 	case ERR: /* print to stderr */
 #ifdef __WIN32__ /* problem displaying stderr on win32 */
 		fp = stdout;
@@ -3064,7 +3061,7 @@ void print_binary(void* data, int len)
 		bit = i % 8;  /* which bit within the byte (0-7) */
 #if 0
 		if (byte && !bit && (byte % 4 == 0)) { /*newline every 4th byte
-			                                **/
+			                                */
 			fprintf(fp, "\n");
 		}
 		else if (i && (bit  == 0)) { /* space between every byte */
@@ -3270,7 +3267,7 @@ void hip_exit(int signal)
 	} else {
 		if (!HCNF.use_smartcard && HCNF.save_my_identities) {
 			save_identities_file(TRUE); /* store my HIs with R1
-		                                     *counters */
+			                             * counters */
 		}
 		if (HCNF.save_known_identities &&
 		    ((signal == SIGINT) || (signal == SIGTERM))) {

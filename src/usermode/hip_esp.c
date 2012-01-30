@@ -306,13 +306,13 @@ void *hip_esp_output(void *arg)
 
 #if defined(__BIG_ENDIAN__) || defined(__arm__)
 			if (((iph->ip_v) == IPVERSION) &&
-			    (iph->ip_dst.s_addr >> 24 & 0xFF) != 0x01)
+			    ((iph->ip_dst.s_addr >> 24 & 0xFF) != 0x01))
 #else /* BIG_ENDIAN */
 			if (((iph->ip_v) == IPVERSION) &&
-			    (iph->ip_dst.s_addr & 0xFF) != 0x01)
-#endif /* BIG_ENDIAN */ 
+			    ((iph->ip_dst.s_addr & 0xFF) != 0x01))
+#endif /* BIG_ENDIAN */
 			{
-			        continue;
+				continue;
 			}
 			lsi_ip = ntohl(iph->ip_dst.s_addr);
 			lsi->sa_family = AF_INET;
@@ -320,8 +320,8 @@ void *hip_esp_output(void *arg)
 			is_broadcast = FALSE;
 			/* broadcast packets */
 			if ((lsi_ip & 0x00FFFFFF) == 0x00FFFFFF) {
-			        if (!do_bcast()) {
-			                continue;
+				if (!do_bcast()) {
+					continue;
 				}
 #endif /* HIP_VPLS */
 				/* unicast the broadcast to each entry */
@@ -413,7 +413,7 @@ void *hip_esp_output(void *arg)
 				if (entry->mode == 3) {
 					s = s_esp_udp;
 				} else if (entry->dst_addrs->addr.ss_family ==
-				         AF_INET) {
+				           AF_INET) {
 					s = s_esp;
 				} else {
 					s = s_esp6;
@@ -454,9 +454,9 @@ void *hip_esp_output(void *arg)
 				}
 				entry = hip_sadb_get_next(entry);
 			} /* end while */
-			/*
-			 * IPv6
-			 */
+			  /*
+			   * IPv6
+			   */
 		} else if ((raw_buff[12] == 0x86) && (raw_buff[13] == 0xdd)) {
 			ip6h = (struct ip6_hdr*) &raw_buff[14];
 			/* accept IPv6 traffic to 2001:10::/28 here */
@@ -513,7 +513,8 @@ void *hip_esp_output(void *arg)
 			flags = 0;
 			if (entry->mode == 3) {
 				s = s_esp_udp;
-			} else if (entry->dst_addrs->addr.ss_family == AF_INET) {
+			} else if (entry->dst_addrs->addr.ss_family ==
+			           AF_INET) {
 				s = s_esp;
 			} else {
 				s = s_esp6;
@@ -634,7 +635,7 @@ void *hip_esp_output(void *arg)
 				if (entry->mode == 3) {
 					s = s_esp_udp;
 				} else if (entry->dst_addrs->addr.ss_family ==
-				         AF_INET) {
+				           AF_INET) {
 					s = s_esp;
 				} else {
 					s = s_esp6;
@@ -967,7 +968,8 @@ void tunreader(void *arg)
 		status = ReadFile(tapfd, buf, BUFF_LEN, &len, &overlapped);
 		if (!status) {
 			if (GetLastError() == ERROR_IO_PENDING) {
-				/* WaitForSingleObject(overlapped.hEvent,2000); */
+				/* WaitForSingleObject(overlapped.hEvent,2000);
+				 */
 				WaitForSingleObject(overlapped.hEvent,INFINITE);
 				if (!GetOverlappedResult(tapfd, &overlapped,
 				                         &len, FALSE)) {
@@ -1196,7 +1198,7 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
 
 	/* only handle ARP requests (opcode 1) here */
 	arp_req_hdr = (struct arp_hdr*) &in[14];
-	switch(ntohs(arp_req_hdr->ar_op)) {
+	switch (ntohs(arp_req_hdr->ar_op)) {
 	case ARPOP_REQUEST:
 		break;
 	default:
@@ -1603,7 +1605,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 		use_udp = TRUE;
 		/*udph = (udphdr*) &in[sizeof(struct ip)];*/
 		esp = (struct ip_esp_hdr*)&in[sizeof(struct ip) +
-		                                sizeof(udphdr)];
+		                              sizeof(udphdr)];
 		/* TODO: IPv6 UDP here */
 	} else {                /* not UDP-encapsulated */
 		if (iph) {      /* IPv4 */
@@ -2225,7 +2227,7 @@ int esp_anti_replay_check_initial(hip_sadb_entry *entry, __u32 seqno,
 			do_replay_check = 0; /* new subspace */
 		}
 		/* RFC 4303 Appendix A Case B: window spans two seq no subspaces
-		 **/
+		 */
 	} else {
 		do_replay_check = 0;
 		if (seqno >= replay_win_minl) {

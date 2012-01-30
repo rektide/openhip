@@ -142,7 +142,7 @@ void post_init_tap()
 
 	/* this performs the equivalent of:
 	 * system("/sbin/ip addr add 1.0.0.1/8 broadcast 1.255.255.255 dev
-	 *hip0")
+	 *        hip0")
 	 * system("/sbin/ip link set hip0 mtu 1400");
 	 * system("/sbin/ip link set hip0 up");
 	 */

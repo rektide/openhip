@@ -154,7 +154,7 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
 	} else { /* normal I1, not relayed by RVS */
 		pthread_mutex_lock(hip_a->peer_hi->rvs_mutex);
 		/* Block in case of RVS DNS resolution is NOT ready */
-		if(*(hip_a->peer_hi->rvs_count) > 0) {
+		if (*(hip_a->peer_hi->rvs_count) > 0) {
 			log_(NORMT, "Waiting for RVS DNS resolution\n");
 			pthread_cond_wait(hip_a->peer_hi->rvs_cond,
 			                  hip_a->peer_hi->rvs_mutex);
@@ -1480,7 +1480,7 @@ int hip_send_close(hip_assoc *hip_a, int send_ack)
 	     send_ack ? "_ACK" : "", location);
 	/* CLOSE_ACK packet is not scheduled for retransmission */
 #ifdef __MACOSX__
-	if(hip_a->ipfw_rule > 0) {
+	if (hip_a->ipfw_rule > 0) {
 		del_divert_rule(hip_a->ipfw_rule);
 		hip_a->ipfw_rule = 0;
 	}
@@ -1927,7 +1927,7 @@ int build_tlv_hostid_len(hi_node *hi, int use_hi_name)
 {
 	int hi_len = 0;
 
-	switch(hi->algorithm_id) {
+	switch (hi->algorithm_id) {
 	case HI_ALG_DSA:        /*       tlv + T + Q + P,G,Y */
 		if (!hi->dsa) {
 			log_(WARN, "No DSA context when building length!\n");
@@ -2134,11 +2134,11 @@ int build_tlv_cert(__u8 *buff)
 	char data[MAX_CERT_LEN];
 	__u16 cert_len;
 
-	if(!HCNF.use_smartcard) {
+	if (!HCNF.use_smartcard) {
 		return(0);
 	}
 
-	if(hipcfg_getLocalCertUrl(data, sizeof(data)) != 0) {
+	if (hipcfg_getLocalCertUrl(data, sizeof(data)) != 0) {
 		log_(NORM, "local certificate is not available.\n");
 		return(0);
 	}
@@ -2188,7 +2188,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
 	sig->algorithm = hi->algorithm_id;
 
 
-	switch(hi->algorithm_id) {
+	switch (hi->algorithm_id) {
 	case HI_ALG_DSA:
 		memset(sig->signature, 0, HIP_DSA_SIG_SIZE);
 		sig->signature[0] = 8;

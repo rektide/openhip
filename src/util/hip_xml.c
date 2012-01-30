@@ -313,11 +313,11 @@ int read_peer_identities_from_hipcfg()
 	struct peer_node nodes[MAX_CONNECTIONS], *np;
 
 	rc = hipcfg_getPeerNodes(nodes, MAX_CONNECTIONS);
-	if(rc < 0) {
+	if (rc < 0) {
 		return(-1);
 	}
 
-	for(i = 0; i < rc; i++)
+	for (i = 0; i < rc; i++)
 	{
 		log_(NORM, "Loading Host Identity %s...\n", nodes[i].name);
 		hi = create_new_hi_node();
@@ -364,7 +364,7 @@ int read_peer_identities_from_hipcfg()
 		memcpy(SA2IP(&hit_ss), hi->hit, SAIPLEN(&hit_ss));
 
 		memset(&llip_ss, 0, sizeof(struct sockaddr_storage));
-		if(!hipcfg_getLlipByEndbox(hit_p, llip_p)) {
+		if (!hipcfg_getLlipByEndbox(hit_p, llip_p)) {
 			/* hipcfg only privides preferred address. */
 			sockaddr_list *list = &hi->addrs;
 			memset(list, 0, sizeof(sockaddr_list));
@@ -385,7 +385,7 @@ int read_peer_identities_from_hipcfg()
 		log_(NORM, "] ");
 
 		if (np->rvs_addrs) {
-			for(l = *(np->rvs_addrs); l != NULL; l = l->next) {
+			for (l = *(np->rvs_addrs); l != NULL; l = l->next) {
 				add_address_to_list(hi->rvs_addrs, SA(&l->addr),
 				                    0);
 			}
@@ -653,7 +653,7 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
 	 * note that we could save the peer's public key here if desired
 	 */
 	if (mine) {
-		switch(h->algorithm_id) {
+		switch (h->algorithm_id) {
 		case HI_ALG_DSA:
 			xmlNewChild(hi, NULL, BAD_CAST "P",
 			            BAD_CAST BN_bn2hex(h->dsa->p));
@@ -700,13 +700,13 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
 		addr_to_str(SA(&h->lsi), (__u8*)addr, INET6_ADDRSTRLEN);
 		xmlNewChild(hi, NULL, BAD_CAST "LSI", BAD_CAST addr);
 	}
-	for(l = *(h->rvs_addrs); l != NULL; l = l->next) {
+	for (l = *(h->rvs_addrs); l != NULL; l = l->next) {
 		addr_to_str(SA(&l->addr), (__u8*)addr, INET6_ADDRSTRLEN);
 		xmlNewChild(hi, NULL, BAD_CAST "RVS", BAD_CAST addr);
 	}
 
 #ifdef HIP_VPLS
-	if(!mine) {
+	if (!mine) {
 		struct sockaddr_storage hosts[MAX_LEGACY_HOSTS];
 		struct sockaddr *eb_p, *host_p;
 		struct sockaddr_storage eb_ss;
@@ -719,8 +719,8 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
 		rc = hipcfg_getLegacyNodesByEndbox(eb_p,
 		                                   hosts,
 		                                   MAX_LEGACY_HOSTS);
-		if(rc > 0) {
-			for(i = 0; i < rc; i++) {
+		if (rc > 0) {
+			for (i = 0; i < rc; i++) {
 				host_p = (struct sockaddr *)&hosts[i];
 				inet_ntop(host_p->sa_family, SA2IP(
 				                  host_p), host_s,
@@ -793,10 +793,10 @@ int save_identities_file(int mine)
 	xmlNodePtr np;
 	char hit_hex[INET6_ADDRSTRLEN];
 	rc = hipcfg_peers_allowed(hits1, hits2, MAX_HI_NAMESIZE);
-	if(rc < 0) {
+	if (rc < 0) {
 		log_(WARN, "hi_to_xml: Error calling hipcfg_peers_allowed");
 	} else {
-		for(i = 0; i < rc; i++) {
+		for (i = 0; i < rc; i++) {
 			np = xmlNewChild(root_node,
 			                 NULL,
 			                 BAD_CAST "peer_allowed",

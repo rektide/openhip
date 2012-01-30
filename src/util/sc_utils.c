@@ -81,7 +81,7 @@ int load_engine_fn(ENGINE *e, const char *engine_id,
 			       fn_name, engine_id, post_cmds[0],
 			       (post_cmds[1] ? post_cmds[1] : "(NULL)"));
 			/* Release the functional reference with ENGINE_finish
-			 **/
+			**/
 			ENGINE_finish(e);
 			return(0);
 		}
@@ -127,7 +127,7 @@ ENGINE *engine_init(char *pin)
 		return(NULL);
 	}
 
-	if(pin) {
+	if (pin) {
 		post_cmds[1] = pin;
 	}
 
@@ -205,7 +205,7 @@ SSL_CTX *ssl_ctx_init(ENGINE *e, const char *pin)
 	SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, verify_callback);
 
 	/* Allow the server cert to have a cert chain no more than 3 certs deep
-	 **/
+	**/
 	SSL_CTX_set_verify_depth(ctx, 3);
 
 	scPrivKey =  ENGINE_load_private_key(e, "4:45", NULL, NULL);

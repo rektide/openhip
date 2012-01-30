@@ -229,7 +229,7 @@ int get_my_addresses()
 	 * with the NLMSG_DONE flag set
 	 */
 	done = FALSE;
-	while(!done) {
+	while (!done) {
 		/* get response */
 #ifndef USE_LINUX_NETLINK
 		/* note that this will block forever if no response */
@@ -364,7 +364,7 @@ int select_preferred_address()
 
 	preferred_selected = FALSE;
 
-	for(i = 0;; i++) { /* for each device */
+	for (i = 0;; i++) { /* for each device */
 		len = sizeof(devid);
 		if (RegEnumKeyEx(key, i, devid, &len, 0, 0, 0, NULL)) {
 			/* RegCloseKey(key); key is closed later */
@@ -834,7 +834,7 @@ int devname_to_index(char *dev, __u64 *mac)
 	 * with the NLMSG_DONE flag set
 	 */
 	done = FALSE;
-	while(!done) {
+	while (!done) {
 		if ((status = recvmsg(s_net, &msg, 0)) < 0) {
 			log_(WARN, "Netlink: recvmsg() error!\nerror: %s\n",
 			     strerror(errno));
@@ -944,7 +944,7 @@ int read_netlink_response()
 			}
 			if (!(h->nlmsg_flags & NLM_F_MULTI) &&
 			    (h->nlmsg_type == RTM_NEWADDR)) { /* add types here
-				                               **/
+				                              **/
 				done = TRUE;
 				break;
 			}
@@ -990,7 +990,7 @@ sockaddr_list *add_address_to_list(sockaddr_list **list, struct sockaddr *addr,
 
 	/* append element to list */
 	if (*list) {
-		for(item = *list; item; item = item->next) {
+		for (item = *list; item; item = item->next) {
 			/* check if new_item already exists */
 			if ((item->if_index == new_item->if_index) &&
 			    (item->addr.ss_family == new_item->addr.ss_family)
@@ -1146,7 +1146,7 @@ int hip_handle_netlink(char *data, int length)
 
 	for (msg = (struct nlmsghdr*)data; NLMSG_OK(msg, (__u32)length);
 	     msg = NLMSG_NEXT(msg, length)) {
-		switch(msg->nlmsg_type) {
+		switch (msg->nlmsg_type) {
 		case RTM_NEWLINK:
 			/* wait for RTM_NEWADDR to add addresses */
 			break;
@@ -1360,7 +1360,7 @@ void readdress_association_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
 	memcpy(&hip_a->peer_hi->addrs.addr, newdstaddr, SALEN(newdstaddr));
 	hip_a->peer_hi->addrs.if_index = if_index;
 	hip_a->peer_hi->addrs.lifetime = 0; /* XXX need to copy from somewhere?
-	                                     **/
+	                                    **/
 	hip_a->peer_hi->addrs.preferred = TRUE;
 	make_address_active(&hip_a->peer_hi->addrs);
 
@@ -1415,7 +1415,7 @@ void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
 		readdress_association(hip_a, newaddr, if_index);
 		/*
 		 * Add the new address to the end of the list (or unmark deleted
-		 *status)
+		 * status)
 		 */
 	} else {
 		/* set UDP port, as we do in hip_handle_acquire() if UDP

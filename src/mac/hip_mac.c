@@ -80,7 +80,7 @@ int g_divertport = 5150;  /* divert port */
 /* misnomer because Darwin/OSX doesn't have NETLINK sockets */
 int hip_netlink_open()
 {
-	if(s_net) { close(s_net); }
+	if (s_net) { close(s_net); }
 	if ((s_net = socket(PF_ROUTE, SOCK_RAW, PF_UNSPEC)) < 0) {
 		return(-1);
 	}
@@ -209,15 +209,15 @@ int hip_handle_netlink(char *data, int len)
 
 		/* extract list of addresses from message */
 
-		for(i = 0; i < RTAX_MAX; i++) {
+		for (i = 0; i < RTAX_MAX; i++) {
 			bzero(&unpacked[i],sizeof(unpacked[i]));
-			if(ifam->ifam_addrs & (1 << i)) {
+			if (ifam->ifam_addrs & (1 << i)) {
 				memcpy(&(unpacked[i]), packed,
 				       packed->sa_len);
 				packed = (struct sockaddr*)
 				         (((char*)packed) +
 				          ROUNDUP(packed->sa_len));
-				if(i == RTAX_IFA) {
+				if (i == RTAX_IFA) {
 					loc = i;
 					break;
 				}
@@ -355,7 +355,7 @@ int devname_to_index( char *dev, __u64 *mac)
 		if (strcmp(ifap->ifa_name,dev) != 0) {
 			continue;
 		}
-		if(ifap->ifa_addr->sa_family == AF_LINK) {
+		if (ifap->ifa_addr->sa_family == AF_LINK) {
 			sdl = (struct sockaddr_dl*)ifap->ifa_addr;
 			memcpy(mac,sdl->sdl_data + sdl->sdl_nlen,6);
 			retVal = sdl->sdl_index;
@@ -411,7 +411,7 @@ int add_address_to_iface(struct sockaddr *addr, int plen, int if_index)
 	int stat = 0;
 	struct ifreq ifr;
 
-	if((sock = socket(PF_INET,SOCK_DGRAM,0)) < 0)
+	if ((sock = socket(PF_INET,SOCK_DGRAM,0)) < 0)
 	{
 		return (-1);
 	}
@@ -428,7 +428,7 @@ int add_address_to_iface(struct sockaddr *addr, int plen, int if_index)
 	/*if(ioctl(sock,SIOCSIFADDR, &ifr )!=0)*/
 	stat = ioctl(sock,SIOCSIFADDR, &ifr);
 	log_(WARN,"status = %d\n",stat);
-	if(ioctl(sock,SIOCSIFADDR, &ifr ) != 0)
+	if (ioctl(sock,SIOCSIFADDR, &ifr ) != 0)
 	{
 		close(sock);
 		return (-1);

@@ -121,10 +121,10 @@ int hitstr2hit(hip_hit hit, char *hit_str)
 	struct sockaddr_storage ss_addr;
 
 	addr = (struct sockaddr*) &ss_addr;
-	if(strchr(hit_str, ':')) {
+	if (strchr(hit_str, ':')) {
 		memset(addr, 0,sizeof(struct sockaddr_storage));
 		addr->sa_family = AF_INET6;
-		if(str_to_addr(hit_str, addr) <= 0) {
+		if (str_to_addr(hit_str, addr) <= 0) {
 			return(-1);
 		}
 		memcpy(hit, SA2IP(addr), HIT_SIZE);
@@ -254,7 +254,7 @@ int main(void) {
 	hc = malloc(sizeof(struct hip_conf));
 
 	memset(hc, 0, sizeof(struct hip_conf));
-	if(read_conf_file("hip.conf", hc) < 0) {
+	if (read_conf_file("hip.conf", hc) < 0) {
 		printf("cannot read hip.conf\n");
 		exit(-1);
 	}
@@ -264,13 +264,13 @@ int main(void) {
 
 	char *dlname = "libhipcfg.so";
 	rc = hipcfg_init(dlname, hc);
-	if(rc < 0) {
+	if (rc < 0) {
 		printf("hipcfg_init failed.\n");
 		exit(-1);
 	}
 
 	hi_node *hi = hipcfg_getMyHostId();
-	if(hi == NULL) {
+	if (hi == NULL) {
 		printf("cannot get local host identity.\n");
 	}
 	else {
@@ -333,8 +333,8 @@ int main(void) {
 
 	hip_hit hits1[10], hits2[10];
 	rc = hipcfg_peers_allowed(hits1, hits2, 10);
-	if(rc > 0) {
-		for(i = 0; i < rc; i++) {
+	if (rc > 0) {
+		for (i = 0; i < rc; i++) {
 			printf("peers_allowed: hit1 %02x%02x hit2 %02x%02x\n",
 			       *(hits1[i] + 14),
 			       *(hits1[i] + 15),
@@ -402,12 +402,12 @@ int main(void) {
 	eb_p->sa_family = AF_INET;
 	inet_pton(AF_INET, eb_s, SA2IP(eb_p));
 	rc = hipcfg_getLegacyNodesByEndbox(eb_p, hosts, hosts_cnt);
-	if(rc > 0) {
+	if (rc > 0) {
 		printf(
 		        "valid case hipcfg_getLegacyNodesByEndbox rc: %d legacyNodes for endbox %s: ",
 		        rc,
 		        eb_s);
-		for(i = 0; i < rc; i++) {
+		for (i = 0; i < rc; i++) {
 			host_p = (struct sockaddr *)&hosts[i];
 			inet_ntop(host_p->sa_family, SA2IP(
 			                  host_p), host_s, sizeof(host_s));
@@ -420,7 +420,7 @@ int main(void) {
 
 	struct peer_node nodes[10];
 	rc = hipcfg_getPeerNodes(nodes, 10);
-	if(rc < 0) {
+	if (rc < 0) {
 		printf("error calling hipcfg_getPeerNodes\n");
 	}
 	else if (rc == 0) {
@@ -428,19 +428,19 @@ int main(void) {
 	}
 
 	printf("hipcfg_getPeerNode returned %d entries\n", rc);
-	for(i = 0; i < rc; i++) {
+	for (i = 0; i < rc; i++) {
 		hit2hitstr(hit_s, nodes[i].hit);
 		printf("peer node: hit: %s, assetTag: %s\n",
 		       hit_s,
 		       nodes[i].name);
 	}
 
-	if(hi == NULL) {
+	if (hi == NULL) {
 		exit(0); /* no further test if not use smartcard */
 
 	}
 	rc = hipcfg_getLocalCertUrl(url, sizeof(url));
-	if(rc == 0) {
+	if (rc == 0) {
 		printf("hipcfg_getLocalCertUrl succeed - url: %s\n", url);
 	}
 	else {
@@ -448,13 +448,13 @@ int main(void) {
 	}
 
 	int fd = open("scCert.pem", O_RDONLY);
-	if(fd < 0) {
+	if (fd < 0) {
 		printf("error open scCert.pem\n");
 	}
 	else {
 		rc = read(fd, cert, sizeof(cert));
 	}
-	if(fd < 0) {
+	if (fd < 0) {
 		printf("error read scCert.pem\n");
 	}
 
@@ -467,7 +467,7 @@ int main(void) {
 	}
 
 	EVP_PKEY *pubkey = X509_get_pubkey(scCert);
-	if(pubkey == NULL) {
+	if (pubkey == NULL) {
 		printf("error get public key from X509 cert.\n");
 		exit(1);
 	}
@@ -484,7 +484,7 @@ int main(void) {
 		SHA1_Update(&c, data, sizeof(data));
 		SHA1_Final(md, &c);
 
-		if(hi->rsa) {
+		if (hi->rsa) {
 			sig_len = RSA_size(hi->rsa);
 			rc = RSA_sign(NID_sha1,
 			              md,
@@ -492,7 +492,7 @@ int main(void) {
 			              rsa_sig,
 			              &sig_len,
 			              hi->rsa);
-			if(rc != 1) {
+			if (rc != 1) {
 				printf("RSA_sign failed\n");
 			}
 			else {
@@ -508,7 +508,7 @@ int main(void) {
 		                rsa_sig,
 		                sig_len,
 		                EVP_PKEY_get1_RSA(pubkey));
-		if(rc != 1) {
+		if (rc != 1) {
 			printf("RSA_verify failed\n");
 		}
 		else {

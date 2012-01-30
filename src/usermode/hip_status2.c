@@ -107,7 +107,7 @@ void *hip_status(void *arg)
 #endif
 	}
 
-	while(g_state == 0) {
+	while (g_state == 0) {
 		FD_ZERO(&read_fdset);
 		FD_SET((unsigned)s, &read_fdset);
 		timeout.tv_sec = 1;
@@ -171,7 +171,7 @@ void handle_status_request(int type, char *buff, int *len)
 	struct status_tlv *t = (struct status_tlv*) buff;
 	__u32 spi, *spi_p;
 
-	switch(type) {
+	switch (type) {
 	case STAT_THREADS:
 		t->tlv_type = htons(HIP_STATUS_REPLY_STRING);
 		t->tlv_len = htons(40);
@@ -221,7 +221,7 @@ extern hip_mutex_t hip_sadb_locks[SADB_SIZE];
 int sockaddr_list_length(sockaddr_list *l)
 {
 	int count = 0;
-	for(; l; l = l->next) {
+	for (; l; l = l->next) {
 		count++;
 	}
 	return(count);

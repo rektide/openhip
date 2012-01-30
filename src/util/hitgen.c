@@ -323,12 +323,12 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 	parms.cert_id = buff;
 	parms.cert = NULL;
 	ENGINE_ctrl_cmd(engine, "LOAD_CERT_CTRL", 0, &parms, NULL, 1);
-	if(parms.cert) {
+	if (parms.cert) {
 		printf("get cert - %s\n", buff);
 	}
 
 	pkey = SSL_get_privatekey(con);
-	if(pkey == NULL) {
+	if (pkey == NULL) {
 		fprintf(stderr,"Error call SSL_get_privatekey\n");
 		exit(1);
 	}
@@ -340,7 +340,7 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 	 * generate the HI
 	 */
 	printf("Generating %s keys for HI...", HI_TYPESTR(opts->type));
-	if(dsa) {
+	if (dsa) {
 		printf("Generating DSA parameters (p,q,g)...");
 		dsa = DSA_generate_parameters(opts->bitsize, seed, sizeof(seed),
 		                              NULL, NULL, cb, stdout);
@@ -356,7 +356,7 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 			exit(1);
 		}
 	}
-	else if(rsa) {
+	else if (rsa) {
 		/* = HIP_RSA_DFT_EXP;
 		 *  rsa = RSA_generate_key(opts->bitsize, e, cb, stdout);
 		 *  if (!rsa) {
@@ -386,7 +386,7 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 	}
 	xmlNewChild(hi, NULL, BAD_CAST "name", BAD_CAST opts->name);
 
-	if(dsa) {
+	if (dsa) {
 		xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST BN_bn2hex(dsa->p));
 		xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST BN_bn2hex(dsa->q));
 		xmlNewChild(hi, NULL, BAD_CAST "G", BAD_CAST BN_bn2hex(dsa->g));
@@ -394,7 +394,7 @@ int output_HI(xmlNodePtr root_node, hi_options *opts)
 		            BAD_CAST BN_bn2hex(dsa->pub_key));
 		xmlNewChild(hi, NULL,BAD_CAST "PRIV",
 		            BAD_CAST BN_bn2hex(dsa->priv_key));
-	} else if(rsa) {
+	} else if (rsa) {
 		xmlNewChild(hi, NULL, BAD_CAST "N", BAD_CAST BN_bn2hex(rsa->n));
 		xmlNewChild(hi, NULL, BAD_CAST "E", BAD_CAST BN_bn2hex(rsa->e));
 /* output public key parameters only
@@ -889,11 +889,12 @@ int main(int argc, char *argv[])
 	}
 
 	/* DTD support */
-	/* dtd = xmlCreateIntSubset(doc,BAD_CAST "root",NULL,BAD_CAST "x.dtd"); */
+	/* dtd = xmlCreateIntSubset(doc,BAD_CAST "root",NULL,BAD_CAST "x.dtd");
+	 */
 	/* xmlNewChild(parent, NsPtr ns, name, content) */
 	/* */
 #ifdef HIP_VPLS
-	if(!do_sc_out) {
+	if (!do_sc_out) {
 #endif
 	if (do_noinput) {
 #ifdef __WIN32__
@@ -944,7 +945,7 @@ int main(int argc, char *argv[])
 		}
 		sprintf(opts.name, "%s-%d", basename, opts.bitsize);
 #ifdef HIP_VPLS
-		if(do_sc_out) {
+		if (do_sc_out) {
 			output_HI(root_node, &opts);
 		}
 		else
@@ -959,7 +960,7 @@ int main(int argc, char *argv[])
 			opts.bitsize = default_sizes[i];
 			sprintf(opts.name, "%s-%d", basename, opts.bitsize);
 #ifdef HIP_VPLS
-			if(do_sc_out) {
+			if (do_sc_out) {
 				output_HI(root_node, &opts);
 			}
 			else

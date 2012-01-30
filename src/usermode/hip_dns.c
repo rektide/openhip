@@ -191,7 +191,7 @@ void *hip_dns(void *arg)
 	}
 #endif /* __WIN32__ */
 
-	while(g_state == 0) {
+	while (g_state == 0) {
 		FD_ZERO(&read_fdset);
 		FD_SET((unsigned)dnsfd, &read_fdset);
 		timeout.tv_sec = 0;
@@ -689,7 +689,8 @@ __u32 get_current_dns_server() {
 		pPerAdapterInfo = (PIP_PER_ADAPTER_INFO)malloc(len2);
 		GetPerAdapterInfo(pai->Index, pPerAdapterInfo, &len2);
 		if (pPerAdapterInfo->DnsServerList.IpAddress.String[0]) {
-			/* XXX TODO: verify that addr is in network byte order */
+			/* XXX TODO: verify that addr is in network byte order
+			 */
 			addr = inet_addr(
 			        pPerAdapterInfo->DnsServerList.IpAddress.String);
 		}

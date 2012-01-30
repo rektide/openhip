@@ -983,7 +983,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
 		return;
 	}
 
-	switch(hiph->packet_type) {
+	switch (hiph->packet_type) {
 	case HIP_I1:
 		err = hip_handle_I1((__u8 *)hiph, hip_a, src, dst);
 		break;
@@ -1034,7 +1034,7 @@ hip_check_next_rvs(hip_assoc *hip_a)
 	hiphdr *hiph;
 	int offset;
 
-	if(!(*(hip_a->peer_hi->rvs_addrs))) {
+	if (!(*(hip_a->peer_hi->rvs_addrs))) {
 		return;
 	}
 
@@ -1084,8 +1084,8 @@ hip_check_next_rvs(hip_assoc *hip_a)
 		hip_a->rexmt_cache.retransmits = 0;
 	} else {
 		/* No more RVS, reset the status of all RVS servers */
-		for(item = *(hip_a->peer_hi->rvs_addrs); item;
-		    item = item->next) {
+		for (item = *(hip_a->peer_hi->rvs_addrs); item;
+		     item = item->next) {
 			item->status = UNVERIFIED;
 		}
 	}
@@ -1240,7 +1240,7 @@ void hip_handle_state_timeouts(struct timeval *time1)
 					do_close = TRUE;
 				}
 				/* no packet sent or received, check UAL minutes
-				 **/
+				**/
 			} else if (TDIFF(*time1, hip_a->state_time) >
 			           (int)HCNF.ual) {
 				do_close = TRUE;
@@ -1255,7 +1255,7 @@ void hip_handle_state_timeouts(struct timeval *time1)
 				log_(NORMT, "HIP association %d moved from", i);
 				log_(NORM, " %s=>UNASSOCIATED\n",
 				     (hip_a->state ==
-				         CLOSED) ? "CLOSED" : "CLOSING");
+				      CLOSED) ? "CLOSED" : "CLOSING");
 				/* max_hip_assoc may decrease here, but this
 				 * shouldn't ruin this for loop */
 				free_hip_assoc(hip_a);
@@ -1322,10 +1322,10 @@ void hip_handle_state_timeouts(struct timeval *time1)
 				if (hip_a->use_time.tv_sec == 0) {
 					do_close = TRUE; /* no bytes ever sent*/
 				} else if (TDIFF(*time1,hip_a->use_time) >
-				         (int)HCNF.ual) {
+				           (int)HCNF.ual) {
 					do_close = TRUE; /* both state time and
-				                          *  use time have
-				                          *  exceeded UAL*/
+					                  *  use time have
+					                  *  exceeded UAL*/
 				}
 				/* last used time is available, check for UAL */
 			} else if ((err == 2) || (err == 1)) {
@@ -1344,7 +1344,7 @@ void hip_handle_state_timeouts(struct timeval *time1)
 			                hip_a, FALSE, TRUE);
 			delete_associations(hip_a, 0, 0);
 #ifdef __MACOSX__
-			if(hip_a->ipfw_rule > 0) {
+			if (hip_a->ipfw_rule > 0) {
 				del_divert_rule(hip_a->ipfw_rule);
 				hip_a->ipfw_rule = 0;
 			}

@@ -966,7 +966,7 @@ unsigned char *check_hip_packet(int family,
 	 * check HITs in HIP header against client table
 	 */
 	pthread_mutex_lock(&hip_mr_client_mutex);
-	switch(hiph->packet_type) {
+	switch (hiph->packet_type) {
 	case HIP_I1:
 	case HIP_I2:
 	case HIP_R1:
@@ -993,7 +993,7 @@ unsigned char *check_hip_packet(int family,
 	/*
 	 * process HIP packets for clients
 	 */
-	switch(hiph->packet_type) {
+	switch (hiph->packet_type) {
 	case HIP_I1:
 		mr_process_I1(client, family, inbound, ext_if, hiph,
 		              payload);
@@ -1381,7 +1381,7 @@ void *hip_mobile_router(void *arg)
 	/*
 	 * Main mobile router loop
 	 */
-	while(g_state == 0) {
+	while (g_state == 0) {
 
 		/*
 		 * select() for socket activity
@@ -2245,7 +2245,7 @@ int free_hip_mr_client(hip_mr_client *hip_mr_c)
 		return(-1);
 	}
 
-	while(hip_mr_c->spi_nats) {
+	while (hip_mr_c->spi_nats) {
 		hip_spi_nat *temp = hip_mr_c->spi_nats;
 		hip_mr_c->spi_nats = temp->next;
 		free(temp);

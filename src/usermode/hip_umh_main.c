@@ -73,7 +73,7 @@ void *hipd_main(void *args)
 			strargs++;
 		}
 		/* scan string until NULL */
-		while(*strargs != '\0') {
+		while (*strargs != '\0') {
 			if (*strargs == ' ') {
 				*strargs = '\0'; /* split into substrings by
 				                  *  adding NULL */

@@ -138,7 +138,7 @@ void hip_handle_status_request(__u8 *buff, int len, struct sockaddr *addr)
 		return;
 	}
 
-	switch(type) {
+	switch (type) {
 	case HIP_STATUS_REQ_PEERS:
 		outlen = status_dump_hi_list(out, peer_hi_head, TRUE);
 		break;

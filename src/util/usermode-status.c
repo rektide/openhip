@@ -70,7 +70,7 @@ void parse_cmd(char *buf, char *cmd, char *parm)
 	for (i = 0; i < len; i++) {
 		if (buf[i] == ' ') {
 			cmd[i] = '\0';
-			if(i < len) {
+			if (i < len) {
 				strcpy(parm, &buf[i + 1]);
 			}
 			return;
@@ -237,7 +237,7 @@ int read_response(int s, char *buff, int *len, int time)
 
 void print_header(int code)
 {
-	switch(code) {
+	switch (code) {
 	case STAT_THREADS:
 		printf("Threads:\n");
 		break;

@@ -199,7 +199,7 @@ typedef enum {
 /* convert lower 24-bits of HIT to LSI */
 #define HIT2LSI(a) (0x01000000L | \
                     ((a[HIT_SIZE - 3] << 16) + \
-		     (a[HIT_SIZE - 2] << 8) + (a[HIT_SIZE - 1])))
+                     (a[HIT_SIZE - 2] << 8) + (a[HIT_SIZE - 1])))
 
 /* compute the exponent of registration lifetime */
 #define YLIFE(x) ((float)x - (float)64) / (float)8

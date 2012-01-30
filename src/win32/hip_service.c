@@ -266,7 +266,8 @@ DWORD hip_install_service()
 		/* Add a description to the service */
 		SERVICE_DESCRIPTION descr =
 		{
-			"Host Identity Protocol manages identity-based security associations." };
+			"Host Identity Protocol manages identity-based security associations."
+		};
 		ChangeServiceConfig2(srv, SERVICE_CONFIG_DESCRIPTION, &descr);
 		CloseServiceHandle(srv);
 	}
@@ -480,8 +481,8 @@ HANDLE init_tap()
 
 	printf("init_tap()\n");
 
-	if(RegOpenKeyEx(HKEY_LOCAL_MACHINE, NETWORK_CONNECTIONS_KEY, 0,
-	                KEY_READ, &key)) {
+	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, NETWORK_CONNECTIONS_KEY, 0,
+	                 KEY_READ, &key)) {
 		printf("Unable to read registry:\n");
 		return(NULL);
 	}
@@ -489,8 +490,8 @@ HANDLE init_tap()
 	/* find the adapter with .tap suffix */
 	for (enum_index = 0;; enum_index++) {
 		len = sizeof(devid);
-		if(RegEnumKeyEx(key, enum_index, devid, &len,
-		                0, 0, 0, NULL) != ERROR_SUCCESS) {
+		if (RegEnumKeyEx(key, enum_index, devid, &len,
+		                 0, 0, 0, NULL) != ERROR_SUCCESS) {
 			RegCloseKey(key);
 			/* we've hit the end of the network connections list */
 			printf("init_tap(): Couldn't find TAP-Win32 adapter.\n");
@@ -541,7 +542,7 @@ init_tap_create_file_retry:
 		 *  LocalFree(lpMsgBuf); */
 
 		/* dw == NO_ERROR */
-		if(hTAP32 != INVALID_HANDLE_VALUE) {
+		if (hTAP32 != INVALID_HANDLE_VALUE) {
 			RegCloseKey(key);
 			CloseHandle(hTAP32);
 			break;
@@ -739,8 +740,8 @@ int check_and_set_tun_address(char *devid, int do_msgbox)
 	/* find the adapter with TAP_COMPONENT_ID (tap0801) */
 	for (enum_index = 0;; enum_index++) {
 		len = sizeof(value);
-		if(RegEnumKeyEx(key, enum_index, value, &len,
-		                0, 0, 0, NULL) != ERROR_SUCCESS) {
+		if (RegEnumKeyEx(key, enum_index, value, &len,
+		                 0, 0, 0, NULL) != ERROR_SUCCESS) {
 			RegCloseKey(key);
 			return(0); /* silently exit if not found */
 		}
@@ -793,8 +794,8 @@ int setup_tap()
 
 	printf("setup_tap: ");
 
-	if(RegOpenKeyEx(HKEY_LOCAL_MACHINE, NETWORK_CONNECTIONS_KEY, 0,
-	                KEY_READ, &key)) {
+	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, NETWORK_CONNECTIONS_KEY, 0,
+	                 KEY_READ, &key)) {
 		printf("Unable to read registry:\n");
 		return(-1);
 	}
@@ -802,8 +803,8 @@ int setup_tap()
 	/* find the adapter with .tap suffix */
 	for (enum_index = 0;; enum_index++) {
 		len = sizeof(devid);
-		if(RegEnumKeyEx(key, enum_index, devid, &len,
-		                0, 0, 0, NULL) != ERROR_SUCCESS) {
+		if (RegEnumKeyEx(key, enum_index, devid, &len,
+		                 0, 0, 0, NULL) != ERROR_SUCCESS) {
 			DWORD dw;
 			LPVOID lpMsgBuf;
 			dw = GetLastError();
@@ -831,7 +832,7 @@ int setup_tap()
 		                    FILE_ATTRIBUTE_SYSTEM,
 		                    0);
 
-		if(hTAP32 != INVALID_HANDLE_VALUE) {
+		if (hTAP32 != INVALID_HANDLE_VALUE) {
 			RegCloseKey(key);
 			CloseHandle(hTAP32);
 			break;

@@ -182,7 +182,7 @@ int delete_associations(hip_assoc *hip_a, __u32 old_spi_in, __u32 old_spi_out)
 		err = -1;
 	}
 #ifdef __MACOSX__
-	if(hip_a->ipfw_rule > 0) {
+	if (hip_a->ipfw_rule > 0) {
 		log_(WARN, "deleting divert rule...\n");
 		del_divert_rule(hip_a->ipfw_rule);
 		hip_a->ipfw_rule = 0;
