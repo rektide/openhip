@@ -819,6 +819,11 @@ int read_conf_file(char *filename)
 			HCNF.master_interface2 = strdup(data);
 		} else if (strcmp((char *)node->name, "endbox_hello_time")==0) {
 			sscanf(data, "%d", &HCNF.endbox_hello_time);
+		} else if (strcmp((char *)node->name, "endbox_allow_core_dump") == 0) {
+				if (strncmp(data, "yes", 3)==0)
+					HCNF.endbox_allow_core_dump = TRUE;
+				else
+					HCNF.endbox_allow_core_dump = FALSE;
 #endif
 		} else if (strcmp((char *)node->name, "dh_lifetime")==0) {
 			sscanf(data, "%d", &HCNF.dh_lifetime);

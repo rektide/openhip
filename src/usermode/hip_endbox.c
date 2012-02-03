@@ -19,45 +19,30 @@
  *           Jeff Meegan, <jeff.r.meegan@boeing.com>
  * 
  * HIP Virtual Private LAN Service (VPLS) specific functions.
+ * This file is included only if HIP is configured with enable-vpls.
  *
  */
 #include <stdio.h>		/* printf() */
-#include <sys/stat.h>
+#include <string.h>		/* memset, etc */
 #include <unistd.h>		/* write() */
-#include <pthread.h>		/* pthread_exit() */
+#include <utime.h>
 #include <sys/time.h>		/* gettimeofday() */
 #include <sys/errno.h>		/* errno, etc */
+#include <sys/resource.h>	/* getrlimit, setrlimit */
 #include <netinet/ip.h>		/* struct ip */
 #include <netinet/ip6.h>	/* struct ip6_hdr */
 #include <netinet/icmp6.h>	/* struct icmp6_hdr */
 #include <netinet/tcp.h>	/* struct tcphdr */
 #include <netinet/udp.h>	/* struct udphdr */
+#include <netinet/ether.h>
 #include <arpa/inet.h>		
-#include <linux/types.h>	/* for pfkeyv2.h types */
-#include <string.h>		/* memset, etc */
-#include <openssl/hmac.h>	/* HMAC algorithms */
-#include <openssl/sha.h>	/* SHA1 algorithms */
-#include <openssl/des.h>	/* 3DES algorithms */
-#include <openssl/rand.h>	/* RAND_bytes() */
-#include <win32/pfkeyv2.h>
 #include <hip/hip_types.h>
 #include <hip/hip_funcs.h>
 #include <hip/hip_usermode.h>
 #include <hip/hip_sadb.h>
 #include <hip/hip_globals.h>
-
-#if defined(__BIG_ENDIAN__) && defined( __MACOSX__)
-#include <mac/checksum_mac.h>
-#else
-#include <win32/checksum.h>
-#endif
-
-#ifdef HIP_VPLS
-#include <utime.h>
-#include <netinet/ether.h>
 #include <hip/hip_cfg_api.h>
 #include <hip/endbox_utils.h>
-#endif /* HIP_VPLS */
 
 struct eb_hello {
   hip_hit hit;
@@ -66,9 +51,10 @@ struct eb_hello {
 
 extern int tapfd;
 
-/* Functions from hip_esp.c */
+/* Functions from hip_util.c and hip_esp.c */
 
-void add_eth_header(__u8 *data, __u64 src, __u64 dst, __u32 type);
+extern __u32 get_preferred_lsi(struct sockaddr *);
+extern void add_eth_header(__u8 *data, __u64 src, __u64 dst, __u32 type);
 
 /* File globals */
 
@@ -80,41 +66,75 @@ static time_t last_hello_time = 0;
 
 void endbox_init()
 {
+	int ret;
+	struct rlimit limits;
+
+	log_(NORM,"Initializing VPLS bridge\n");
+	ret = system("/usr/local/etc/hip/bridge_up.sh");
+	log_(NORM, "bridge_up.sh returns %d\n", ret);
+
+	if (HCNF.endbox_allow_core_dump) {
+		log_(NORM, "Setting limit on core size to max\n");
+		ret = getrlimit(RLIMIT_CORE, &limits);
+		log_(NORM, "getrlimit returns %d\n", ret);
+		log_(NORM, "Current is %u; max is %u\n",
+			limits.rlim_cur, limits.rlim_max);
+		limits.rlim_cur = limits.rlim_max;
+		ret = setrlimit(RLIMIT_CORE, &limits);
+		log_(NORM, "setrlimit returns %d\n", ret);
+		ret = getrlimit(RLIMIT_CORE, &limits);
+		log_(NORM, "getrlimit returns %d\n", ret);
+		log_(NORM, "Current is %u; max is %u\n",
+			limits.rlim_cur, limits.rlim_max);
+	}
+
 	return;
 }
 
 /* Determine if this packet is from one of our legacy nodes to an allowed
  * remote legacy node.
  */
-int is_valid_packet(__u32 src, __u32 dst)
+static int is_valid_packet(__u32 src, __u32 dst, struct sockaddr *lsi)
 {
 	int rc;
-	struct sockaddr_storage host_ss;
-	struct sockaddr_storage eb_ss;
-	struct sockaddr *host_p;
-	struct sockaddr *eb_p;
 	hip_hit hit1, hit2;
 	hi_node *my_host_id;
-	char ip[INET6_ADDRSTRLEN];
+	//char ip[INET6_ADDRSTRLEN];
 
+	struct sockaddr_storage default_ss;
+	struct sockaddr_storage host_ss;
+	struct sockaddr_storage eb_ss;
+	struct sockaddr *default_p;
+	struct sockaddr *host_p;
+	struct sockaddr *dest_p;
+	struct sockaddr *eb_p;
+
+	if (!src)
+		return 0;
+
+	memset(&default_ss, 0, sizeof(struct sockaddr_storage));
 	memset(&host_ss, 0, sizeof(struct sockaddr_storage));
 	memset(&eb_ss, 0, sizeof(struct sockaddr_storage));
+	default_p = (struct sockaddr*)&default_ss;
 	host_p = (struct sockaddr*)&host_ss;
 	eb_p = (struct sockaddr*)&eb_ss;
 
-	/* Is this source address a legacy node? */
+	default_p->sa_family = AF_INET;
+	((struct sockaddr_in *)default_p)->sin_addr.s_addr = 0;
+
+	/* Is this source address a legacy node or is there a default endbox? */
 
 	host_p->sa_family = AF_INET;
 	((struct sockaddr_in *)host_p)->sin_addr.s_addr = src;
 	eb_p->sa_family = AF_INET6;
 	rc = hipcfg_getEndboxByLegacyNode(host_p, eb_p);
 	if (rc) {
-		addr_to_str(host_p, (__u8 *)ip, INET6_ADDRSTRLEN);
-		log_(NORM, "is_valid_packet: invalid source addr %s\n", ip);
-		return 0;
+		rc = hipcfg_getEndboxByLegacyNode(default_p, eb_p);
+		if (rc)
+			return 0;
 	}
 
-	/* Is this legacy node one of ours? */
+	/* Is this legacy node one of mine or am I the default endbox? */
 
 	memcpy(hit1, SA2IP(eb_p), HIT_SIZE);
 	my_host_id = get_preferred_hi(my_hi_head);
@@ -126,16 +146,18 @@ int is_valid_packet(__u32 src, __u32 dst)
 	if (!dst)
 		return 1;
 
-	/* Is this destination address a legacy node? */
+	/* Is this dest address a legacy node or is there a default endbox? */
 
 	host_p->sa_family = AF_INET;
 	((struct sockaddr_in *)host_p)->sin_addr.s_addr = dst;
 	eb_p->sa_family=AF_INET6;
 	rc = hipcfg_getEndboxByLegacyNode(host_p, eb_p);
+	dest_p = host_p;
 	if (rc) {
-		addr_to_str(host_p, (__u8 *)ip, INET6_ADDRSTRLEN);
-		log_(NORM, "is_valid_packet: invalid dest addr %s\n", ip);
-		return 0;
+		dest_p = default_p;
+		rc = hipcfg_getEndboxByLegacyNode(default_p, eb_p);
+		if (rc)
+			return 0;
 	}
 
 	/* If the destination is also one of ours, ignore the packet */
@@ -151,6 +173,14 @@ int is_valid_packet(__u32 src, __u32 dst)
 	   log_(NORM, "peer connection not allowed hit1: %02x%02x, hit2: "
 		"%02x%02x\n", hit1[HIT_SIZE-2], hit1[HIT_SIZE-1],
 		hit2[HIT_SIZE-2], hit2[HIT_SIZE-1]);
+	else {
+		/* Get the LSI of the destination endbox */
+		eb_p->sa_family = AF_INET;
+		hipcfg_getEndboxByLegacyNode(dest_p, eb_p);
+		lsi->sa_family = AF_INET;
+		LSI4(lsi) = ntohl(LSI4(eb_p));
+	}
+
 	return rc;
 }
 
@@ -163,13 +193,11 @@ void endbox_send_hello()
 {
   __u8 out[256];
   __u64 dst_mac = 0xffffffffffffffffLL;
-  __u64 src_mac;
   int outlen = 0;
   hi_node *my_host_id;
   struct eb_hello *endbox_hello;
 
-  src_mac = (__u64)g_tap_lsi << 16;
-  add_eth_header(out, src_mac, dst_mac, 0x88b5);
+  add_eth_header(out, g_tap_mac, dst_mac, 0x88b5);
 
   endbox_hello = (struct eb_hello *) &out[14];
   my_host_id = get_preferred_hi(my_hi_head);
@@ -219,29 +247,17 @@ void endbox_check_hello_time(time_t *now_time)
 int endbox_ipv4_packet_check(struct ip *iph, struct sockaddr *lsi, 
 	int *packet_count) 
 {
-	struct sockaddr_storage legacy_host_ss, eb_ss;
-	struct sockaddr *legacy_host_p, *eb_p;
+	__u32 dst;
 
 	if (!IN_MULTICAST(ntohl(iph->ip_dst.s_addr)) && 
 	    ((ntohl(iph->ip_dst.s_addr)) & 0x000000FF) != 0x000000FF) {
-	          if(!is_valid_packet(iph->ip_src.s_addr, iph->ip_dst.s_addr))
-			    return(-1);
-
-		  legacy_host_p = SA(&legacy_host_ss);
-		  eb_p = SA(&eb_ss);
-		  legacy_host_p->sa_family = AF_INET;
-		  LSI4(legacy_host_p) = iph->ip_dst.s_addr;
-		  eb_p->sa_family = AF_INET;
-		  if(!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)){
-			lsi->sa_family = AF_INET;
-			LSI4(lsi) = ntohl(LSI4(eb_p));
-		  }
-		  (*packet_count)++;
+		dst = iph->ip_dst.s_addr;
 	} else {
-		if(!is_valid_packet(iph->ip_src.s_addr, 0))
-			return(-1);
-		  (*packet_count)++;
+		dst = 0;
 	}
+	if (!is_valid_packet(iph->ip_src.s_addr, dst, lsi))
+		return(-1);
+	(*packet_count)++;
 	return(0);
 }
 
@@ -252,34 +268,22 @@ int endbox_arp_packet_check(struct arp_hdr *arph, struct sockaddr *lsi,
 	int *packet_count)
 {
 	struct arp_req_data *arp_req;
-	struct sockaddr_storage legacy_host_ss, eb_ss;
-	struct sockaddr *legacy_host_p, *eb_p;
 
 	if ((ntohs(arph->ar_hrd) == 0x01) &&     /* Ethernet */
 	    (ntohs(arph->ar_pro) == 0x0800) &&   /* IPv4 */
 	    (arph->ar_hln == 6) && (arph->ar_pln == 4)) {
 		arp_req = (struct arp_req_data*)(arph + 1);
-		if(!is_valid_packet(arp_req->src_ip, arp_req->dst_ip))
+		if (!is_valid_packet(arp_req->src_ip, arp_req->dst_ip, lsi))
 			return(-1);
-		legacy_host_p = SA(&legacy_host_ss);
-		eb_p = SA(&eb_ss);
-		legacy_host_p->sa_family = AF_INET;
-		LSI4(legacy_host_p) = arp_req->dst_ip;
-		eb_p->sa_family = AF_INET;
-		if(!hipcfg_getEndboxByLegacyNode(legacy_host_p, eb_p)){
-			lsi->sa_family = AF_INET;
-			LSI4(lsi) = ntohl(LSI4(eb_p));
-		}
-		(*packet_count)++;
-		return 0;
 	} else {
 		return(-1);
 	}
+	(*packet_count)++;
 	return 0;
 }
 
 /*
- * Called from hip_esp_input()/output() while loop
+ * Called from hip_esp_input()/output() while loops
  */
 void endbox_periodic_heartbeat(time_t *now_time, time_t *last_time,
 	int *packet_count, char *name, int touchHeartbeat)
@@ -307,11 +311,22 @@ void endbox_periodic_heartbeat(time_t *now_time, time_t *last_time,
  */
 void endbox_ipv4_multicast_write(__u8 *data, int offset, int len) 
 {
-	struct ip* iph = (struct ip*) &data[offset + sizeof(struct eth_hdr)];
+	struct ip *iph = (struct ip *) &data[offset + sizeof(struct eth_hdr)];
+	struct eth_hdr *eth;
 
 	if (IN_MULTICAST((ntohl(iph->ip_dst.s_addr))) && no_multicast)
 		return;
-	else if (write(tapfd, &data[offset], len) < 0)
+	else {
+		/* This is an ugly hack to fix a problem too convoluted to
+		 * explain here when two endboxes are connected to
+		 * cross-connected switches.
+		 */
+		if (IN_MULTICAST((ntohl(iph->ip_dst.s_addr)))) {
+			eth = (struct eth_hdr *) &data[offset];
+			memcpy(eth->src, &g_tap_mac, 6);
+		}
+		if (write(tapfd, &data[offset], len) < 0)
 			printf("hip_esp_input() write() failed.\n");
+	}
 }
 

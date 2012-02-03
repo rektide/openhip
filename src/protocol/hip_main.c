@@ -37,7 +37,6 @@
 #include <fcntl.h>
 #ifdef HIP_VPLS
 #include <utime.h>
-#include <sys/resource.h>    /* getrlimit, setrlimit         */
 #endif
 #ifdef __WIN32__
 #include <winsock2.h>
@@ -126,8 +125,6 @@ void post_init_tap();
 #endif
 #ifdef HIP_VPLS
 void endbox_init();
-int hipcfg_init();
-extern __u32 get_preferred_lsi(struct sockaddr *);
 #endif
 
 /*
@@ -169,8 +166,6 @@ int main_loop(int argc, char **argv)
 	int need_select_preferred=FALSE;
 #ifdef HIP_VPLS
         time_t last_time, now_time;
-        int ret;
-        struct rlimit limits;
 #endif
 
 	/* Initializing global variables */
@@ -247,6 +242,7 @@ int main_loop(int argc, char **argv)
 	memset(HCNF.known_hi_filename, 0, sizeof(HCNF.known_hi_filename));
 #ifdef HIP_VPLS
 	HCNF.endbox_hello_time = 0;
+	HCNF.endbox_allow_core_dump = 0;
 #endif
 
 	/*
@@ -483,36 +479,14 @@ int main_loop(int argc, char **argv)
 
 #ifdef HIP_VPLS
 	endbox_init();
-	log_(NORM,"Initializing VPLS bridge\n");
-	struct sockaddr_storage ss_lsi;
-	struct sockaddr *lsi = (struct sockaddr*)&ss_lsi;
-	lsi->sa_family = AF_INET;
-	get_preferred_lsi(lsi);
-	unsigned char lsi_s[INET_ADDRSTRLEN];
-	addr_to_str(SA(lsi), lsi_s, INET_ADDRSTRLEN);
-	char cmd[64];
-	sprintf(cmd, "/usr/local/etc/hip/bridge_up.sh %s", lsi_s);
-	ret = system(cmd);
-	log_(NORM, "bridge_up.sh returns %d\n", ret);
 	last_time = time(NULL);
-	ret = getrlimit(RLIMIT_CORE, &limits);
-	log_(NORM, "getrlimit returns %d\n", ret);
-	log_(NORM, "Current %d hard limit %d\n",
-		limits.rlim_cur, limits.rlim_max);
-	limits.rlim_cur = limits.rlim_max;
-	ret = setrlimit(RLIMIT_CORE, &limits);
-	log_(NORM, "setrlimit returns %d\n", ret);
-	ret = getrlimit(RLIMIT_CORE, &limits);
-	log_(NORM, "getrlimit returns %d\n", ret);
-	log_(NORM, "Current %d hard limit %d\n",
-		limits.rlim_cur, limits.rlim_max);
-	signal(SIGINT, hip_exit);
-	signal(SIGTERM, hip_exit);
+	if (!HCNF.endbox_allow_core_dump)
+		signal(SIGSEGV, hip_exit);
 #else
-	signal(SIGINT, hip_exit);
-	signal(SIGTERM, hip_exit);
 	signal(SIGSEGV, hip_exit);
 #endif
+	signal(SIGINT, hip_exit);
+	signal(SIGTERM, hip_exit);
 	hip_writelock();
 
 	/* Netlink socket */
