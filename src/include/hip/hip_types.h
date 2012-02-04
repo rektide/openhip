@@ -895,6 +895,7 @@ struct hip_conf {
 	char *cfg_serv_login_pwd;       /* e.g. ldap bindpw */
 	__u32 endbox_hello_time;        /* frequency of endbox hellos on overlay
 	                                 */
+	__u32 endbox_allow_core_dump;   /* whether or not to allow endbox to core dump */
 #endif /* HIP_VPLS */
 	char conf_filename[255];
 	char my_hi_filename[255];

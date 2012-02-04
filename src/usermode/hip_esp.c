@@ -298,6 +298,9 @@ void *hip_esp_output(void *arg)
 				continue;
 			}
 			is_broadcast = FALSE;
+			/* Right now multicast only goes through currently
+			 * established tunnels.
+			 */
 			if (IN_MULTICAST(ntohl(iph->ip_dst.s_addr)) ||
 			    (((ntohl(iph->ip_dst.s_addr)) & 0x000000FF) ==
 			     0x000000FF)) {
