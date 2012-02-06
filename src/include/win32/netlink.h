@@ -14,49 +14,49 @@
 
 /* Netlink address */
 struct sockaddr_nl {
-	__u16 nl_family;
-	__u16 nl_pad;
-	__u32 nl_pid;
-	__u32 nl_groups;
+  __u16 nl_family;
+  __u16 nl_pad;
+  __u32 nl_pid;
+  __u32 nl_groups;
 };
 
 /* Common Netlink message header */
 struct nlmsghdr {
-	__u32 nlmsg_len;
-	__u16 nlmsg_type;
-	__u16 nlmsg_flags;
-	__u32 nlmsg_seq;
-	__u32 nlmsg_pid;
+  __u32 nlmsg_len;
+  __u16 nlmsg_type;
+  __u16 nlmsg_flags;
+  __u32 nlmsg_seq;
+  __u32 nlmsg_pid;
 };
 
 /* Interface address message */
 struct ifaddrmsg {
-	__u8 ifa_family;
-	__u8 ifa_prefixlen;
-	__u8 ifa_flags;
-	__u8 ifa_scope;
-	int ifa_index;
+  __u8 ifa_family;
+  __u8 ifa_prefixlen;
+  __u8 ifa_flags;
+  __u8 ifa_scope;
+  int ifa_index;
 };
 
 /* Interface info message */
 struct ifinfomsg {
-	__u8 ifi_family;
-	__u8 ifi_pad;
-	__u16 ifi_type;
-	int ifi_index;
-	__u32 ifi_flags;
-	__u32 ifi_change;
+  __u8 ifi_family;
+  __u8 ifi_pad;
+  __u16 ifi_type;
+  int ifi_index;
+  __u32 ifi_flags;
+  __u32 ifi_change;
 };
 
 /* Routing message attribute */
 struct rtattr {
-	__u16 rta_len;
-	__u16 rta_type;
+  __u16 rta_len;
+  __u16 rta_type;
 };
 
 /* Generic message header */
 struct rtgenmsg {
-	__u8 rtgen_family;
+  __u8 rtgen_family;
 };
 
 #define NLMSG_ALIGNTO   4

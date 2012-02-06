@@ -98,7 +98,7 @@ hip_proto_sel_entry *hip_remove_proto_sel_entry(hip_proto_sel_entry *prev,
  */
 int sadb_hashfn(__u32 spi)
 {
-	return(spi % SADB_SIZE);
+  return(spi % SADB_SIZE);
 }
 
 /*
@@ -109,36 +109,39 @@ int sadb_hashfn(__u32 spi)
  */
 int sadb_dst_hashfn(struct sockaddr *dst)
 {
-	__u32 addr;
-	struct sockaddr_in6 *addr6;
+  __u32 addr;
+  struct sockaddr_in6 *addr6;
 
-	if (dst->sa_family == AF_INET) {
-		addr = htonl(((struct sockaddr_in*)dst)->sin_addr.s_addr);
-	} else {
-		addr6 = (struct sockaddr_in6*)dst;
+  if (dst->sa_family == AF_INET)
+    {
+      addr = htonl(((struct sockaddr_in*)dst)->sin_addr.s_addr);
+    }
+  else
+    {
+      addr6 = (struct sockaddr_in6*)dst;
 #ifdef __MACOSX__
-		addr = addr6->sin6_addr.__u6_addr.__u6_addr32[0];
-		addr ^= addr6->sin6_addr.__u6_addr.__u6_addr32[1];
-		addr ^= addr6->sin6_addr.__u6_addr.__u6_addr32[2];
-		addr ^= addr6->sin6_addr.__u6_addr.__u6_addr32[3];
+      addr = addr6->sin6_addr.__u6_addr.__u6_addr32[0];
+      addr ^= addr6->sin6_addr.__u6_addr.__u6_addr32[1];
+      addr ^= addr6->sin6_addr.__u6_addr.__u6_addr32[2];
+      addr ^= addr6->sin6_addr.__u6_addr.__u6_addr32[3];
 #else
 #ifdef __WIN32__
-		addr =  (*((__u32 *)&addr6->sin6_addr.s6_addr[0]));
-		addr ^= (*((__u32 *)&addr6->sin6_addr.s6_addr[2]));
-		addr ^= (*((__u32 *)&addr6->sin6_addr.s6_addr[4]));
-		addr ^= (*((__u32 *)&addr6->sin6_addr.s6_addr[6]));
+      addr =  (*((__u32 *)&addr6->sin6_addr.s6_addr[0]));
+      addr ^= (*((__u32 *)&addr6->sin6_addr.s6_addr[2]));
+      addr ^= (*((__u32 *)&addr6->sin6_addr.s6_addr[4]));
+      addr ^= (*((__u32 *)&addr6->sin6_addr.s6_addr[6]));
 #else
 #if !defined(__MACOSX__)
-		addr = addr6->sin6_addr.s6_addr32[0];
-		addr ^= addr6->sin6_addr.s6_addr32[1];
-		addr ^= addr6->sin6_addr.s6_addr32[2];
-		addr ^= addr6->sin6_addr.s6_addr32[3];
+      addr = addr6->sin6_addr.s6_addr32[0];
+      addr ^= addr6->sin6_addr.s6_addr32[1];
+      addr ^= addr6->sin6_addr.s6_addr32[2];
+      addr ^= addr6->sin6_addr.s6_addr32[3];
 #endif
 #endif
 #endif
-	}
+    }
 
-	return(addr % SADB_SIZE);
+  return(addr % SADB_SIZE);
 }
 
 /*
@@ -146,19 +149,22 @@ int sadb_dst_hashfn(struct sockaddr *dst)
  *
  * Initialize hash tables.
  */
-void hip_sadb_init() {
-	int i;
-	for (i = 0; i < SADB_SIZE; i++) {
-		hip_sadb[i] = NULL;
-		hip_sadb_dst[i] = NULL;
-		pthread_mutex_init(&hip_sadb_locks[i], NULL);
-		pthread_mutex_init(&hip_sadb_dst_locks[i], NULL);
-	}
-	lsi_temp = NULL;
-	for (i = 0; i < PROTO_SEL_SIZE; i++) {
-		hip_proto_sel[i] = NULL;
-		pthread_mutex_init(&hip_proto_sel_locks[i], NULL);
-	}
+void hip_sadb_init()
+{
+  int i;
+  for (i = 0; i < SADB_SIZE; i++)
+    {
+      hip_sadb[i] = NULL;
+      hip_sadb_dst[i] = NULL;
+      pthread_mutex_init(&hip_sadb_locks[i], NULL);
+      pthread_mutex_init(&hip_sadb_dst_locks[i], NULL);
+    }
+  lsi_temp = NULL;
+  for (i = 0; i < PROTO_SEL_SIZE; i++)
+    {
+      hip_proto_sel[i] = NULL;
+      pthread_mutex_init(&hip_proto_sel_locks[i], NULL);
+    }
 }
 
 /*
@@ -166,56 +172,63 @@ void hip_sadb_init() {
  *
  * Free hash tables.
  */
-void hip_sadb_deinit() {
-	hip_sadb_entry *e, *e_n;
-	hip_sadb_dst_entry *d, *d_n;
-	hip_proto_sel_entry *s, *s_n;
-	hip_lsi_entry *l;
-	int i;
-	for (i = 0; i < SADB_SIZE; i++) {
-		/* pthread_mutex_lock(&hip_sadb_locks[i]); */
-		e = hip_sadb[i];
-		while (e) {
-			/* pthread_mutex_lock(&e->rw_lock); */
-			e_n = e->next;
-			hip_sadb_delete_entry(e, FALSE);
-			e = e_n;
-		}
-		/* pthread_mutex_unlock(&hip_sadb_locks[i]); */
-		pthread_mutex_destroy(&hip_sadb_locks[i]);
+void hip_sadb_deinit()
+{
+  hip_sadb_entry *e, *e_n;
+  hip_sadb_dst_entry *d, *d_n;
+  hip_proto_sel_entry *s, *s_n;
+  hip_lsi_entry *l;
+  int i;
+  for (i = 0; i < SADB_SIZE; i++)
+    {
+      /* pthread_mutex_lock(&hip_sadb_locks[i]); */
+      e = hip_sadb[i];
+      while (e)
+        {
+          /* pthread_mutex_lock(&e->rw_lock); */
+          e_n = e->next;
+          hip_sadb_delete_entry(e, FALSE);
+          e = e_n;
+        }
+      /* pthread_mutex_unlock(&hip_sadb_locks[i]); */
+      pthread_mutex_destroy(&hip_sadb_locks[i]);
 
-		/* pthread_mutex_lock(&hip_sadb_dst_locks[i]); */
-		d = hip_sadb_dst[i];
-		while (d) {
-			/* pthread_mutex_lock(&d->rw_lock); */
-			d_n = d->next;
-			pthread_mutex_unlock(&d->rw_lock);
-			pthread_mutex_destroy(&d->rw_lock);
-			free(d);
-			d = d_n;
-		}
-		/* pthread_mutex_unlock(&hip_sadb_dst_locks[i]); */
-		pthread_mutex_destroy(&hip_sadb_dst_locks[i]);
-	}
+      /* pthread_mutex_lock(&hip_sadb_dst_locks[i]); */
+      d = hip_sadb_dst[i];
+      while (d)
+        {
+          /* pthread_mutex_lock(&d->rw_lock); */
+          d_n = d->next;
+          pthread_mutex_unlock(&d->rw_lock);
+          pthread_mutex_destroy(&d->rw_lock);
+          free(d);
+          d = d_n;
+        }
+      /* pthread_mutex_unlock(&hip_sadb_dst_locks[i]); */
+      pthread_mutex_destroy(&hip_sadb_dst_locks[i]);
+    }
 
-	l = lsi_temp;
-	while (l) {
-		lsi_temp = l->next;
-		free(l);
-		l = lsi_temp;
-	}
+  l = lsi_temp;
+  while (l)
+    {
+      lsi_temp = l->next;
+      free(l);
+      l = lsi_temp;
+    }
 
-	for (i = 0; i < PROTO_SEL_SIZE; i++) {
-		/* pthread_mutex_lock(&hip_proto_sel_locks[i]); */
-		s = hip_proto_sel[i];
-		while (s) {
-			s_n = s->next;
-			free(s);
-			s = s_n;
-		}
-		pthread_mutex_unlock(&hip_proto_sel_locks[i]);
-		pthread_mutex_destroy(&hip_proto_sel_locks[i]);
-	}
+  for (i = 0; i < PROTO_SEL_SIZE; i++)
+    {
+      /* pthread_mutex_lock(&hip_proto_sel_locks[i]); */
+      s = hip_proto_sel[i];
+      while (s)
+        {
+          s_n = s->next;
+          free(s);
+          s = s_n;
+        }
+      pthread_mutex_unlock(&hip_proto_sel_locks[i]);
+      pthread_mutex_destroy(&hip_proto_sel_locks[i]);
+    }
 }
 
 /*
@@ -232,163 +245,183 @@ int hip_sadb_add(__u32 mode, int direction,
                  __u8 *a_key, __u32 a_type, __u32 a_keylen,
                  __u32 lifetime)
 {
-	hip_sadb_entry *entry, *prev = NULL;
-	hip_lsi_entry *lsi_entry;
-	int hash, err, key_len;
-	__u8 key1[8], key2[8], key3[8]; /* for 3-DES */
-	struct timeval now;
-	struct sockaddr *peer_lsi;
+  hip_sadb_entry *entry, *prev = NULL;
+  hip_lsi_entry *lsi_entry;
+  int hash, err, key_len;
+  __u8 key1[8], key2[8], key3[8];       /* for 3-DES */
+  struct timeval now;
+  struct sockaddr *peer_lsi;
 
-	/* type is currently ignored */
-	if (!src || !dst || !a_key) {
-		return(-1);
-	}
+  /* type is currently ignored */
+  if (!src || !dst || !a_key)
+    {
+      return(-1);
+    }
 
-	gettimeofday(&now, NULL);
+  gettimeofday(&now, NULL);
 
-	hash = sadb_hashfn(spi);
-	pthread_mutex_lock(&hip_sadb_locks[hash]); /* lock this chain */
-	for (entry = hip_sadb[sadb_hashfn(spi)]; entry; entry = entry->next) {
-		if (entry->spi == spi) {
-			goto hip_sadb_add_error_nofree; /* already exists */
-		}
-		prev = entry;
-	}
+  hash = sadb_hashfn(spi);
+  pthread_mutex_lock(&hip_sadb_locks[hash]);       /* lock this chain */
+  for (entry = hip_sadb[sadb_hashfn(spi)]; entry; entry = entry->next)
+    {
+      if (entry->spi == spi)
+        {
+          goto hip_sadb_add_error_nofree;               /* already exists */
+        }
+      prev = entry;
+    }
 
-	entry = malloc(sizeof(hip_sadb_entry));
-	if (!entry) {
-		goto hip_sadb_add_error_nofree; /* no buffer space available */
-	}
-	/* add the new entry */
-	memset(entry, 0, sizeof(hip_sadb_entry));
-	pthread_mutex_init(&entry->rw_lock, NULL);
-	pthread_mutex_lock(&entry->rw_lock);
-	entry->mode = mode;
-	entry->direction = direction;
-	entry->next = NULL;
-	entry->spi = spi;
-	entry->spinat = spinat;
-	entry->hit_magic = checksum_magic((const hip_hit*)(SA2IP(src_hit)),
-	                                  (const hip_hit*)(SA2IP(dst_hit)));
-	entry->src_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
-	entry->dst_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
-	memset(&entry->src_hit, 0, sizeof(struct sockaddr_storage));
-	memset(&entry->dst_hit, 0, sizeof(struct sockaddr_storage));
-	memset(&entry->lsi, 0, sizeof(struct sockaddr_storage));
-	entry->a_type = a_type;
-	entry->e_type = e_type;
-	entry->a_keylen = a_keylen;
-	entry->e_keylen = e_keylen;
-	entry->a_key = (__u8*)malloc(a_keylen);
-	if (e_keylen > 0) {
-		entry->e_key = (__u8*)malloc(e_keylen);
-	}
-	entry->lifetime = lifetime;
-	entry->exptime.tv_sec = now.tv_sec + lifetime;
-	entry->exptime.tv_usec = now.tv_usec;
-	entry->bytes = 0;
-	entry->packets = 0;
-	entry->lost = 0;
-	entry->dropped = 0;
-	entry->usetime.tv_sec = 0;
-	entry->usetime.tv_usec = 0;
-	entry->sequence = 0;
-	entry->sequence_hi = 0;
-	entry->replay_win_max = 0;
-	entry->replay_win_map = 0;
+  entry = malloc(sizeof(hip_sadb_entry));
+  if (!entry)
+    {
+      goto hip_sadb_add_error_nofree;           /* no buffer space available */
+    }
+  /* add the new entry */
+  memset(entry, 0, sizeof(hip_sadb_entry));
+  pthread_mutex_init(&entry->rw_lock, NULL);
+  pthread_mutex_lock(&entry->rw_lock);
+  entry->mode = mode;
+  entry->direction = direction;
+  entry->next = NULL;
+  entry->spi = spi;
+  entry->spinat = spinat;
+  entry->hit_magic = checksum_magic((const hip_hit*)(SA2IP(src_hit)),
+                                    (const hip_hit*)(SA2IP(dst_hit)));
+  entry->src_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
+  entry->dst_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
+  memset(&entry->src_hit, 0, sizeof(struct sockaddr_storage));
+  memset(&entry->dst_hit, 0, sizeof(struct sockaddr_storage));
+  memset(&entry->lsi, 0, sizeof(struct sockaddr_storage));
+  entry->a_type = a_type;
+  entry->e_type = e_type;
+  entry->a_keylen = a_keylen;
+  entry->e_keylen = e_keylen;
+  entry->a_key = (__u8*)malloc(a_keylen);
+  if (e_keylen > 0)
+    {
+      entry->e_key = (__u8*)malloc(e_keylen);
+    }
+  entry->lifetime = lifetime;
+  entry->exptime.tv_sec = now.tv_sec + lifetime;
+  entry->exptime.tv_usec = now.tv_usec;
+  entry->bytes = 0;
+  entry->packets = 0;
+  entry->lost = 0;
+  entry->dropped = 0;
+  entry->usetime.tv_sec = 0;
+  entry->usetime.tv_usec = 0;
+  entry->sequence = 0;
+  entry->sequence_hi = 0;
+  entry->replay_win_max = 0;
+  entry->replay_win_map = 0;
 
-	/* malloc error */
-	if (!entry->src_addrs || !entry->dst_addrs || !entry->a_key) {
-		goto hip_sadb_add_error;
-	}
-	if ((e_keylen > 0) && !entry->e_key) {
-		goto hip_sadb_add_error;
-	}
+  /* malloc error */
+  if (!entry->src_addrs || !entry->dst_addrs || !entry->a_key)
+    {
+      goto hip_sadb_add_error;
+    }
+  if ((e_keylen > 0) && !entry->e_key)
+    {
+      goto hip_sadb_add_error;
+    }
 
-	/* copy addresses, HITs */
-	memset(entry->src_addrs, 0, sizeof(sockaddr_list));
-	memset(entry->dst_addrs, 0, sizeof(sockaddr_list));
-	memcpy(&entry->src_addrs->addr, src, SALEN(src));
-	memcpy(&entry->dst_addrs->addr, dst, SALEN(dst));
-	memcpy(&entry->src_hit, src_hit, SALEN(src_hit));
-	memcpy(&entry->dst_hit, dst_hit, SALEN(dst_hit));
+  /* copy addresses, HITs */
+  memset(entry->src_addrs, 0, sizeof(sockaddr_list));
+  memset(entry->dst_addrs, 0, sizeof(sockaddr_list));
+  memcpy(&entry->src_addrs->addr, src, SALEN(src));
+  memcpy(&entry->dst_addrs->addr, dst, SALEN(dst));
+  memcpy(&entry->src_hit, src_hit, SALEN(src_hit));
+  memcpy(&entry->dst_hit, dst_hit, SALEN(dst_hit));
 
-	/* 1 = incoming, 2 = outgoing */
-	if (!((direction == 1) || (direction == 2))) {
-		printf("sadb_add() invalid direction specified: %d\n",
-		       direction);
-		goto hip_sadb_add_error;
-	}
-	peer_lsi = (direction == 1) ? src_lsi : dst_lsi;
-	memcpy(&entry->lsi, peer_lsi, SALEN(peer_lsi));
-	if (entry->lsi.ss_family == AF_INET) {
-		/* LSI parameters are in network byte order, but here
-		 * they are used in host byte order */
-		LSI4(SA(&entry->lsi)) = ntohl(LSI4(SA(&entry->lsi)));
-	}
+  /* 1 = incoming, 2 = outgoing */
+  if (!((direction == 1) || (direction == 2)))
+    {
+      printf("sadb_add() invalid direction specified: %d\n",
+             direction);
+      goto hip_sadb_add_error;
+    }
+  peer_lsi = (direction == 1) ? src_lsi : dst_lsi;
+  memcpy(&entry->lsi, peer_lsi, SALEN(peer_lsi));
+  if (entry->lsi.ss_family == AF_INET)
+    {
+      /* LSI parameters are in network byte order, but here
+       * they are used in host byte order */
+      LSI4(SA(&entry->lsi)) = ntohl(LSI4(SA(&entry->lsi)));
+    }
 
-	if (direction == 2) { /* outgoing */
-		/* add to destination cache for easy lookup via address */
-		hip_sadb_add_dst_entry(SA(&entry->lsi), entry);
-		hip_sadb_add_dst_entry(dst_hit, entry);
-		if ((lsi_entry = hip_lookup_lsi(SA(&entry->lsi)))) {
-			lsi_entry->send_packets = 1;
-			/* Once an incoming SA is added (outgoing is always
-			 * added first in hipd) then we need to send unbuffered
-			 * packets.
-			 * While that could be done here, instead we decrease
-			 * the timeout of hip_esp_input so it is done later.
-			 * Otherwise, experience shows a race condition where
-			 * the first unbuffered packet arrives at the peer
-			 * before its SAs are built. */
-			g_read_usec = 200000;
-		}
-	}
+  if (direction == 2)         /* outgoing */
+    {           /* add to destination cache for easy lookup via address */
+      hip_sadb_add_dst_entry(SA(&entry->lsi), entry);
+      hip_sadb_add_dst_entry(dst_hit, entry);
+      if ((lsi_entry = hip_lookup_lsi(SA(&entry->lsi))))
+        {
+          lsi_entry->send_packets = 1;
+          /* Once an incoming SA is added (outgoing is always
+           * added first in hipd) then we need to send unbuffered
+           * packets.
+           * While that could be done here, instead we decrease
+           * the timeout of hip_esp_input so it is done later.
+           * Otherwise, experience shows a race condition where
+           * the first unbuffered packet arrives at the peer
+           * before its SAs are built. */
+          g_read_usec = 200000;
+        }
+    }
 
-	/* copy keys */
-	memcpy(entry->a_key, a_key, a_keylen);
-	if (e_keylen > 0) {
-		memcpy(entry->e_key, e_key, e_keylen);
-	}
-	if ((e_keylen > 0) && (e_type == SADB_EALG_3DESCBC)) {
-		key_len = e_keylen / 3;
-		memcpy(key1, &e_key[0], key_len);
-		memcpy(key2, &e_key[8], key_len);
-		memcpy(key3, &e_key[16], key_len);
-		des_set_odd_parity((des_cblock*)key1);
-		des_set_odd_parity((des_cblock*)key2);
-		des_set_odd_parity((des_cblock*)key3);
-		err = des_set_key_checked((des_cblock*)key1, entry->ks[0]);
-		err += des_set_key_checked((des_cblock*)key2, entry->ks[1]);
-		err += des_set_key_checked((des_cblock*)key3, entry->ks[2]);
-		if (err) {
-			printf("hip_sadb_add: Warning - 3DES key problem.\n");
-		}
-	} else if ((e_keylen > 0) && (e_type == SADB_X_EALG_AESCBC)) {
-		/* AES key differs for encryption/decryption, so we set
-		 * it upon first use in the SA */
-		entry->aes_key = NULL;
-	} else if ((e_keylen > 0) && (e_type == SADB_X_EALG_BLOWFISHCBC)) {
-		entry->bf_key = malloc(sizeof(BF_KEY));
-		BF_set_key(entry->bf_key, e_keylen, e_key);
-	}
+  /* copy keys */
+  memcpy(entry->a_key, a_key, a_keylen);
+  if (e_keylen > 0)
+    {
+      memcpy(entry->e_key, e_key, e_keylen);
+    }
+  if ((e_keylen > 0) && (e_type == SADB_EALG_3DESCBC))
+    {
+      key_len = e_keylen / 3;
+      memcpy(key1, &e_key[0], key_len);
+      memcpy(key2, &e_key[8], key_len);
+      memcpy(key3, &e_key[16], key_len);
+      des_set_odd_parity((des_cblock*)key1);
+      des_set_odd_parity((des_cblock*)key2);
+      des_set_odd_parity((des_cblock*)key3);
+      err = des_set_key_checked((des_cblock*)key1, entry->ks[0]);
+      err += des_set_key_checked((des_cblock*)key2, entry->ks[1]);
+      err += des_set_key_checked((des_cblock*)key3, entry->ks[2]);
+      if (err)
+        {
+          printf("hip_sadb_add: Warning - 3DES key problem.\n");
+        }
+    }
+  else if ((e_keylen > 0) && (e_type == SADB_X_EALG_AESCBC))
+    {
+      /* AES key differs for encryption/decryption, so we set
+       * it upon first use in the SA */
+      entry->aes_key = NULL;
+    }
+  else if ((e_keylen > 0) && (e_type == SADB_X_EALG_BLOWFISHCBC))
+    {
+      entry->bf_key = malloc(sizeof(BF_KEY));
+      BF_set_key(entry->bf_key, e_keylen, e_key);
+    }
 
-	/* finally, link the new entry into the chain */
-	if (prev) {
-		prev->next = entry;
-	} else {
-		hip_sadb[hash] = entry;
-	}
-	pthread_mutex_unlock(&entry->rw_lock);
-	pthread_mutex_unlock(&hip_sadb_locks[hash]); /* release chain lock */
-	return(0);
+  /* finally, link the new entry into the chain */
+  if (prev)
+    {
+      prev->next = entry;
+    }
+  else
+    {
+      hip_sadb[hash] = entry;
+    }
+  pthread_mutex_unlock(&entry->rw_lock);
+  pthread_mutex_unlock(&hip_sadb_locks[hash]);       /* release chain lock */
+  return(0);
 
 hip_sadb_add_error:
-	/* take care of deallocation */
-	hip_sadb_delete_entry(entry, FALSE);
+  /* take care of deallocation */
+  hip_sadb_delete_entry(entry, FALSE);
 hip_sadb_add_error_nofree:
-	pthread_mutex_unlock(&hip_sadb_locks[hash]);
-	return(-1);
+  pthread_mutex_unlock(&hip_sadb_locks[hash]);
+  return(-1);
 }
 
 /*
@@ -398,27 +431,31 @@ hip_sadb_add_error_nofree:
  * First free dynamically-allocated elements, then unlink the entry and
  * either replace it or zero it.
  */
-int hip_sadb_delete(__u32 spi) {
-	hip_sadb_entry *entry;
-	hip_lsi_entry *lsi_entry;
+int hip_sadb_delete(__u32 spi)
+{
+  hip_sadb_entry *entry;
+  hip_lsi_entry *lsi_entry;
 
-	if (!(entry = hip_sadb_lookup_spi(spi))) {
-		return(-1);
-	}
+  if (!(entry = hip_sadb_lookup_spi(spi)))
+    {
+      return(-1);
+    }
 
-	pthread_mutex_lock(&entry->rw_lock);
-	if (entry->direction == 2) { /* outgoing */
-		hip_sadb_delete_dst_entry(SA(&entry->lsi));
-		hip_sadb_delete_dst_entry(SA(&entry->dst_hit));
-	}
+  pthread_mutex_lock(&entry->rw_lock);
+  if (entry->direction == 2)         /* outgoing */
+    {
+      hip_sadb_delete_dst_entry(SA(&entry->lsi));
+      hip_sadb_delete_dst_entry(SA(&entry->dst_hit));
+    }
 
-	/* set LSI entry to expire */
-	if ((lsi_entry = hip_lookup_lsi(SA(&entry->lsi)))) {
-		lsi_entry->creation_time.tv_sec = 0;
-	}
+  /* set LSI entry to expire */
+  if ((lsi_entry = hip_lookup_lsi(SA(&entry->lsi))))
+    {
+      lsi_entry->creation_time.tv_sec = 0;
+    }
 
-	hip_sadb_delete_entry(entry, TRUE);
-	return(0);
+  hip_sadb_delete_entry(entry, TRUE);
+  return(0);
 }
 
 /*
@@ -433,33 +470,39 @@ int hip_sadb_delete(__u32 spi) {
  */
 int hip_sadb_add_del_addr(__u32 spi, struct sockaddr *addr, int flags)
 {
-	hip_sadb_entry *e;
-	sockaddr_list **l;
-	int hash, err;
+  hip_sadb_entry *e;
+  sockaddr_list **l;
+  int hash, err;
 
-	if ((flags < 0) || (flags > 4)) {
-		return(-1); /* invalid flags */
-	}
-	e = hip_sadb_lookup_spi(spi);
-	if (!e) {
-		return(-1); /* sadb entry not found */
+  if ((flags < 0) || (flags > 4))
+    {
+      return(-1);           /* invalid flags */
+    }
+  e = hip_sadb_lookup_spi(spi);
+  if (!e)
+    {
+      return(-1);           /* sadb entry not found */
 
-	}
-	hash = sadb_hashfn(spi);
-	pthread_mutex_lock(&hip_sadb_locks[hash]);
-	l = (flags == 1 || flags == 3) ? &e->src_addrs : &e->dst_addrs;
-	err = 0;
-	/* add source or destination address to entry */
-	if ((flags == 1) || (flags == 2)) {
-		if (!add_address_to_list(l, addr, 0)) {
-			err = -1;
-		}
-		/* remove source or destination address from entry */
-	} else {
-		delete_address_from_list(l, addr, 0);
-	}
-	pthread_mutex_unlock(&hip_sadb_locks[hash]);
-	return(err);
+    }
+  hash = sadb_hashfn(spi);
+  pthread_mutex_lock(&hip_sadb_locks[hash]);
+  l = (flags == 1 || flags == 3) ? &e->src_addrs : &e->dst_addrs;
+  err = 0;
+  /* add source or destination address to entry */
+  if ((flags == 1) || (flags == 2))
+    {
+      if (!add_address_to_list(l, addr, 0))
+        {
+          err = -1;
+        }
+      /* remove source or destination address from entry */
+    }
+  else
+    {
+      delete_address_from_list(l, addr, 0);
+    }
+  pthread_mutex_unlock(&hip_sadb_locks[hash]);
+  return(err);
 }
 
 /*
@@ -470,63 +513,76 @@ int hip_sadb_add_del_addr(__u32 spi, struct sockaddr *addr, int flags)
  */
 int hip_sadb_delete_entry(hip_sadb_entry *entry, int unlink)
 {
-	hip_sadb_entry *last, *e;
-	int hash;
-	if (!entry) {
-		return(-1);
-	}
+  hip_sadb_entry *last, *e;
+  int hash;
+  if (!entry)
+    {
+      return(-1);
+    }
 
-	if (unlink) {
-		hash = sadb_hashfn(entry->spi);
-		pthread_mutex_lock(&hip_sadb_locks[hash]);
-		for (last = NULL, e = hip_sadb[hash]; e; last = e, e =
-		             e->next) {
-			if (e == entry) {
-				break;
-			}
-		}
-		if (e) { /* entry was found, unlink it from the chain */
-			if (last) {
-				last->next = entry->next;
-			} else {
-				hip_sadb[hash] = entry->next;
-			}
-		}
-		pthread_mutex_unlock(&hip_sadb_locks[hash]);
-	}
+  if (unlink)
+    {
+      hash = sadb_hashfn(entry->spi);
+      pthread_mutex_lock(&hip_sadb_locks[hash]);
+      for (last = NULL, e = hip_sadb[hash]; e; last = e, e =
+             e->next)
+        {
+          if (e == entry)
+            {
+              break;
+            }
+        }
+      if (e)             /* entry was found, unlink it from the chain */
+        {
+          if (last)
+            {
+              last->next = entry->next;
+            }
+          else
+            {
+              hip_sadb[hash] = entry->next;
+            }
+        }
+      pthread_mutex_unlock(&hip_sadb_locks[hash]);
+    }
 
-	/* free address lists */
-	if (entry->src_addrs) {
-		free_addr_list(entry->src_addrs);
-	}
-	if (entry->dst_addrs) {
-		free_addr_list(entry->dst_addrs);
-	}
+  /* free address lists */
+  if (entry->src_addrs)
+    {
+      free_addr_list(entry->src_addrs);
+    }
+  if (entry->dst_addrs)
+    {
+      free_addr_list(entry->dst_addrs);
+    }
 
-	/* securely erase keys */
-	if (entry->a_key) {
-		memset(entry->a_key, 0, entry->a_keylen);
-		free(entry->a_key);
-	}
-	if (entry->e_key) {
-		memset(entry->e_key, 0, entry->e_keylen);
-		free(entry->e_key);
-	}
+  /* securely erase keys */
+  if (entry->a_key)
+    {
+      memset(entry->a_key, 0, entry->a_keylen);
+      free(entry->a_key);
+    }
+  if (entry->e_key)
+    {
+      memset(entry->e_key, 0, entry->e_keylen);
+      free(entry->e_key);
+    }
 
-	pthread_mutex_unlock(&entry->rw_lock);
-	pthread_mutex_destroy(&entry->rw_lock);
-	free(entry);
-	return(0);
+  pthread_mutex_unlock(&entry->rw_lock);
+  pthread_mutex_destroy(&entry->rw_lock);
+  free(entry);
+  return(0);
 }
 
 void free_addr_list(sockaddr_list *a)
 {
-	sockaddr_list *a_next;
-	while (a) {
-		a_next = a->next;
-		free(a);
-		a = a_next;
-	}
+  sockaddr_list *a_next;
+  while (a)
+    {
+      a_next = a->next;
+      free(a);
+      a = a_next;
+    }
 }
 
 /*
@@ -536,35 +592,45 @@ void free_addr_list(sockaddr_list *a)
  */
 hip_lsi_entry *create_lsi_entry(struct sockaddr *lsi)
 {
-	hip_lsi_entry *entry, *tmp;
+  hip_lsi_entry *entry, *tmp;
 
-	entry = (hip_lsi_entry*) malloc(sizeof(hip_lsi_entry));
-	if (!entry) {
-		printf("create_lsi_entry: malloc error!\n");
-		return(NULL);
-	}
-	memset(entry, 0, sizeof(hip_lsi_entry));
-	entry->next = NULL;
-	if (lsi->sa_family == AF_INET) {
-		memcpy(&entry->lsi4, lsi, SALEN(lsi));
-		memset(&entry->lsi6, 0, sizeof(entry->lsi6));
-	} else {
-		memset(&entry->lsi4, 0, sizeof(entry->lsi4));
-		memcpy(&entry->lsi6, lsi, SALEN(lsi));
-	}
-	entry->num_packets = 0;
-	entry->next_packet = 0;
-	entry->send_packets = 0;
-	gettimeofday(&entry->creation_time, NULL);
+  entry = (hip_lsi_entry*) malloc(sizeof(hip_lsi_entry));
+  if (!entry)
+    {
+      printf("create_lsi_entry: malloc error!\n");
+      return(NULL);
+    }
+  memset(entry, 0, sizeof(hip_lsi_entry));
+  entry->next = NULL;
+  if (lsi->sa_family == AF_INET)
+    {
+      memcpy(&entry->lsi4, lsi, SALEN(lsi));
+      memset(&entry->lsi6, 0, sizeof(entry->lsi6));
+    }
+  else
+    {
+      memset(&entry->lsi4, 0, sizeof(entry->lsi4));
+      memcpy(&entry->lsi6, lsi, SALEN(lsi));
+    }
+  entry->num_packets = 0;
+  entry->next_packet = 0;
+  entry->send_packets = 0;
+  gettimeofday(&entry->creation_time, NULL);
 
-	/* add it to the list */
-	if (!lsi_temp) {
-		lsi_temp = entry;
-	} else {
-		for (tmp = lsi_temp; tmp->next; tmp = tmp->next) {; }
-		tmp->next = entry;
-	}
-	return(entry);
+  /* add it to the list */
+  if (!lsi_temp)
+    {
+      lsi_temp = entry;
+    }
+  else
+    {
+      for (tmp = lsi_temp; tmp->next; tmp = tmp->next)
+        {
+          ;
+        }
+      tmp->next = entry;
+    }
+  return(entry);
 }
 
 /*
@@ -576,30 +642,36 @@ hip_lsi_entry *create_lsi_entry(struct sockaddr *lsi)
  */
 void hip_remove_expired_lsi_entries(struct timeval *now)
 {
-	hip_lsi_entry *entry, *tmp, *prev = NULL;
+  hip_lsi_entry *entry, *tmp, *prev = NULL;
 
-	entry = lsi_temp;
-	while (entry) {
-		if (entry->send_packets) {
-			unbuffer_packets(entry);
-		}
-		if ((now->tv_sec - entry->creation_time.tv_sec) >
-		    LSI_ENTRY_LIFETIME) {
-			/* unlink the entry */
-			if (prev) {
-				prev->next = entry->next;
-			} else {
-				lsi_temp = entry->next;
-			}
-			/* delete the entry */
-			tmp = entry;
-			entry = entry->next;
-			free(tmp);
-			continue;
-		}
-		prev = entry;
-		entry = entry->next;
-	}
+  entry = lsi_temp;
+  while (entry)
+    {
+      if (entry->send_packets)
+        {
+          unbuffer_packets(entry);
+        }
+      if ((now->tv_sec - entry->creation_time.tv_sec) >
+          LSI_ENTRY_LIFETIME)
+        {
+          /* unlink the entry */
+          if (prev)
+            {
+              prev->next = entry->next;
+            }
+          else
+            {
+              lsi_temp = entry->next;
+            }
+          /* delete the entry */
+          tmp = entry;
+          entry = entry->next;
+          free(tmp);
+          continue;
+        }
+      prev = entry;
+      entry = entry->next;
+    }
 }
 
 /*
@@ -610,24 +682,26 @@ void hip_remove_expired_lsi_entries(struct timeval *now)
  */
 int buffer_packet(struct sockaddr *lsi, __u8 *data, int len)
 {
-	int is_new_entry = FALSE;
-	hip_lsi_entry *entry;
+  int is_new_entry = FALSE;
+  hip_lsi_entry *entry;
 
-	/* find entry, or create a new one */
-	if (!(entry = hip_lookup_lsi(lsi))) {
-		entry = create_lsi_entry(lsi);
-		is_new_entry = TRUE;
-	}
+  /* find entry, or create a new one */
+  if (!(entry = hip_lookup_lsi(lsi)))
+    {
+      entry = create_lsi_entry(lsi);
+      is_new_entry = TRUE;
+    }
 
-	/* add packet to queue if there is room */
-	if ((len + entry->next_packet) > LSI_PKT_BUFFER_SIZE) {
-		return(FALSE);
-	}
-	/* TODO: log packet buffer overflow, drop newer/older packets? */
-	memcpy(&entry->packet_buffer[entry->next_packet], data, len);
-	entry->num_packets++;
-	entry->next_packet += len;
-	return(is_new_entry);
+  /* add packet to queue if there is room */
+  if ((len + entry->next_packet) > LSI_PKT_BUFFER_SIZE)
+    {
+      return(FALSE);
+    }
+  /* TODO: log packet buffer overflow, drop newer/older packets? */
+  memcpy(&entry->packet_buffer[entry->next_packet], data, len);
+  entry->num_packets++;
+  entry->next_packet += len;
+  return(is_new_entry);
 }
 
 /*
@@ -638,66 +712,78 @@ int buffer_packet(struct sockaddr *lsi, __u8 *data, int len)
  */
 void unbuffer_packets(hip_lsi_entry *entry)
 {
-	struct ip *iph;
-	struct ip6_hdr *ip6h;
-	__u8 *data;
-	int len, next_hdr = 0;
-	char ipstr[5];
-	__u32 lsi;
+  struct ip *iph;
+  struct ip6_hdr *ip6h;
+  __u8 *data;
+  int len, next_hdr = 0;
+  char ipstr[5];
+  __u32 lsi;
 
-	g_read_usec = 1000000;
-	entry->send_packets = 0;
-	if (entry->num_packets > 0) {
-		lsi = htonl(LSI4(&entry->lsi4));
-		printf("Retransmitting %d user data packets for %u.%u.%u.%u.\n",
-		       entry->num_packets, NIPQUAD(lsi));
-	}
-	while (entry->num_packets > 0) {
-		entry->num_packets--;
-		data = &entry->packet_buffer[next_hdr];
-		/* read first byte to determine if IPv4/IPv6, and get length */
-		iph = (struct ip*) &data[14];
-		ip6h = (struct ip6_hdr*) &data[14];
-		if ((data[12] == 0x08) && (data[13] == 0x06)) {
-			len = sizeof(struct arp_hdr) +
-			      sizeof(struct arp_req_data) + 14;
-			sprintf(ipstr, "ARP");
-		} else if (iph->ip_v == 4) { /* IPv4 packet */
-			len = ntohs(iph->ip_len) + 14;
-			sprintf(ipstr, "IPv4");
-		} else if ((ip6h->ip6_vfc & 0xF0) == 0x60) { /* IPv6 packet */
-			len = ntohs(ip6h->ip6_plen) + 14 +
-			      sizeof(struct ip6_hdr);
-			sprintf(ipstr, "IPv6");
-		} else { /* unknown header! */
-			printf("Warning: unknown IP header in buffered "
-			       "packet, freeing.\n");
-			/* cannot determine length, so expire this entry */
-			entry->send_packets = 0;
-			entry->creation_time.tv_sec = 0;
-			break;
-		}
-		if ((next_hdr + len) > LSI_PKT_BUFFER_SIZE) {
-			printf( "Warning: buffered packet with length=%d "
-			        "is too large for buffer, dropping.\n", len);
-			entry->send_packets = 0;
-			entry->creation_time.tv_sec = 0;
-			break;
-		}
-		next_hdr += len;
+  g_read_usec = 1000000;
+  entry->send_packets = 0;
+  if (entry->num_packets > 0)
+    {
+      lsi = htonl(LSI4(&entry->lsi4));
+      printf("Retransmitting %d user data packets for %u.%u.%u.%u.\n",
+             entry->num_packets, NIPQUAD(lsi));
+    }
+  while (entry->num_packets > 0)
+    {
+      entry->num_packets--;
+      data = &entry->packet_buffer[next_hdr];
+      /* read first byte to determine if IPv4/IPv6, and get length */
+      iph = (struct ip*) &data[14];
+      ip6h = (struct ip6_hdr*) &data[14];
+      if ((data[12] == 0x08) && (data[13] == 0x06))
+        {
+          len = sizeof(struct arp_hdr) +
+                sizeof(struct arp_req_data) + 14;
+          sprintf(ipstr, "ARP");
+        }
+      else if (iph->ip_v == 4)               /* IPv4 packet */
+        {
+          len = ntohs(iph->ip_len) + 14;
+          sprintf(ipstr, "IPv4");
+        }
+      else if ((ip6h->ip6_vfc & 0xF0) == 0x60)               /* IPv6 packet */
+        {
+          len = ntohs(ip6h->ip6_plen) + 14 +
+                sizeof(struct ip6_hdr);
+          sprintf(ipstr, "IPv6");
+        }
+      else               /* unknown header! */
+        {
+          printf("Warning: unknown IP header in buffered "
+                 "packet, freeing.\n");
+          /* cannot determine length, so expire this entry */
+          entry->send_packets = 0;
+          entry->creation_time.tv_sec = 0;
+          break;
+        }
+      if ((next_hdr + len) > LSI_PKT_BUFFER_SIZE)
+        {
+          printf( "Warning: buffered packet with length=%d "
+                  "is too large for buffer, dropping.\n", len);
+          entry->send_packets = 0;
+          entry->creation_time.tv_sec = 0;
+          break;
+        }
+      next_hdr += len;
 #ifdef __WIN32__
-		if (send(readsp[0], data, len, 0) < 0) {
+      if (send(readsp[0], data, len, 0) < 0)
+        {
 #else
-		if (write(readsp[0], data, len) < 0) {
+      if (write(readsp[0], data, len) < 0)
+        {
 #endif
-			printf("unbuffer_packets: write error: %s",
-			       strerror(errno));
-			break;
-		}
-	}
+          printf("unbuffer_packets: write error: %s",
+                 strerror(errno));
+          break;
+        }
+    }
 
-	entry->num_packets = 0;
-	entry->next_packet = 0;
+  entry->num_packets = 0;
+  entry->next_packet = 0;
 }
 
 /*
@@ -708,17 +794,19 @@ void unbuffer_packets(hip_lsi_entry *entry)
  */
 hip_lsi_entry *hip_lookup_lsi(struct sockaddr *lsi)
 {
-	hip_lsi_entry *entry;
-	struct sockaddr_storage *entry_lsi;
+  hip_lsi_entry *entry;
+  struct sockaddr_storage *entry_lsi;
 
-	for (entry = lsi_temp; entry; entry = entry->next) {
-		entry_lsi = (lsi->sa_family == AF_INET) ? &entry->lsi4 :
-		            &entry->lsi6;
-		if (memcmp(SA2IP(entry_lsi), SA2IP(lsi), SAIPLEN(lsi)) == 0) {
-			return(entry);
-		}
-	}
-	return(NULL);
+  for (entry = lsi_temp; entry; entry = entry->next)
+    {
+      entry_lsi = (lsi->sa_family == AF_INET) ? &entry->lsi4 :
+                  &entry->lsi6;
+      if (memcmp(SA2IP(entry_lsi), SA2IP(lsi), SAIPLEN(lsi)) == 0)
+        {
+          return(entry);
+        }
+    }
+  return(NULL);
 }
 
 /*
@@ -726,19 +814,22 @@ hip_lsi_entry *hip_lookup_lsi(struct sockaddr *lsi)
  *
  * Lookup an SADB entry based on SPI, for incoming ESP packets.
  */
-hip_sadb_entry *hip_sadb_lookup_spi(__u32 spi) {
-	hip_sadb_entry *e;
-	int hash;
+hip_sadb_entry *hip_sadb_lookup_spi(__u32 spi)
+{
+  hip_sadb_entry *e;
+  int hash;
 
-	hash = sadb_hashfn(spi);
-	pthread_mutex_lock(&hip_sadb_locks[hash]);
-	for (e = hip_sadb[hash]; e; e = e->next) {
-		if (e->spi == spi) {
-			break;
-		}
-	}
-	pthread_mutex_unlock(&hip_sadb_locks[hash]);
-	return(e);
+  hash = sadb_hashfn(spi);
+  pthread_mutex_lock(&hip_sadb_locks[hash]);
+  for (e = hip_sadb[hash]; e; e = e->next)
+    {
+      if (e->spi == spi)
+        {
+          break;
+        }
+    }
+  pthread_mutex_unlock(&hip_sadb_locks[hash]);
+  return(e);
 }
 
 /*
@@ -750,54 +841,62 @@ hip_sadb_entry *hip_sadb_lookup_spi(__u32 spi) {
  */
 int hip_sadb_add_dst_entry(struct sockaddr *addr, hip_sadb_entry *entry)
 {
-	hip_sadb_dst_entry *d, *last = NULL;
-	int hash;
+  hip_sadb_dst_entry *d, *last = NULL;
+  int hash;
 
-	if (!addr || !entry) {
-		return(-1);
-	}
+  if (!addr || !entry)
+    {
+      return(-1);
+    }
 
-	hash = sadb_dst_hashfn(addr);
-	pthread_mutex_lock(&hip_sadb_dst_locks[hash]); /* lock this chain */
+  hash = sadb_dst_hashfn(addr);
+  pthread_mutex_lock(&hip_sadb_dst_locks[hash]);       /* lock this chain */
 
-	/* search to prevent duplicate entries */
-	for (d = hip_sadb_dst[hash]; d; d = d->next) {
-		last = d;
-		if (!d->sadb_entry) {
-			continue;
-		}
-		/* dst entry already exists with same address, just
-		 * update the entry ptr and return */
-		if (!memcmp(SA2IP(&d->addr), SA2IP(addr), SAIPLEN(addr))) {
-			pthread_mutex_lock(&d->rw_lock);
-			d->sadb_entry = entry;
-			pthread_mutex_unlock(&d->rw_lock);
-			pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
-			return(0);
-		}
-	}
+  /* search to prevent duplicate entries */
+  for (d = hip_sadb_dst[hash]; d; d = d->next)
+    {
+      last = d;
+      if (!d->sadb_entry)
+        {
+          continue;
+        }
+      /* dst entry already exists with same address, just
+       * update the entry ptr and return */
+      if (!memcmp(SA2IP(&d->addr), SA2IP(addr), SAIPLEN(addr)))
+        {
+          pthread_mutex_lock(&d->rw_lock);
+          d->sadb_entry = entry;
+          pthread_mutex_unlock(&d->rw_lock);
+          pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
+          return(0);
+        }
+    }
 
-	d = (hip_sadb_dst_entry*) malloc(sizeof(hip_sadb_dst_entry));
-	if (!d) {
-		pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
-		return(-1); /* no buffer space available */
-	}
-	memset(d, 0, sizeof(hip_sadb_dst_entry));
-	pthread_mutex_init(&d->rw_lock, NULL);
-	pthread_mutex_lock(&d->rw_lock);
-	d->sadb_entry = entry;
-	d->next = NULL;
-	memcpy(&d->addr, addr, SALEN(addr));
+  d = (hip_sadb_dst_entry*) malloc(sizeof(hip_sadb_dst_entry));
+  if (!d)
+    {
+      pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
+      return(-1);           /* no buffer space available */
+    }
+  memset(d, 0, sizeof(hip_sadb_dst_entry));
+  pthread_mutex_init(&d->rw_lock, NULL);
+  pthread_mutex_lock(&d->rw_lock);
+  d->sadb_entry = entry;
+  d->next = NULL;
+  memcpy(&d->addr, addr, SALEN(addr));
 
-	/* link new entry into the chain */
-	if (last) {
-		last->next = d;
-	} else {
-		hip_sadb_dst[hash] = d;
-	}
-	pthread_mutex_unlock(&d->rw_lock);
-	pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
-	return(0);
+  /* link new entry into the chain */
+  if (last)
+    {
+      last->next = d;
+    }
+  else
+    {
+      hip_sadb_dst[hash] = d;
+    }
+  pthread_mutex_unlock(&d->rw_lock);
+  pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
+  return(0);
 }
 
 /*
@@ -805,42 +904,49 @@ int hip_sadb_add_dst_entry(struct sockaddr *addr, hip_sadb_entry *entry)
  *
  * Delete an SADB entry based on destination address (LSI).
  */
-int hip_sadb_delete_dst_entry(struct sockaddr *addr) {
-	hip_sadb_dst_entry *e, *last;
-	int hash;
+int hip_sadb_delete_dst_entry(struct sockaddr *addr)
+{
+  hip_sadb_dst_entry *e, *last;
+  int hash;
 
-	/* unlink from chain */
-	hash = sadb_dst_hashfn(addr);
-	pthread_mutex_lock(&hip_sadb_dst_locks[hash]);
-	for (last = NULL, e = hip_sadb_dst[hash]; e; last = e, e = e->next) {
-		pthread_mutex_lock(&e->rw_lock);
-		if ((addr->sa_family == e->addr.ss_family) &&
-		    (memcmp(SA2IP(addr), SA2IP(&e->addr),
-		            SAIPLEN(addr)) == 0)) {
-			/* keep this entry's lock */
-			break;
-		}
-		pthread_mutex_unlock(&e->rw_lock);
-	}
-	if (!e) {
-		pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
-		return(-1); /* dst entry not found */
-	}
-	if (last) {
-		last->next = e->next;
-	} else {
-		hip_sadb_dst[hash] = e->next;
-	}
-	pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
+  /* unlink from chain */
+  hash = sadb_dst_hashfn(addr);
+  pthread_mutex_lock(&hip_sadb_dst_locks[hash]);
+  for (last = NULL, e = hip_sadb_dst[hash]; e; last = e, e = e->next)
+    {
+      pthread_mutex_lock(&e->rw_lock);
+      if ((addr->sa_family == e->addr.ss_family) &&
+          (memcmp(SA2IP(addr), SA2IP(&e->addr),
+                  SAIPLEN(addr)) == 0))
+        {
+          /* keep this entry's lock */
+          break;
+        }
+      pthread_mutex_unlock(&e->rw_lock);
+    }
+  if (!e)
+    {
+      pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
+      return(-1);           /* dst entry not found */
+    }
+  if (last)
+    {
+      last->next = e->next;
+    }
+  else
+    {
+      hip_sadb_dst[hash] = e->next;
+    }
+  pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
 
-	/* entry is locked at this point */
-	e->sadb_entry = NULL;
-	e->next = NULL;
-	memset(&e->addr, 0, sizeof(e->addr));
-	pthread_mutex_unlock(&e->rw_lock);
-	pthread_mutex_destroy(&e->rw_lock);
-	free(e);
-	return(0);
+  /* entry is locked at this point */
+  e->sadb_entry = NULL;
+  e->next = NULL;
+  memset(&e->addr, 0, sizeof(e->addr));
+  pthread_mutex_unlock(&e->rw_lock);
+  pthread_mutex_destroy(&e->rw_lock);
+  free(e);
+  return(0);
 }
 
 /*
@@ -849,27 +955,30 @@ int hip_sadb_delete_dst_entry(struct sockaddr *addr) {
  * Lookup an SADB entry based on destination address (LSI), for outgoing
  * ESP packets. Uses the destination cache.
  */
-hip_sadb_entry *hip_sadb_lookup_addr(struct sockaddr *addr) {
-	hip_sadb_dst_entry *e;
-	hip_sadb_entry *r;
-	int hash;
+hip_sadb_entry *hip_sadb_lookup_addr(struct sockaddr *addr)
+{
+  hip_sadb_dst_entry *e;
+  hip_sadb_entry *r;
+  int hash;
 
-	hash = sadb_dst_hashfn(addr);
-	pthread_mutex_lock(&hip_sadb_dst_locks[hash]);
-	for (r = NULL, e = hip_sadb_dst[hash]; e; e = e->next) {
-		pthread_mutex_lock(&e->rw_lock);
-		if ((addr->sa_family == e->addr.ss_family) &&
-		    (memcmp(SA2IP(addr), SA2IP(&e->addr),
-		            SAIPLEN(addr)) == 0)) {
-			r = e->sadb_entry;
-			pthread_mutex_unlock(&e->rw_lock);
-			break;
-		}
-		pthread_mutex_unlock(&e->rw_lock);
-	}
-	pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
+  hash = sadb_dst_hashfn(addr);
+  pthread_mutex_lock(&hip_sadb_dst_locks[hash]);
+  for (r = NULL, e = hip_sadb_dst[hash]; e; e = e->next)
+    {
+      pthread_mutex_lock(&e->rw_lock);
+      if ((addr->sa_family == e->addr.ss_family) &&
+          (memcmp(SA2IP(addr), SA2IP(&e->addr),
+                  SAIPLEN(addr)) == 0))
+        {
+          r = e->sadb_entry;
+          pthread_mutex_unlock(&e->rw_lock);
+          break;
+        }
+      pthread_mutex_unlock(&e->rw_lock);
+    }
+  pthread_mutex_unlock(&hip_sadb_dst_locks[hash]);
 
-	return(r);
+  return(r);
 }
 
 /*
@@ -880,33 +989,48 @@ hip_sadb_entry *hip_sadb_lookup_addr(struct sockaddr *addr) {
  */
 hip_sadb_entry *hip_sadb_get_next(hip_sadb_entry *placemark)
 {
-	int i, return_next = 0;
-	hip_sadb_entry *e, *r = NULL;
+  int i, return_next = 0;
+  hip_sadb_entry *e, *r = NULL;
 
-	/* step through entire hash table */
-	for (i = 0; i < SADB_SIZE; i++) {
-		pthread_mutex_lock(&hip_sadb_locks[i]);
-		for (e = hip_sadb[i]; e; e = e->next) {
-			if (e->direction != 2) { /* only outgoing entries */
-				continue;
-			}
-			if (!placemark) { /* just use first outgoing entry */
-				r = e;
-			} else {
-				if (return_next) { /* this is the next entry */
-					r = e;
-				} else if (e == placemark) {
-					/* search for placemark, and set flag to
-					 * return the next entry */
-					return_next = 1;
-				}
-			}
-			if (r) { break; } /* stop searching */
-		}
-		pthread_mutex_unlock(&hip_sadb_locks[i]);
-		if (r) { break; } /* done */
-	}
-	return(r);
+  /* step through entire hash table */
+  for (i = 0; i < SADB_SIZE; i++)
+    {
+      pthread_mutex_lock(&hip_sadb_locks[i]);
+      for (e = hip_sadb[i]; e; e = e->next)
+        {
+          if (e->direction != 2)                 /* only outgoing entries */
+            {
+              continue;
+            }
+          if (!placemark)                 /* just use first outgoing entry */
+            {
+              r = e;
+            }
+          else
+            {
+              if (return_next)                     /* this is the next entry */
+                {
+                  r = e;
+                }
+              else if (e == placemark)
+                {
+                  /* search for placemark, and set flag to
+                   * return the next entry */
+                  return_next = 1;
+                }
+            }
+          if (r)
+            {
+              break;
+            }                             /* stop searching */
+        }
+      pthread_mutex_unlock(&hip_sadb_locks[i]);
+      if (r)
+        {
+          break;
+        }                         /* done */
+    }
+  return(r);
 }
 
 /*
@@ -916,29 +1040,33 @@ hip_sadb_entry *hip_sadb_get_next(hip_sadb_entry *placemark)
  */
 void hip_sadb_expire(struct timeval *now)
 {
-	int i;
-	hip_sadb_entry *e;
-	__u32 spi;
+  int i;
+  hip_sadb_entry *e;
+  __u32 spi;
 
-	for (i = 0; i < SADB_SIZE; i++) {
-		spi = 0;
-		pthread_mutex_lock(&hip_sadb_locks[i]);
-		for (e = hip_sadb[i]; e; e = e->next) {
-			if (now->tv_sec > e->exptime.tv_sec) {
-				/* wait another lifetime before expiring this SA
-				 * again;
-				 * this causes only one expire message to be
-				 *sent */
-				e->exptime.tv_sec = now->tv_sec +
-				                    (time_t)e->lifetime;
-				spi = e->spi;
-			}
-		}
-		pthread_mutex_unlock(&hip_sadb_locks[i]);
-		if (spi > 0) {
-			start_expire(spi);
-		}
-	}
+  for (i = 0; i < SADB_SIZE; i++)
+    {
+      spi = 0;
+      pthread_mutex_lock(&hip_sadb_locks[i]);
+      for (e = hip_sadb[i]; e; e = e->next)
+        {
+          if (now->tv_sec > e->exptime.tv_sec)
+            {
+              /* wait another lifetime before expiring this SA
+               * again;
+               * this causes only one expire message to be
+               *sent */
+              e->exptime.tv_sec = now->tv_sec +
+                                  (time_t)e->lifetime;
+              spi = e->spi;
+            }
+        }
+      pthread_mutex_unlock(&hip_sadb_locks[i]);
+      if (spi > 0)
+        {
+          start_expire(spi);
+        }
+    }
 }
 
 /*
@@ -948,16 +1076,17 @@ void hip_sadb_expire(struct timeval *now)
  */
 int hip_sadb_get_usage(__u32 spi, __u64 *bytes, struct timeval *usetime)
 {
-	hip_sadb_entry *entry = hip_sadb_lookup_spi(spi);
-	if (!entry) {
-		return(-1); /* not found */
-	}
-	pthread_mutex_lock(&entry->rw_lock);
-	*bytes = entry->bytes;
-	usetime->tv_sec = entry->usetime.tv_sec;
-	usetime->tv_usec = entry->usetime.tv_usec;
-	pthread_mutex_unlock(&entry->rw_lock);
-	return(0);
+  hip_sadb_entry *entry = hip_sadb_lookup_spi(spi);
+  if (!entry)
+    {
+      return(-1);           /* not found */
+    }
+  pthread_mutex_lock(&entry->rw_lock);
+  *bytes = entry->bytes;
+  usetime->tv_sec = entry->usetime.tv_sec;
+  usetime->tv_usec = entry->usetime.tv_usec;
+  pthread_mutex_unlock(&entry->rw_lock);
+  return(0);
 }
 
 /*
@@ -967,14 +1096,15 @@ int hip_sadb_get_usage(__u32 spi, __u64 *bytes, struct timeval *usetime)
  */
 int hip_sadb_get_lost(__u32 spi, __u32 *lost)
 {
-	hip_sadb_entry *entry = hip_sadb_lookup_spi(spi);
-	if (!entry) {
-		return(-1); /* not found */
-	}
-	pthread_mutex_lock(&entry->rw_lock);
-	*lost = entry->lost;
-	pthread_mutex_unlock(&entry->rw_lock);
-	return(0);
+  hip_sadb_entry *entry = hip_sadb_lookup_spi(spi);
+  if (!entry)
+    {
+      return(-1);           /* not found */
+    }
+  pthread_mutex_lock(&entry->rw_lock);
+  *lost = entry->lost;
+  pthread_mutex_unlock(&entry->rw_lock);
+  return(0);
 }
 
 /*
@@ -986,16 +1116,18 @@ int hip_sadb_get_lost(__u32 spi, __u32 *lost)
 void hip_sadb_inc_bytes(hip_sadb_entry *entry, __u64 bytes, struct timeval *now,
                         int lock)
 {
-	if (lock) {
-		pthread_mutex_lock(&entry->rw_lock);
-	}
-	entry->bytes += bytes;
-	entry->packets++;
-	entry->usetime.tv_sec = now->tv_sec;
-	entry->usetime.tv_usec = now->tv_usec;
-	if (lock) {
-		pthread_mutex_unlock(&entry->rw_lock);
-	}
+  if (lock)
+    {
+      pthread_mutex_lock(&entry->rw_lock);
+    }
+  entry->bytes += bytes;
+  entry->packets++;
+  entry->usetime.tv_sec = now->tv_sec;
+  entry->usetime.tv_usec = now->tv_usec;
+  if (lock)
+    {
+      pthread_mutex_unlock(&entry->rw_lock);
+    }
 }
 
 /*
@@ -1011,30 +1143,34 @@ void hip_sadb_inc_bytes(hip_sadb_entry *entry, __u64 bytes, struct timeval *now,
  */
 __u32 hip_sadb_inc_loss(hip_sadb_entry *entry, __u32 loss, struct sockaddr *dst)
 {
-	sockaddr_list *l;
-	for (l = entry->dst_addrs; l; l = l->next) {
-		if ((l->addr.ss_family == dst->sa_family) &&
-		    (!(memcmp(SA2IP(&l->addr), SA2IP(dst),
-		              SAIPLEN(&l->addr))))) {
-			l->nonce += loss;
-			return(l->nonce);
-		}
-	}
-	return(0);
+  sockaddr_list *l;
+  for (l = entry->dst_addrs; l; l = l->next)
+    {
+      if ((l->addr.ss_family == dst->sa_family) &&
+          (!(memcmp(SA2IP(&l->addr), SA2IP(dst),
+                    SAIPLEN(&l->addr)))))
+        {
+          l->nonce += loss;
+          return(l->nonce);
+        }
+    }
+  return(0);
 }
 
 void hip_sadb_reset_loss(hip_sadb_entry *entry, struct sockaddr *dst)
 {
-	sockaddr_list *l;
-	for (l = entry->dst_addrs; l; l = l->next) {
-		if ((l->addr.ss_family == dst->sa_family) &&
-		    (!(memcmp(SA2IP(&l->addr), SA2IP(dst),
-		              SAIPLEN(&l->addr))))) {
-			l->nonce = 0;
-			return;
-		}
-	}
-	return;
+  sockaddr_list *l;
+  for (l = entry->dst_addrs; l; l = l->next)
+    {
+      if ((l->addr.ss_family == dst->sa_family) &&
+          (!(memcmp(SA2IP(&l->addr), SA2IP(dst),
+                    SAIPLEN(&l->addr)))))
+        {
+          l->nonce = 0;
+          return;
+        }
+    }
+  return;
 }
 
 /*
@@ -1047,37 +1183,42 @@ void hip_sadb_reset_loss(hip_sadb_entry *entry, struct sockaddr *dst)
 int hip_select_family_by_proto(__u32 lsi, __u8 proto, __u8 *header,
                                struct timeval *now)
 {
-	hip_proto_sel_entry *sel;
+  hip_proto_sel_entry *sel;
 
-	/* no entry needed for these protocols */
-	if (proto == IPPROTO_ICMP) {
-		return(AF_INET);
-	}
-	if (proto == IPPROTO_ICMPV6) {
-		return(AF_INET6);
-	}
+  /* no entry needed for these protocols */
+  if (proto == IPPROTO_ICMP)
+    {
+      return(AF_INET);
+    }
+  if (proto == IPPROTO_ICMPV6)
+    {
+      return(AF_INET6);
+    }
 
-	/* perform lookup using incoming dir */
-	sel = hip_lookup_sel_entry(lsi, proto, header, 1);
+  /* perform lookup using incoming dir */
+  sel = hip_lookup_sel_entry(lsi, proto, header, 1);
 
-	/* protocol selector entry exists, update the time */
-	if (sel) {
-		sel->last_used.tv_sec = now->tv_sec;
-		return (sel->family);
-		/* selector entry does not exist, create a new
-		 * entry with the default address family */
-	} else {
-		hip_add_proto_sel_entry(lsi, proto, header,
+  /* protocol selector entry exists, update the time */
+  if (sel)
+    {
+      sel->last_used.tv_sec = now->tv_sec;
+      return (sel->family);
+      /* selector entry does not exist, create a new
+       * entry with the default address family */
+    }
+  else
+    {
+      hip_add_proto_sel_entry(lsi, proto, header,
 /* Test by Orlie 10/6/08
  *                                       AF_INET6,
  */
-		                        PROTO_SEL_DEFAULT_FAMILY,
-		                        1, now);
+                              PROTO_SEL_DEFAULT_FAMILY,
+                              1, now);
 /* Test by Orlie 10/6/08
  *               return (AF_INET6);
  */
-		return (PROTO_SEL_DEFAULT_FAMILY);
-	}
+      return (PROTO_SEL_DEFAULT_FAMILY);
+    }
 }
 
 /*
@@ -1093,110 +1234,119 @@ int hip_select_family_by_proto(__u32 lsi, __u8 proto, __u8 *header,
 int hip_add_proto_sel_entry(__u32 lsi, __u8 proto, __u8 *header, int family,
                             int dir, struct timeval *now)
 {
-	int hash;
-	hip_proto_sel_entry *e, *last = NULL;
-	__u32 selector = hip_proto_header_to_selector(lsi, proto, header, dir);
+  int hash;
+  hip_proto_sel_entry *e, *last = NULL;
+  __u32 selector = hip_proto_header_to_selector(lsi, proto, header, dir);
 
-	hash = hip_proto_sel_hash(selector);
-	pthread_mutex_lock(&hip_proto_sel_locks[hash]); /* lock this chain */
+  hash = hip_proto_sel_hash(selector);
+  pthread_mutex_lock(&hip_proto_sel_locks[hash]);       /* lock this chain */
 
-	for (e = hip_proto_sel[hash]; e; e = e->next) {
-		last = e;
-		if (e->family != family) {
-			continue;
-		}
-		if (e->selector != selector) {
-			continue;
-		}
-		/* entry already exists, update time */
-		e->last_used.tv_sec = now->tv_sec;
-		pthread_mutex_unlock(&hip_proto_sel_locks[hash]);
-		return(0);
-	}
+  for (e = hip_proto_sel[hash]; e; e = e->next)
+    {
+      last = e;
+      if (e->family != family)
+        {
+          continue;
+        }
+      if (e->selector != selector)
+        {
+          continue;
+        }
+      /* entry already exists, update time */
+      e->last_used.tv_sec = now->tv_sec;
+      pthread_mutex_unlock(&hip_proto_sel_locks[hash]);
+      return(0);
+    }
 
-	e = malloc(sizeof(hip_proto_sel_entry));
-	if (!e) {
-		pthread_mutex_unlock(&hip_proto_sel_locks[hash]);
-		return(-1); /* no buffer space available */
-	}
+  e = malloc(sizeof(hip_proto_sel_entry));
+  if (!e)
+    {
+      pthread_mutex_unlock(&hip_proto_sel_locks[hash]);
+      return(-1);           /* no buffer space available */
+    }
 
-	/* add the new entry */
-	memset(e, 0, sizeof(hip_proto_sel_entry));
-	e->next = NULL;
-	e->selector = selector;
-	e->family = family;
-	e->last_used.tv_sec = now->tv_sec;
+  /* add the new entry */
+  memset(e, 0, sizeof(hip_proto_sel_entry));
+  e->next = NULL;
+  e->selector = selector;
+  e->family = family;
+  e->last_used.tv_sec = now->tv_sec;
 
-	if (last) {
-		last->next = e;
-	}
-	else {
-		hip_proto_sel[hash] = e;
-	}
-	pthread_mutex_unlock(&hip_proto_sel_locks[hash]);
-	return(0);
+  if (last)
+    {
+      last->next = e;
+    }
+  else
+    {
+      hip_proto_sel[hash] = e;
+    }
+  pthread_mutex_unlock(&hip_proto_sel_locks[hash]);
+  return(0);
 }
 
 hip_proto_sel_entry *hip_lookup_sel_entry(__u32 lsi, __u8 proto, __u8 *header,
                                           int dir)
 {
-	hip_proto_sel_entry *e;
-	int hash;
-	__u32 selector = hip_proto_header_to_selector(lsi, proto, header, dir);
+  hip_proto_sel_entry *e;
+  int hash;
+  __u32 selector = hip_proto_header_to_selector(lsi, proto, header, dir);
 
-	hash = hip_proto_sel_hash(selector);
-	pthread_mutex_lock(&hip_proto_sel_locks[hash]); /* lock this chain */
+  hash = hip_proto_sel_hash(selector);
+  pthread_mutex_lock(&hip_proto_sel_locks[hash]);       /* lock this chain */
 
-	for (e = hip_proto_sel[hash]; e; e = e->next) {
-		if (selector == e->selector) {
-			break;
-		}
-	}
-	pthread_mutex_unlock(&hip_proto_sel_locks[hash]);
-	return(e);
+  for (e = hip_proto_sel[hash]; e; e = e->next)
+    {
+      if (selector == e->selector)
+        {
+          break;
+        }
+    }
+  pthread_mutex_unlock(&hip_proto_sel_locks[hash]);
+  return(e);
 }
 
 __u32 hip_proto_header_to_selector(__u32 lsi, __u8 proto, __u8 *header, int dir)
 {
-	struct tcphdr *tcph;
-	struct udphdr *udph;
-	__u32 selector;
+  struct tcphdr *tcph;
+  struct udphdr *udph;
+  __u32 selector;
 
-	switch (proto) {
-	case IPPROTO_TCP:
-		tcph = (struct tcphdr *)header;
+  switch (proto)
+    {
+    case IPPROTO_TCP:
+      tcph = (struct tcphdr *)header;
 #ifdef __MACOSX__
-		selector =
-		        (dir == 1) ? (tcph->th_sport << 16) + tcph->th_dport :
-		        (tcph->th_dport << 16) + tcph->th_sport;
+      selector =
+        (dir == 1) ? (tcph->th_sport << 16) + tcph->th_dport :
+        (tcph->th_dport << 16) + tcph->th_sport;
 #else
-		selector = (dir == 1) ? (tcph->source << 16) + tcph->dest :
-		           (tcph->dest << 16) + tcph->source;
+      selector = (dir == 1) ? (tcph->source << 16) + tcph->dest :
+                 (tcph->dest << 16) + tcph->source;
 #endif
-		break;
-	case IPPROTO_UDP:
-		udph = (struct udphdr *)header;
+      break;
+    case IPPROTO_UDP:
+      udph = (struct udphdr *)header;
 #ifdef __MACOSX__
-		selector =
-		        (dir == 1) ? (udph->uh_sport << 16) + udph->uh_dport :
-		        (udph->uh_dport << 16) + udph->uh_sport;
+      selector =
+        (dir == 1) ? (udph->uh_sport << 16) + udph->uh_dport :
+        (udph->uh_dport << 16) + udph->uh_sport;
 #else
-		selector = (dir == 1) ? (udph->source << 16) + udph->dest :
-		           (udph->dest << 16) + udph->source;
+      selector = (dir == 1) ? (udph->source << 16) + udph->dest :
+                 (udph->dest << 16) + udph->source;
 #endif
-		break;
-	case IPPROTO_ESP:
-		/* could use SPI for selector, but ESP has different
-		 * incoming and outgoing SPIs */
-		selector = 1;
-		break;
-	/* TODO: write other selectors here as needed */
-	default:
-		selector = 0;
-		break;
-	}
-	selector += lsi;
-	return(selector);
+      break;
+    case IPPROTO_ESP:
+      /* could use SPI for selector, but ESP has different
+       * incoming and outgoing SPIs */
+      selector = 1;
+      break;
+    /* TODO: write other selectors here as needed */
+    default:
+      selector = 0;
+      break;
+    }
+  selector += lsi;
+  return(selector);
 }
 
 /*
@@ -1204,90 +1354,108 @@ __u32 hip_proto_header_to_selector(__u32 lsi, __u8 proto, __u8 *header, int dir)
  */
 void hip_remove_expired_sel_entries(struct timeval *now)
 {
-	static unsigned int last = 0;
-	int i;
-	hip_proto_sel_entry *entry, *prev, *next;
+  static unsigned int last = 0;
+  int i;
+  hip_proto_sel_entry *entry, *prev, *next;
 
 
-	/* rate limit - every 30 seconds */
-	if ((last > 0) && ((now->tv_sec - last) < 30)) {
-		return;
-	} else {
-		last = now->tv_sec;
-	}
+  /* rate limit - every 30 seconds */
+  if ((last > 0) && ((now->tv_sec - last) < 30))
+    {
+      return;
+    }
+  else
+    {
+      last = now->tv_sec;
+    }
 
 
-	for (i = 0; i < PROTO_SEL_SIZE; i++) {
-		prev = NULL;
-		pthread_mutex_lock(&hip_proto_sel_locks[i]);
-		entry = hip_proto_sel[i]; /* traverse list in each bucket */
-		while (entry) {
-			next = entry->next;
-			/* check for expiration */
-			if ((now->tv_sec - entry->last_used.tv_sec) >
-			    PROTO_SEL_ENTRY_LIFETIME) {
-				free(entry);
-				if (prev) {
-					prev->next = next;
-				} else {
-					hip_proto_sel[i] = next;
-				}
-			} else {
-				prev = entry;
-			}
-			entry = next;
-		}
-		pthread_mutex_unlock(&hip_proto_sel_locks[i]);
-	}
+  for (i = 0; i < PROTO_SEL_SIZE; i++)
+    {
+      prev = NULL;
+      pthread_mutex_lock(&hip_proto_sel_locks[i]);
+      entry = hip_proto_sel[i];           /* traverse list in each bucket */
+      while (entry)
+        {
+          next = entry->next;
+          /* check for expiration */
+          if ((now->tv_sec - entry->last_used.tv_sec) >
+              PROTO_SEL_ENTRY_LIFETIME)
+            {
+              free(entry);
+              if (prev)
+                {
+                  prev->next = next;
+                }
+              else
+                {
+                  hip_proto_sel[i] = next;
+                }
+            }
+          else
+            {
+              prev = entry;
+            }
+          entry = next;
+        }
+      pthread_mutex_unlock(&hip_proto_sel_locks[i]);
+    }
 }
 
 hip_proto_sel_entry *hip_remove_proto_sel_entry(hip_proto_sel_entry *prev,
                                                 hip_proto_sel_entry *entry)
 {
-	hip_proto_sel_entry *next;
+  hip_proto_sel_entry *next;
 
-	if (prev) { /* unlink the entry from the list */
-		prev->next = entry->next;
-		memset(entry, 0, sizeof(hip_proto_sel_entry));
-		free(entry);
-		return(prev->next);
-	} else if (entry->next) { /* replace entry in table w/next in list */
-		next = entry->next;
-		memcpy(entry, next, sizeof(hip_proto_sel_entry));
-		memset(next, 0, sizeof(hip_proto_sel_entry));
-		free(next); /* remove duplicate */
-		return(entry);
-	} else { /* no prev or next, just erase single entry */
-		memset(entry, 0, sizeof(hip_proto_sel_entry));
-		return(NULL);
-	}
+  if (prev)         /* unlink the entry from the list */
+    {
+      prev->next = entry->next;
+      memset(entry, 0, sizeof(hip_proto_sel_entry));
+      free(entry);
+      return(prev->next);
+    }
+  else if (entry->next)           /* replace entry in table w/next in list */
+    {
+      next = entry->next;
+      memcpy(entry, next, sizeof(hip_proto_sel_entry));
+      memset(next, 0, sizeof(hip_proto_sel_entry));
+      free(next);           /* remove duplicate */
+      return(entry);
+    }
+  else           /* no prev or next, just erase single entry */
+    {
+      memset(entry, 0, sizeof(hip_proto_sel_entry));
+      return(NULL);
+    }
 }
 
 /* debug */
 void print_sadb()
 {
-	int i;
-	hip_sadb_entry *entry;
+  int i;
+  hip_sadb_entry *entry;
 
-	for (i = 0; i < SADB_SIZE; i++) {
-		for (entry = hip_sadb[i]; entry; entry = entry->next) {
-			pthread_mutex_lock(&entry->rw_lock);
-			printf("entry(%d): ", i);
-			printf(
-			        "SPI=0x%x dir=%d magic=0x%x mode=%d lsi=%x ",
-			        entry->spi,
-			        entry->direction,
-			        entry->hit_magic,
-			        entry->mode,
-			        ((struct sockaddr_in*)&entry->lsi)->sin_addr.
-			        s_addr);
-			printf("a_type=%d e_type=%d a_keylen=%d "
-			       "e_keylen=%d lifetime=%llu seq=%d\n",
-			       entry->a_type, entry->e_type,
-			       entry->a_keylen, entry->e_keylen,
-			       entry->lifetime, entry->sequence  );
-			pthread_mutex_unlock(&entry->rw_lock);
-		}
-	}
+  for (i = 0; i < SADB_SIZE; i++)
+    {
+      for (entry = hip_sadb[i]; entry; entry = entry->next)
+        {
+          pthread_mutex_lock(&entry->rw_lock);
+          printf("entry(%d): ", i);
+          printf(
+            "SPI=0x%x dir=%d magic=0x%x mode=%d lsi=%x ",
+            entry->spi,
+            entry->direction,
+            entry->hit_magic,
+            entry->mode,
+            ((struct sockaddr_in*)&entry->lsi)->sin_addr.
+            s_addr);
+          printf("a_type=%d e_type=%d a_keylen=%d "
+                 "e_keylen=%d lifetime=%llu seq=%d\n",
+                 entry->a_type, entry->e_type,
+                 entry->a_keylen, entry->e_keylen,
+                 entry->lifetime, entry->sequence  );
+          pthread_mutex_unlock(&entry->rw_lock);
+        }
+    }
 }
 

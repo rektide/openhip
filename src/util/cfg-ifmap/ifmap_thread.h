@@ -31,17 +31,17 @@ extern QWaitCondition mapWaitCond;
 class IfmapClient;
 
 class IfmapThread : public QThread {
-	Q_OBJECT
+  Q_OBJECT
 public:
-	IfmapThread(QObject *parent = 0);
-	~IfmapThread();
+  IfmapThread(QObject *parent = 0);
+  ~IfmapThread();
 
-	void run();
+  void run();
 
-	void deleteMapClient();
+  void deleteMapClient();
 
 public:
-	IfmapClient *_client;
+  IfmapClient *_client;
 
 };
 

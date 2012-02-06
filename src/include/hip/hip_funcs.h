@@ -80,12 +80,12 @@
 
 
 #define IN_LOOP(a) \
-        (htonl(((struct sockaddr_in*)a)->sin_addr.s_addr) >> IN_CLASSA_NSHIFT \
-         ==  (INADDR_LOOPBACK >> IN_CLASSA_NSHIFT))
+  (htonl(((struct sockaddr_in*)a)->sin_addr.s_addr) >> IN_CLASSA_NSHIFT \
+   ==  (INADDR_LOOPBACK >> IN_CLASSA_NSHIFT))
 #define IN6_LOOP(a) \
-        IN6_IS_ADDR_LOOPBACK( &((struct sockaddr_in6*)a)->sin6_addr )
+  IN6_IS_ADDR_LOOPBACK( &((struct sockaddr_in6*)a)->sin6_addr )
 #define IN6_LL(a) \
-        IN6_IS_ADDR_LINKLOCAL( &((struct sockaddr_in6*)a)->sin6_addr )
+  IN6_IS_ADDR_LINKLOCAL( &((struct sockaddr_in6*)a)->sin6_addr )
 
 
 /*
@@ -340,10 +340,10 @@ int  add_proxy_ticket(const __u8 *data);
 static __inline __u64 __hton64( __u64 i )
 {
 #if defined(__BIG_ENDIAN__) || defined(__arm__)
-	return(i);
+  return(i);
 #endif
-	return(((__u64)(htonl((__u32)(i) & 0xffffffff)) << 32)
-	       | htonl((__u32)(((i) >> 32) & 0xffffffff)));
+  return(((__u64)(htonl((__u32)(i) & 0xffffffff)) << 32)
+         | htonl((__u32)(((i) >> 32) & 0xffffffff)));
 }
 
 #define hton64(i)   __hton64( i )
@@ -353,10 +353,13 @@ static __inline __u64 __hton64( __u64 i )
 #ifdef __WIN32__
 static __inline int gettimeofday(struct timeval *tv, void *tz)
 {
-	if (!tv) { return(-1); }
-	tv->tv_usec = 0;
-	tv->tv_sec = time(NULL);
-	return(0);
+  if (!tv)
+    {
+      return(-1);
+    }
+  tv->tv_usec = 0;
+  tv->tv_sec = time(NULL);
+  return(0);
 }
 
 #define pthread_mutex_lock(mp) WaitForSingleObject(*mp, INFINITE)

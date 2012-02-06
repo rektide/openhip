@@ -82,11 +82,11 @@ extern int g_state;
 /* get pointer to IP from a sockaddr
  *    useful for inet_ntop calls     */
 #define SA2IP(x) (((struct sockaddr*)x)->sa_family == AF_INET) ? \
-        (void*)&((struct sockaddr_in*)x)->sin_addr : \
-        (void*)&((struct sockaddr_in6*)x)->sin6_addr
+  (void*)&((struct sockaddr_in*)x)->sin_addr : \
+  (void*)&((struct sockaddr_in6*)x)->sin6_addr
 /* get socket address length in bytes */
 #define SALEN(x) (((struct sockaddr*)x)->sa_family == AF_INET) ? \
-        sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6)
+  sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6)
 /* get IP address length in bytes */
 #define SAIPLEN(x) (((struct sockaddr*)x)->sa_family == AF_INET) ? 4 : 16
 #endif
@@ -95,20 +95,20 @@ extern int g_state;
 
 /* from linux/include/linux/kernel.h */
 #define NIPQUAD(addr) \
-        ((unsigned char *)&addr)[0], \
-        ((unsigned char *)&addr)[1], \
-        ((unsigned char *)&addr)[2], \
-        ((unsigned char *)&addr)[3]
+  ((unsigned char *)&addr)[0], \
+  ((unsigned char *)&addr)[1], \
+  ((unsigned char *)&addr)[2], \
+  ((unsigned char *)&addr)[3]
 
 #define NIP6(addr) \
-        ntohs((addr).s6_addr16[0]), \
-        ntohs((addr).s6_addr16[1]), \
-        ntohs((addr).s6_addr16[2]), \
-        ntohs((addr).s6_addr16[3]), \
-        ntohs((addr).s6_addr16[4]), \
-        ntohs((addr).s6_addr16[5]), \
-        ntohs((addr).s6_addr16[6]), \
-        ntohs((addr).s6_addr16[7])
+  ntohs((addr).s6_addr16[0]), \
+  ntohs((addr).s6_addr16[1]), \
+  ntohs((addr).s6_addr16[2]), \
+  ntohs((addr).s6_addr16[3]), \
+  ntohs((addr).s6_addr16[4]), \
+  ntohs((addr).s6_addr16[5]), \
+  ntohs((addr).s6_addr16[6]), \
+  ntohs((addr).s6_addr16[7])
 
 #define TRUE 1
 #define FALSE 0
@@ -117,20 +117,20 @@ extern int g_state;
  * Local data types
  */
 struct ip_esp_hdr {
-	__u32 spi;
-	__u32 seq_no;
-	__u8 enc_data[0];
+  __u32 spi;
+  __u32 seq_no;
+  __u8 enc_data[0];
 };
 
 struct ip_esp_padinfo {
-	__u8 pad_length;
-	__u8 next_hdr;
+  __u8 pad_length;
+  __u8 next_hdr;
 };
 
 struct eth_hdr {
-	__u8 dst[6];
-	__u8 src[6];
-	__u16 type;
+  __u8 dst[6];
+  __u8 src[6];
+  __u16 type;
 } __attribute__((packed));
 
 /* ARP header - RFC 826, STD 37 */
@@ -139,11 +139,11 @@ struct eth_hdr {
  * 'packed' attribute
  */
 struct arp_hdr {
-	__u16 ar_hrd;
-	__u16 ar_pro;
-	__u8 ar_hln;
-	__u8 ar_pln;
-	__u16 ar_op;
+  __u16 ar_hrd;
+  __u16 ar_pro;
+  __u8 ar_hln;
+  __u8 ar_pln;
+  __u16 ar_op;
 } __attribute__((packed));
 
 /*
@@ -152,10 +152,10 @@ struct arp_hdr {
  */
 
 struct arp_req_data {
-	__u8 src_mac[6];
-	__u32 src_ip;
-	__u8 dst_mac[6];
-	__u32 dst_ip;
+  __u8 src_mac[6];
+  __u32 src_ip;
+  __u8 dst_mac[6];
+  __u32 dst_ip;
 } __attribute__((packed));
 
 #define ARPOP_REQUEST 1

@@ -36,8 +36,8 @@
  */
 struct status_tlv
 {
-	unsigned short tlv_type;
-	unsigned short tlv_len;
+  unsigned short tlv_type;
+  unsigned short tlv_len;
 };
 
 #define ADD_ITEM(a, b, c) memcpy(&a[c], &b, sizeof(b)); c += sizeof(b);
@@ -46,51 +46,51 @@ struct status_tlv
  * Status request types serviced by hipd
  */
 enum requests {
-	HIP_STATUS_REQ_MIN,
-	HIP_STATUS_REQ_PEERS,
-	HIP_STATUS_REQ_MYIDS,
-	HIP_STATUS_REQ_MYADDRS,
-	HIP_STATUS_REQ_ASSOC,
-	HIP_STATUS_REQ_OPTS,
-	HIP_STATUS_REQ_CONF,
-	HIP_STATUS_REQ_MAX
+  HIP_STATUS_REQ_MIN,
+  HIP_STATUS_REQ_PEERS,
+  HIP_STATUS_REQ_MYIDS,
+  HIP_STATUS_REQ_MYADDRS,
+  HIP_STATUS_REQ_ASSOC,
+  HIP_STATUS_REQ_OPTS,
+  HIP_STATUS_REQ_CONF,
+  HIP_STATUS_REQ_MAX
 };
 
 enum settings {
-	HIP_STATUS_CONFIG_MIN=HIP_STATUS_REQ_MAX,
-	HIP_STATUS_CONFIG_OPTS,
-	HIP_STATUS_CONFIG_MAX
+  HIP_STATUS_CONFIG_MIN=HIP_STATUS_REQ_MAX,
+  HIP_STATUS_CONFIG_OPTS,
+  HIP_STATUS_CONFIG_MAX
 };
 
 /*
  * Status request types handled by the Windows service
  */
 enum win_requests {
-	STAT_MIN,
-	STAT_THREADS,
-	STAT_SADB,
-	STAT_DST,
-	STAT_LSI,
-	STAT_PEERS,
-	STAT_IDS,
-	STAT_ALL_SPI,
-	STAT_MAX
+  STAT_MIN,
+  STAT_THREADS,
+  STAT_SADB,
+  STAT_DST,
+  STAT_LSI,
+  STAT_PEERS,
+  STAT_IDS,
+  STAT_ALL_SPI,
+  STAT_MAX
 };
 
 enum responses {
-	HIP_STATUS_REPLY_MIN,
-	HIP_STATUS_REPLY_ERROR,
-	HIP_STATUS_REPLY_STRING,
-	HIP_STATUS_REPLY_SADB,
-	HIP_STATUS_REPLY_ADDR,
-	HIP_STATUS_REPLY_DST_ENTRY,
-	HIP_STATUS_REPLY_LSI_ENTRY,
-	HIP_STATUS_REPLY_HI,
-	HIP_STATUS_REPLY_ASSOC,
-	HIP_STATUS_REPLY_OPTS,
-	HIP_STATUS_REPLY_ALL_SPI,
-	HIP_STATUS_REPLY_DONE,
-	HIP_STATUS_REPLY_MAX
+  HIP_STATUS_REPLY_MIN,
+  HIP_STATUS_REPLY_ERROR,
+  HIP_STATUS_REPLY_STRING,
+  HIP_STATUS_REPLY_SADB,
+  HIP_STATUS_REPLY_ADDR,
+  HIP_STATUS_REPLY_DST_ENTRY,
+  HIP_STATUS_REPLY_LSI_ENTRY,
+  HIP_STATUS_REPLY_HI,
+  HIP_STATUS_REPLY_ASSOC,
+  HIP_STATUS_REPLY_OPTS,
+  HIP_STATUS_REPLY_ALL_SPI,
+  HIP_STATUS_REPLY_DONE,
+  HIP_STATUS_REPLY_MAX
 };
 
 
@@ -101,25 +101,25 @@ enum responses {
  * Useful text definitions
  */
 const char enc_alg_texts[7][28] = {
-	"",
-	"AES CBC with HMAC SHA1",
-	"3DES CBC with HMAC SHA1",
-	"3DES CBC with HMAC MD5",
-	"BLOWFISH CBC with HMAC SHA1",
-	"NULL with HMAC SHA1",
-	"NULL with HMAC MD5",
+  "",
+  "AES CBC with HMAC SHA1",
+  "3DES CBC with HMAC SHA1",
+  "3DES CBC with HMAC MD5",
+  "BLOWFISH CBC with HMAC SHA1",
+  "NULL with HMAC SHA1",
+  "NULL with HMAC MD5",
 };
 
 const char state_texts[9][16] = {
-	"Unassociated",
-	"I1 Sent",
-	"I2 Sent",
-	"R2 Sent",
-	"Established",
-	"Rekeying",
-	"Closing",
-	"Closed",
-	"E Failed",
+  "Unassociated",
+  "I1 Sent",
+  "I2 Sent",
+  "R2 Sent",
+  "Established",
+  "Rekeying",
+  "Closing",
+  "Closed",
+  "E Failed",
 };
 
 #endif

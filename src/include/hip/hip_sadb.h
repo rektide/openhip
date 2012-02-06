@@ -71,7 +71,7 @@
 #define LSI4(a) (((struct sockaddr_in*)a)->sin_addr.s_addr)
 #define ESP_SEQNO_MAX (0xFFFFFFFF - 0x20)
 #define check_esp_seqno_overflow(e) e && (e->sequence_hi == 0xFFFFFFFF) && \
-        (e->sequence >= ESP_SEQNO_MAX)
+  (e->sequence >= ESP_SEQNO_MAX)
 
 /*
  * HIP Security Association entry
@@ -82,48 +82,48 @@
  */
 typedef struct _hip_sadb_entry
 {
-	struct _hip_sadb_entry *next;
-	__u32 spi;                      /* primary index into SADB */
-	__u32 spinat;                   /* spinat for mobile router */
-	__u32 mode;     /* ESP mode :  0-default 1-transport 2-tunnel 3-beet */
-	int direction;                  /* 1-in/2-out */
-	__u16 hit_magic;                /* for quick checksum calculation */
-	sockaddr_list *src_addrs;       /* source addresses             */
-	sockaddr_list *dst_addrs;       /* destination addresses        */
-	struct sockaddr_storage src_hit; /* source HIT */
-	struct sockaddr_storage dst_hit; /* destination HIT */
-	struct sockaddr_storage lsi;    /* peer's IPv4 1.x.x.x LSI */
-	__u32 a_type;                   /* crypto parameters            */
-	__u32 e_type;
-	__u32 a_keylen;
-	__u32 e_keylen;
-	__u8 *a_key;                    /* raw crypto keys */
-	__u8 *e_key;
-	__u64 lifetime;                 /* seconds until expiration */
-	struct timeval exptime;         /* expiration timestamp */
-	__u64 bytes;                    /* bytes tx/rx */
-	__u32 packets;                  /* number of packets tx/rx*/
-	__u32 lost;                     /* number of packets lost */
-	__u32 dropped;                  /* number of packets dropped */
-	struct timeval usetime;         /* last used timestamp */
-	__u32 sequence;                 /* outgoing or highest received seq no*/
-	__u32 sequence_hi;              /* high-order bits of 64-bit ESN */
-	__u64 replay_win_max;           /* right side of received window */
-	__u64 replay_win_map;           /* anti-replay bitmap */
-	char iv[8];
-	des_key_schedule ks[3];         /* 3-DES keys */
-	AES_KEY *aes_key;               /* AES key */
-	BF_KEY *bf_key;                 /* BLOWFISH key */
-	hip_mutex_t rw_lock;
+  struct _hip_sadb_entry *next;
+  __u32 spi;                            /* primary index into SADB */
+  __u32 spinat;                         /* spinat for mobile router */
+  __u32 mode;           /* ESP mode :  0-default 1-transport 2-tunnel 3-beet */
+  int direction;                        /* 1-in/2-out */
+  __u16 hit_magic;                      /* for quick checksum calculation */
+  sockaddr_list *src_addrs;             /* source addresses             */
+  sockaddr_list *dst_addrs;             /* destination addresses        */
+  struct sockaddr_storage src_hit;       /* source HIT */
+  struct sockaddr_storage dst_hit;       /* destination HIT */
+  struct sockaddr_storage lsi;          /* peer's IPv4 1.x.x.x LSI */
+  __u32 a_type;                         /* crypto parameters            */
+  __u32 e_type;
+  __u32 a_keylen;
+  __u32 e_keylen;
+  __u8 *a_key;                          /* raw crypto keys */
+  __u8 *e_key;
+  __u64 lifetime;                       /* seconds until expiration */
+  struct timeval exptime;               /* expiration timestamp */
+  __u64 bytes;                          /* bytes tx/rx */
+  __u32 packets;                        /* number of packets tx/rx*/
+  __u32 lost;                           /* number of packets lost */
+  __u32 dropped;                        /* number of packets dropped */
+  struct timeval usetime;               /* last used timestamp */
+  __u32 sequence;                       /* outgoing or highest received seq no*/
+  __u32 sequence_hi;                    /* high-order bits of 64-bit ESN */
+  __u64 replay_win_max;                 /* right side of received window */
+  __u64 replay_win_map;                 /* anti-replay bitmap */
+  char iv[8];
+  des_key_schedule ks[3];               /* 3-DES keys */
+  AES_KEY *aes_key;                     /* AES key */
+  BF_KEY *bf_key;                       /* BLOWFISH key */
+  hip_mutex_t rw_lock;
 } hip_sadb_entry;
 
 /* HIP SADB desintation cache entry */
 typedef struct _hip_sadb_dst_entry
 {
-	struct _hip_sadb_dst_entry *next;
-	struct sockaddr_storage addr;
-	hip_sadb_entry *sadb_entry;
-	hip_mutex_t rw_lock;
+  struct _hip_sadb_dst_entry *next;
+  struct sockaddr_storage addr;
+  hip_sadb_entry *sadb_entry;
+  hip_mutex_t rw_lock;
 } hip_sadb_dst_entry;
 
 /* HIP LSI table entry */
@@ -132,15 +132,15 @@ typedef struct _hip_sadb_dst_entry
 #define LSI_ENTRY_LIFETIME 120
 typedef struct _hip_lsi_entry
 {
-	struct _hip_lsi_entry *next;
-	struct sockaddr_storage addr;
-	struct sockaddr_storage lsi4;
-	struct sockaddr_storage lsi6;
-	__u8 packet_buffer[LSI_PKT_BUFFER_SIZE];
-	int num_packets;
-	int next_packet;
-	int send_packets;
-	struct timeval creation_time;
+  struct _hip_lsi_entry *next;
+  struct sockaddr_storage addr;
+  struct sockaddr_storage lsi4;
+  struct sockaddr_storage lsi6;
+  __u8 packet_buffer[LSI_PKT_BUFFER_SIZE];
+  int num_packets;
+  int next_packet;
+  int send_packets;
+  struct timeval creation_time;
 } hip_lsi_entry;
 /* protocol selector entry */
 #define PROTO_SEL_SIZE 512
@@ -149,10 +149,10 @@ typedef struct _hip_lsi_entry
 #define hip_proto_sel_hash(a) (a % PROTO_SEL_SIZE)
 typedef struct _hip_proto_sel_entry
 {
-	struct _hip_proto_sel_entry *next;
-	__u32 selector;         /* upper layer protocol-specific selector */
-	int family;             /* guidance on which address family to use */
-	struct timeval last_used;
+  struct _hip_proto_sel_entry *next;
+  __u32 selector;               /* upper layer protocol-specific selector */
+  int family;                   /* guidance on which address family to use */
+  struct timeval last_used;
 } hip_proto_sel_entry;
 
 

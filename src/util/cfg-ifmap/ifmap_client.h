@@ -29,47 +29,47 @@
 using namespace ifmap11;
 
 class IfmapClient : public QObject {
-	Q_OBJECT
+  Q_OBJECT
 public:
-	IfmapClient(QObject *parent = 0);
-	~IfmapClient();
+  IfmapClient(QObject *parent = 0);
+  ~IfmapClient();
 
 public slots:
-	void connectToMap(QMap<QString,QString> *mapConfig);
-	void setUnderlayIp(QString ip);
+  void connectToMap(QMap<QString,QString> *mapConfig);
+  void setUnderlayIp(QString ip);
 
 private slots:
-	void newSession();
-	void mapResponseOnARC(MapResponse *mapResponse);
-	void publishUnderlayIp();
+  void newSession();
+  void mapResponseOnARC(MapResponse *mapResponse);
+  void publishUnderlayIp();
 
 private:
-	void updateEndboxMapping(SearchResult *searchResult);
-	QString interfaceAddr();
-	bool purgePublisher();
-	bool publishCurrentState();
-	bool setupEndboxMapSubscriptions();
-	bool searchCurrentConfig();
-	void processPollResponse(MapResponse *mapResponse);
+  void updateEndboxMapping(SearchResult *searchResult);
+  QString interfaceAddr();
+  bool purgePublisher();
+  bool publishCurrentState();
+  bool setupEndboxMapSubscriptions();
+  bool searchCurrentConfig();
+  void processPollResponse(MapResponse *mapResponse);
 
 private:
-	Ifmap *_ifmap;
-	bool _haveValidSession;
-	QString _sessionId;
-	QString _publisherId;
-	QString _currentIp;
-	QString _oldIp;
-	bool _haveInitialConfig;
+  Ifmap *_ifmap;
+  bool _haveValidSession;
+  QString _sessionId;
+  QString _publisherId;
+  QString _currentIp;
+  QString _oldIp;
+  bool _haveInitialConfig;
 
-	QString _scadaNS;
+  QString _scadaNS;
 
-	QString _matchLinks;
-	QString _resultsFilter;
-	int _maxDepth;
+  QString _matchLinks;
+  QString _resultsFilter;
+  int _maxDepth;
 
-	int _retryDelay;
+  int _retryDelay;
 
-	QMap<QString,QString> _mapConfig;
+  QMap<QString,QString> _mapConfig;
 };
 
 #endif

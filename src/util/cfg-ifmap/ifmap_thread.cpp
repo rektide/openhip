@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2011 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -27,26 +27,27 @@ QMutex mapMutex;
 QWaitCondition mapWaitCond;
 
 IfmapThread::IfmapThread(QObject *parent)
-	: QThread(parent)
+  : QThread(parent)
 {
-    qDebug() << "In IfmapThread constructor";
+  qDebug() << "In IfmapThread constructor";
 }
 
 IfmapThread::~IfmapThread()
 {
-    qDebug() << "In IfmapThread destructor";
+  qDebug() << "In IfmapThread destructor";
 }
 
 void IfmapThread::run()
 {
-    qDebug() << "in IfmapThread::run()";
+  qDebug() << "in IfmapThread::run()";
 
-    _client = new IfmapClient(0);
-    exec();
+  _client = new IfmapClient(0);
+  exec();
 }
 
 void IfmapThread::deleteMapClient()
 {
-    qDebug() << "In IfmapThread::deleteMapClient";
-    delete _client;
+  qDebug() << "In IfmapThread::deleteMapClient";
+  delete _client;
 }
+

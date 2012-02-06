@@ -25,24 +25,24 @@
 class hipCfgLdap : public hipCfg
 {
 public:
-	int loadCfg(struct hip_conf *hc);
-	int closeCfg();
-	int postLocalCert(const char *hit);
-	int verifyCert(const char *url, const hip_hit hit);
-	static hipCfgLdap *getInstance();
+  int loadCfg(struct hip_conf *hc);
+  int closeCfg();
+  int postLocalCert(const char *hit);
+  int verifyCert(const char *url, const hip_hit hit);
+  static hipCfgLdap *getInstance();
 
 private:
-	hipCfgLdap();
-	int connectToLdap();
-	void disconnectLdap();
-	int getCertFromLdap(const char *url, char *buf, int size);
-	int getEndboxMapsFromLdap();
-	int getPeerAllowedFromLdap();
+  hipCfgLdap();
+  int connectToLdap();
+  void disconnectLdap();
+  int getCertFromLdap(const char *url, char *buf, int size);
+  int getEndboxMapsFromLdap();
+  int getPeerAllowedFromLdap();
 
 private:
-	string _basedn;
-	static LDAPConnection *_lc;
-	static hipCfgLdap *_instance;
+  string _basedn;
+  static LDAPConnection *_lc;
+  static hipCfgLdap *_instance;
 };
 
 #endif

@@ -24,12 +24,12 @@
 
 /* DNS packet structures */
 struct dns_hdr {
-	__u16 transaction_id;
-	__u16 flags;
-	__u16 question_count;
-	__u16 answer_count;
-	__u16 namesrvr_count;
-	__u16 additional_count;
+  __u16 transaction_id;
+  __u16 flags;
+  __u16 question_count;
+  __u16 answer_count;
+  __u16 namesrvr_count;
+  __u16 additional_count;
 #ifdef __WIN32__
 };
 #else
@@ -53,11 +53,11 @@ struct dns_hdr {
 #define DNS_TYPE_NXDOMAIN       -1 /* (not a real DNS answer type) */
 
 struct dns_ans_hdr {
-	__u16 ans_name;
-	__u16 ans_type;
-	__u16 ans_class;
-	__u32 ans_ttl;
-	__u16 ans_len;
+  __u16 ans_name;
+  __u16 ans_type;
+  __u16 ans_class;
+  __u32 ans_ttl;
+  __u16 ans_len;
 #ifdef __WIN32__
 };
 #else

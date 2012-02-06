@@ -51,7 +51,7 @@ extern int hipcfg_allowed_peers(const hip_hit hit1, const hip_hit hit2);
  *         0 if no such hit pair
  *         -1 if error.
  * Note: hits1 and hits2 are arrays with the at least max_cnt size, and have
- *pre-alloced
+ **pre-alloced
  *       when calling this function.
  */
 #define hipcfg_peers_allowed_fn "hipcfg_peers_allowed"
@@ -64,9 +64,9 @@ extern int hipcfg_peers_allowed(hip_hit *hits1, hip_hit *hits2, int max_cnt);
  * Input: ip - the current Underlay IP address of the endbox
  *             the sockaddr should point to a sockaddr_storage structure so that
  *             either an IPv4 or IPv6 address can be passed in. The sa_family
- *must
+ **must
  *             be set to AF_INET for an IPv4 address, or AF_INET6 for an IPv6
- *address.
+ **address.
  *
  * Output: none
  *
@@ -79,15 +79,15 @@ extern int hipcfg_setUnderlayIpAddress(const char *ip);
 
 /* Input: host - the legacy host IPv4/IPv6 address
  *               the sockaddr should point to a sockaddr_storage structure so
- *that
+ **that
  *               either an IPv4 or IPv6 address can be passed in. The sa_family
- *must
+ **must
  *               be set to AF_INET for an IPv4 address, or AF_INET6 for an IPv6
- *address.
+ **address.
  * Output: eb - the endbox's LSI/HIT. sockaddr should point to a
- *sockaddr_storage
+ **sockaddr_storage
  *              structure so that either an IPv4 or IPv6 address can be
- *returned.
+ **returned.
  *              When the call is returned, the sa_family is set to AF_INET if
  *              sockaddr_storage contains an IPv4 address, or AF_INET6 if it
  *              contains an IPv6 address.
@@ -107,10 +107,10 @@ extern int hipcfg_getEndboxByLegacyNode(const struct sockaddr *host,
  *             before calling this function.
  * Output: llip -  lower layer IP address, either IPv4/v6.
  *             sa_family will be set to either AF_INET or AF_INET6 after
- *successfully
+ **successfully
  *             calling this function per its actual IP address family.
  * Return: 0 - if the lookup succeeed, 1 - if the mapping is not found, -1 if
- *error.
+ **error.
  */
 #define hipcfg_getLlipByEndbox_fn "hipcfg_getLlipByEndbox"
 extern int (*hipcfg_getLlipByEndbox_p)(const struct sockaddr *eb,
@@ -123,12 +123,12 @@ extern int hipcfg_getLlipByEndbox(const struct sockaddr *eb,
  *            before calling this function.
  * Output hosts - an array of legacy nodes. sa_family of each element
  *                will be set to either AF_INET or AF_INET6 per its actual IP
- *address family
+ **address family
  *                The caller must provide the storage for the  array.
  *        size - the size of array hosts (maximum number of elements can be
- *returned).
+ **returned).
  * Return -1 if error,  0 if cannot find a match, a positivie number for the
- *actual elements in hosts.
+ **actual elements in hosts.
  */
 #define hipcfg_getLegacyNodesByEndbox_fn "hipcfg_getLegacyNodesByEndbox"
 extern int (*hipcfg_getLegacyNodesByEndbox_p)(const struct sockaddr *eb,

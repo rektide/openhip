@@ -40,19 +40,19 @@
 /*
  * IPv4 pseudoheader format
  *       0      7 8     15 16    23 24    31
- *+--------+--------+--------+--------+
+ **+--------+--------+--------+--------+
  |          source address           |
- |+--------+--------+--------+--------+
+ ||+--------+--------+--------+--------+
  |        destination address        |
- |+--------+--------+--------+--------+
+ ||+--------+--------+--------+--------+
  |  zero  |protocol|       length    |
- |+--------+--------+--------+--------+
+ ||+--------+--------+--------+--------+
  |                                   |
  |       /                                   /
  |  <transport layer header/data>    |
  \                                   \
  |                                   |
- |+--------+--------+--------+--------+
+ ||+--------+--------+--------+--------+
  |
  |  length is defined as the length of the
  |  <transport layer header/data>; in this case,
@@ -60,7 +60,7 @@
  */
 /*
  * IPv6 pseudoheader format
- *+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ **+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  |                                                               |
  +                                                               +
  |                                                               |
@@ -68,7 +68,7 @@
  |                                                               |
  +                                                               +
  |                                                               |
- |+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ ||+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  |                                                               |
  +                                                               +
  |                                                               |
@@ -76,11 +76,11 @@
  |                                                               |
  +                                                               +
  |                                                               |
- |+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ ||+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  |                   Upper-Layer Packet Length                   |
- |+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ ||+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  |                      zero                     |  Next Header  |
- |+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ ||+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  |
  |  The Upper-Layer Packet Length in the pseudo-header is the
  |  length of the upper-layer header and data (e.g., TCP header
@@ -98,20 +98,20 @@
 #if (IPV6)
 typedef struct _pseudo_header
 {
-	unsigned char src_addr[16];
-	unsigned char dst_addr[16];
-	__u32 packet_length;
-	char zero[3];
-	__u8 next_hdr;
+  unsigned char src_addr[16];
+  unsigned char dst_addr[16];
+  __u32 packet_length;
+  char zero[3];
+  __u8 next_hdr;
 } pseudo_header;
 #else
 typedef struct _pseudo_header
 {
-	unsigned char src_addr[4];
-	unsigned char dst_addr[4];
-	__u8 zero;
-	__u8 protocol;
-	__u16 packet_length;
+  unsigned char src_addr[4];
+  unsigned char dst_addr[4];
+  __u8 zero;
+  __u8 protocol;
+  __u16 packet_length;
 } pseudo_header;
 #endif
 
@@ -120,28 +120,28 @@ typedef unsigned char hip_hit[16];
 #if (HIP_OVER_UDP)
 #define HIP_UDP_PORT 272
 typedef struct _hiphdr {
-	__u16 src_port;
-	__u16 dst_port;
-	__u16 len;
-	__u16 checksum;
-	__u16 control;      /* control                     */
-	__u8 packet_type;   /* packet type                 */
-	__u8 res : 4,version : 4; /* version, reserved        */
-	hip_hit hit_sndr;   /* Sender's Host Identity Tag  */
-	hip_hit hit_rcvr;   /* Receiver's Host Identity Tag*/
-	/* HIP TLV parameters follow ...  */
+  __u16 src_port;
+  __u16 dst_port;
+  __u16 len;
+  __u16 checksum;
+  __u16 control;            /* control                     */
+  __u8 packet_type;         /* packet type                 */
+  __u8 res : 4,version : 4;       /* version, reserved        */
+  hip_hit hit_sndr;         /* Sender's Host Identity Tag  */
+  hip_hit hit_rcvr;         /* Receiver's Host Identity Tag*/
+  /* HIP TLV parameters follow ...  */
 } hiphdr;
 #else
 typedef struct _hiphdr {
-	__u8 next_hdr;          /* payload protocol            */
-	__u8 payload_len;       /* payload length              */
-	__u8 packet_type;       /* packet type                 */
-	__u8 res : 4,version : 4;  /* version, reserved           */
-	__u16 control;          /* control                     */
-	__u16 checksum;         /* checksum                    */
-	hip_hit hit_sndr;       /* Sender's Host Identity Tag  */
-	hip_hit hit_rcvr;       /* Receiver's Host Identity Tag */
-	/* HIP TLV parameters follow ...  */
+  __u8 next_hdr;                /* payload protocol            */
+  __u8 payload_len;             /* payload length              */
+  __u8 packet_type;             /* packet type                 */
+  __u8 res : 4,version : 4;        /* version, reserved           */
+  __u16 control;                /* control                     */
+  __u16 checksum;               /* checksum                    */
+  hip_hit hit_sndr;             /* Sender's Host Identity Tag  */
+  hip_hit hit_rcvr;             /* Receiver's Host Identity Tag */
+  /* HIP TLV parameters follow ...  */
 } hiphdr;
 #endif
 
@@ -150,81 +150,83 @@ static int hex_to_bin(char *, char *, int);
 
 int main(int argc, char *argv[])
 {
-	int i;
-	int checksummed_size;
-	hiphdr *hiph;
-	unsigned char buff[512];
+  int i;
+  int checksummed_size;
+  hiphdr *hiph;
+  unsigned char buff[512];
 
-	hip_hit hit_sndr;
-	hip_hit hit_rcvr;
-	__u32 ip_src;
-	__u32 ip_dst;
+  hip_hit hit_sndr;
+  hip_hit hit_rcvr;
+  __u32 ip_src;
+  __u32 ip_dst;
 
-	char hit_sndr_char[] = HIT_SNDR;
-	char hit_rcvr_char[] = HIT_RCVR;
-	char ip_src_char[] = IPV4_SRC;
-	char ip_dst_char[] = IPV4_DST;
+  char hit_sndr_char[] = HIT_SNDR;
+  char hit_rcvr_char[] = HIT_RCVR;
+  char ip_src_char[] = IPV4_SRC;
+  char ip_dst_char[] = IPV4_DST;
 
-	hex_to_bin(hit_sndr_char, hit_sndr, 16);
-	hex_to_bin(hit_rcvr_char, hit_rcvr, 16);
-	hex_to_bin(ip_src_char, (char*) &ip_src, 4);
-	hex_to_bin(ip_dst_char, (char*) &ip_dst, 4);
+  hex_to_bin(hit_sndr_char, hit_sndr, 16);
+  hex_to_bin(hit_rcvr_char, hit_rcvr, 16);
+  hex_to_bin(ip_src_char, (char*) &ip_src, 4);
+  hex_to_bin(ip_dst_char, (char*) &ip_dst, 4);
 
 #if (HIP_OVER_UDP)
-	/* build the HIP header for I1*/
-	/* Leave 12 bytes for pseudoheader */
-	hiph = (hiphdr*) &buff[IPV4_PSEUDO_SIZE];
-	hiph->src_port = htons(HIP_UDP_PORT);
-	hiph->dst_port = htons(HIP_UDP_PORT);
-	hiph->len = htons(sizeof(hiphdr));
-	hiph->checksum = 0;
-	hiph->control = 0;
-	hiph->packet_type = HIP_I1;
-	hiph->version = HIP_VERSION;
-	hiph->res = 0;
+  /* build the HIP header for I1*/
+  /* Leave 12 bytes for pseudoheader */
+  hiph = (hiphdr*) &buff[IPV4_PSEUDO_SIZE];
+  hiph->src_port = htons(HIP_UDP_PORT);
+  hiph->dst_port = htons(HIP_UDP_PORT);
+  hiph->len = htons(sizeof(hiphdr));
+  hiph->checksum = 0;
+  hiph->control = 0;
+  hiph->packet_type = HIP_I1;
+  hiph->version = HIP_VERSION;
+  hiph->res = 0;
 #else
-	/* build the HIP header for I1*/
-	/* Leave 12 bytes up front for pseudoheader */
+  /* build the HIP header for I1*/
+  /* Leave 12 bytes up front for pseudoheader */
 #if (IPV6)
-	hiph = (hiphdr*) &buff[IPV6_PSEUDO_SIZE];
+  hiph = (hiphdr*) &buff[IPV6_PSEUDO_SIZE];
 #else
-	hiph = (hiphdr*) &buff[IPV4_PSEUDO_SIZE];
+  hiph = (hiphdr*) &buff[IPV4_PSEUDO_SIZE];
 #endif
-	hiph->next_hdr = IPPROTO_NONE;
-	hiph->payload_len = 4; /* 2*sizeof(hip_hit)/8 */
-	hiph->packet_type = HIP_I1;
-	hiph->version = HIP_VERSION;
-	hiph->res = 0;
-	hiph->control = 0;
-	hiph->checksum = 0;
+  hiph->next_hdr = IPPROTO_NONE;
+  hiph->payload_len = 4;       /* 2*sizeof(hip_hit)/8 */
+  hiph->packet_type = HIP_I1;
+  hiph->version = HIP_VERSION;
+  hiph->res = 0;
+  hiph->control = 0;
+  hiph->checksum = 0;
 #endif
 
-	memcpy(hiph->hit_sndr, hit_sndr, HIT_SIZE);
-	memcpy(hiph->hit_rcvr, hit_rcvr, HIT_SIZE);
+  memcpy(hiph->hit_sndr, hit_sndr, HIT_SIZE);
+  memcpy(hiph->hit_rcvr, hit_rcvr, HIT_SIZE);
 
-	hiph->checksum = htons(checksum_packet(&buff[0], ip_src, ip_dst));
+  hiph->checksum = htons(checksum_packet(&buff[0], ip_src, ip_dst));
 
-	/* Print out results */
+  /* Print out results */
 #if (HIP_OVER_UDP)
-	checksummed_size = sizeof(hiphdr) + IPV4_PSEUDO_SIZE;
-	printf("IPv4 UDP I1 with pseudoheader (first 12 bytes)");
+  checksummed_size = sizeof(hiphdr) + IPV4_PSEUDO_SIZE;
+  printf("IPv4 UDP I1 with pseudoheader (first 12 bytes)");
 #else
 #if (IPV6)
-	checksummed_size = IPV6_PSEUDO_SIZE + ((hiph->payload_len + 1) * 8);
-	printf("IPv6 I1 with pseudoheader (first 40 bytes)");
+  checksummed_size = IPV6_PSEUDO_SIZE + ((hiph->payload_len + 1) * 8);
+  printf("IPv6 I1 with pseudoheader (first 40 bytes)");
 #else
-	checksummed_size = IPV4_PSEUDO_SIZE + ((hiph->payload_len + 1) * 8);
-	printf("IPv4 I1 with pseudoheader (first 12 bytes)");
+  checksummed_size = IPV4_PSEUDO_SIZE + ((hiph->payload_len + 1) * 8);
+  printf("IPv4 I1 with pseudoheader (first 12 bytes)");
 #endif
 #endif
-	printf(" and corresponding checksum:\n\t");
-	for (i = 0; i < checksummed_size; i++) {
-		if ((i % 4 == 0) && (i != 0)) {
-			printf("\n\t");
-		}
-		printf("%02x", buff[i]);
-	}
-	printf("\n");
+  printf(" and corresponding checksum:\n\t");
+  for (i = 0; i < checksummed_size; i++)
+    {
+      if ((i % 4 == 0) && (i != 0))
+        {
+          printf("\n\t");
+        }
+      printf("%02x", buff[i]);
+    }
+  printf("\n");
 }
 
 /*
@@ -237,73 +239,76 @@ int main(int argc, char *argv[])
 static
 __u16 checksum_packet(char *data, __u32 src, __u32 dst)
 {
-	__u16 checksum;
-	int length;
-	long sum = 0;
-	int count;
-	unsigned short *p; /* 16-bit */
-	hiphdr* hiph;
-	pseudo_header* pseudoh;
+  __u16 checksum;
+  int length;
+  long sum = 0;
+  int count;
+  unsigned short *p;       /* 16-bit */
+  hiphdr* hiph;
+  pseudo_header* pseudoh;
 
-	pseudoh = (pseudo_header*) &data[0];
-	hiph = (hiphdr*) &data[IPV4_PSEUDO_SIZE];
+  pseudoh = (pseudo_header*) &data[0];
+  hiph = (hiphdr*) &data[IPV4_PSEUDO_SIZE];
 
 #if (IPV6)
-	hiph = (hiphdr*) &data[IPV6_PSEUDO_SIZE];
-	memset(pseudoh, 0, sizeof(pseudo_header));
-	memset(pseudoh->src_addr + 10, 0xFF, 2);
-	memset(pseudoh->dst_addr + 10, 0xFF, 2);
-	memcpy(pseudoh->src_addr + 12, &src, 4);
-	memcpy(pseudoh->dst_addr + 12, &dst, 4);
-	length = (hiph->payload_len + 1) * 8;
-	pseudoh->packet_length = htonl(length);
-	pseudoh->next_hdr = H_PROTO_HIP;
+  hiph = (hiphdr*) &data[IPV6_PSEUDO_SIZE];
+  memset(pseudoh, 0, sizeof(pseudo_header));
+  memset(pseudoh->src_addr + 10, 0xFF, 2);
+  memset(pseudoh->dst_addr + 10, 0xFF, 2);
+  memcpy(pseudoh->src_addr + 12, &src, 4);
+  memcpy(pseudoh->dst_addr + 12, &dst, 4);
+  length = (hiph->payload_len + 1) * 8;
+  pseudoh->packet_length = htonl(length);
+  pseudoh->next_hdr = H_PROTO_HIP;
 #else
-	hiph = (hiphdr*) &data[IPV4_PSEUDO_SIZE];
-	/* fill the IPv4-style pseudo-header (RFC 768)*/
-	memset(pseudoh, 0, sizeof(pseudo_header));
-	memcpy(pseudoh->src_addr, &src, 4);
-	memcpy(pseudoh->dst_addr, &dst, 4);
-	pseudoh->protocol = H_PROTO_HIP;
+  hiph = (hiphdr*) &data[IPV4_PSEUDO_SIZE];
+  /* fill the IPv4-style pseudo-header (RFC 768)*/
+  memset(pseudoh, 0, sizeof(pseudo_header));
+  memcpy(pseudoh->src_addr, &src, 4);
+  memcpy(pseudoh->dst_addr, &dst, 4);
+  pseudoh->protocol = H_PROTO_HIP;
 #if (HIP_OVER_UDP)
-	length = ntohs(hiph->len);
-	pseudoh->packet_length = hiph->len; /* Already in network order */
+  length = ntohs(hiph->len);
+  pseudoh->packet_length = hiph->len;       /* Already in network order */
 #else
-	length = (hiph->payload_len + 1) * 8;
-	pseudoh->packet_length = htons(length);
+  length = (hiph->payload_len + 1) * 8;
+  pseudoh->packet_length = htons(length);
 #endif
 #endif
 
-	/*
-	 * this checksum algorithm can be found
-	 * in RFC 1071 section 4.1
-	 */
+  /*
+   * this checksum algorithm can be found
+   * in RFC 1071 section 4.1
+   */
 
-	/* one's complement sum 16-bit words of data */
+  /* one's complement sum 16-bit words of data */
 #if (IPV6)
-	count = length + IPV6_PSEUDO_SIZE;
+  count = length + IPV6_PSEUDO_SIZE;
 #else
-	count = length + IPV4_PSEUDO_SIZE;
+  count = length + IPV4_PSEUDO_SIZE;
 #endif
-	p = (unsigned short*) data;
-	while (count > 1) {
-		sum += *p++;
-		count -= 2;
-	}
-	/* add left-over byte, if any */
-	if (count > 0) {
-		sum += (unsigned char)*p;
-	}
+  p = (unsigned short*) data;
+  while (count > 1)
+    {
+      sum += *p++;
+      count -= 2;
+    }
+  /* add left-over byte, if any */
+  if (count > 0)
+    {
+      sum += (unsigned char)*p;
+    }
 
-	/*  Fold 32-bit sum to 16 bits */
-	while (sum >> 16) {
-		sum = (sum & 0xffff) + (sum >> 16);
-	}
+  /*  Fold 32-bit sum to 16 bits */
+  while (sum >> 16)
+    {
+      sum = (sum & 0xffff) + (sum >> 16);
+    }
 
-	/* take the one's complement of the sum */
-	checksum = ~sum;
+  /* take the one's complement of the sum */
+  checksum = ~sum;
 
-	return(checksum);
+  return(checksum);
 }
 
 /*
@@ -313,63 +318,74 @@ __u16 checksum_packet(char *data, __u32 src, __u32 dst)
 static
 int hex_to_bin(char *src, char *dst, int dst_len)
 {
-	char hex[] = "0123456789abcdef";
-	char hexcap[] = "0123456789ABCDEF";
-	char *p, c;
-	int src_len, total, i;
-	unsigned char o;
+  char hex[] = "0123456789abcdef";
+  char hexcap[] = "0123456789ABCDEF";
+  char *p, c;
+  int src_len, total, i;
+  unsigned char o;
 
-	if ((!src) || (!dst)) {
-		return(-1);
-	}
-	src_len = strlen(src);
-	if (dst_len > src_len) {
-		return(-1);
-	}
+  if ((!src) || (!dst))
+    {
+      return(-1);
+    }
+  src_len = strlen(src);
+  if (dst_len > src_len)
+    {
+      return(-1);
+    }
 
-	/* chop any '0x' prefix */
-	if ((src[0] == '0') && (src[1] == 'x')) {
-		src += 2;
-		src_len -= 2;
-	}
+  /* chop any '0x' prefix */
+  if ((src[0] == '0') && (src[1] == 'x'))
+    {
+      src += 2;
+      src_len -= 2;
+    }
 
-	/* convert requested number of bytes from hex to binary */
-	total = 0;
-	for (i = 0; (i < src_len) && (total < dst_len); i += 2) {
-		/* most significant nibble */
-		c = src[i];
-		/*
-		 * Normally would use tolower(), but have found problems
-		 * with dynamic linking and different glibc versions
-		 */
-		if ((p = strchr(hex, c)) == NULL) {
-			if ((p = strchr(hexcap, c)) == NULL) {
-				continue;
-			}
-		}
-		if (((p - hex) < 0) || ((p - hex) > 15)) {
-			fprintf(stderr, "Binary conversion failed %c\n",c);
-			return(-1);
-		}
-		o = (p - hex) << 4;
-		/* least significant nibble */
-		c = src[i + 1];
-		if ((p = strchr(hex, c)) == NULL) {
-			if ((p = strchr(hexcap, c)) == NULL) {
-				continue;
-			}
-		}
-		if (((p - hex) < 0) || ((p - hex) > 15)) {
-			fprintf(stderr, "Binary conversion failed 2 %c", c);
-			return(-1);
-		}
-		o += (p - hex);
-		dst[total] = o;
-		total++;
-		if (total >= src_len) {
-			total = dst_len;
-		}
-	}
-	return(total);
+  /* convert requested number of bytes from hex to binary */
+  total = 0;
+  for (i = 0; (i < src_len) && (total < dst_len); i += 2)
+    {
+      /* most significant nibble */
+      c = src[i];
+      /*
+       * Normally would use tolower(), but have found problems
+       * with dynamic linking and different glibc versions
+       */
+      if ((p = strchr(hex, c)) == NULL)
+        {
+          if ((p = strchr(hexcap, c)) == NULL)
+            {
+              continue;
+            }
+        }
+      if (((p - hex) < 0) || ((p - hex) > 15))
+        {
+          fprintf(stderr, "Binary conversion failed %c\n",c);
+          return(-1);
+        }
+      o = (p - hex) << 4;
+      /* least significant nibble */
+      c = src[i + 1];
+      if ((p = strchr(hex, c)) == NULL)
+        {
+          if ((p = strchr(hexcap, c)) == NULL)
+            {
+              continue;
+            }
+        }
+      if (((p - hex) < 0) || ((p - hex) > 15))
+        {
+          fprintf(stderr, "Binary conversion failed 2 %c", c);
+          return(-1);
+        }
+      o += (p - hex);
+      dst[total] = o;
+      total++;
+      if (total >= src_len)
+        {
+          total = dst_len;
+        }
+    }
+  return(total);
 }
 
