@@ -1,3 +1,5 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
@@ -2739,5 +2741,3 @@ int build_rekey(hip_assoc *hip_a)
   return(0);
 }
 
-/* -*- mode: cc-mode; tab-width: 2; c-default-style "gnu" -*- */
-/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
