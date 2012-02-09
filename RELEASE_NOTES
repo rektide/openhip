@@ -1,0 +1,151 @@
+OpenHIP Release Notes
+
+***** Version 0.9 February 2012 *****
+The changes featured in the release are:
+    * relicensed using the MIT Expat license instead of the GPLv2 license
+    * enforce GNU coding style using uncrustify, include vim/emacs mode lines
+    * reimplement mobile router using netfilter queue instead of libipq
+    * removed GPLed header files and assembly language
+    * removed outdated kernel support, libipsec, and i3 protocol code
+    * removed PF_KEY thread, replacing with direct SADB calls
+    * fix compilation under Ubuntu 11.10 and Fedora 15 (gcc 4.6.1/4.6.0)
+    * added 'make check' target that launches automated testing using CORE
+      (http://code.google.com/p/coreemu/)
+    * implemented RFC 4303 ESP anti-replay protection with 64-bit ESN
+    * implemented experimental multihoming triggered by lost ESP seq. numbers
+    * added hip.conf options for ignored_address, save_my_identities
+    * for HIP_VPLS/endbox mode pass layer-2 traffic: include ethernet headers
+      in tunnel; use hello protocol for endbox multicast election; 
+      allow default endbox for unresolvable legacy addresses
+
+
+***** Version 0.8 July 2011 *****
+The changes featured in the release are:
+    * numerous bugfixes since the 0.7 release (see the bug_tracker)
+    * use IANA allocated HIP UDP port 10500 instead of 50500
+    * contribution from Alexander Kiening: process RVS addresses from DNS
+      response
+    * improved mobile router to allow a mobile node behind one mobile router to
+      connect to a mobile node behind another mobile router
+    * support for mobile router double-jump
+    * implement SA timeout, expiration
+    * various endbox improvements
+    * code to support OpenWRT compilation under ARM architecture
+The deb files were built using Ubuntu 10.10, and the rpm files using Fedora 13.
+
+
+***** Version 0.7 October 2009 *****
+The big changes are:
+    * HIP now operates over UDP by default, allowing you to initiate
+      connections from behind a NAT
+    * mobility handovers between IPv4 and IPv6 now possible in the mobile
+      router mode
+Here is a list of changes with greater detail:
+    * changes from 0.7_RC1 to 0.7 include fixing a shutdown bug, mobility bug,
+      secret key issue, and not sending locator parameters in R1 messages
+      (unless --enable-mobile-router is used)
+    * cleanup of the NAT code and implementation of the nat-08 draft for HIP/
+      ESP over UDP that shares the same port 50500; removed all STUN code and
+      options, now uses UDP by default for IPv4
+    * cleanup command-line options
+    * rewrite and cleanup of registration and rendezvous code in support of RFC
+      5203 and RFC_5204
+    * update to mobile router code to allow address family handovers when
+      changing the MR's public address; cleanup of mobile router code, globals
+      changed to static locals; support IPv4 in mobile router
+    * update to --enable-sma-crawler=(config) option, files-based configuration
+      library; now uses OpenSSL engine interface, removing OpenSC dependencies
+    * restructure the HIP configuration library code to put common code in a
+      base class
+    * tested on Windows Vista, XP, Fedora 11, Ubuntu 9.04, CentOS 5.3, Mac OS X
+
+
+***** Version 0.6 May 2009 *****
+This is a maintenance release that fixes several bugs, and introduces the
+following new code:
+    * Boeing's Secure_Mobile_Architecture (SMA) implementation
+    * Smartcard support with LDAP configuration API
+    * Mobile router implementation of draft-melen-hip-mr-02.txt (Note: This is
+      not an interoperable implementation with a draft-conformant
+      implementation, but more of a demo-level implementation of the key
+      features of HIP mobile router).
+Note that instructions for building and configuring these new options are being
+developed, check this wiki (Usage) for updated information.
+
+**** 0.6 Supported platforms ****
+We've tested the OpenHIP 0.6 release on these platforms:
+    * Linux
+          o Ubuntu 9.04 with openhip_0.6_i386.deb
+          o Fedora 10 + updates with openhip-0.6-1.i386.rpm
+          o CentOS 5.3 amd64 built from hip-0.6.tgz source
+    * Windows
+          o Windows XP SP3 with openhip-0.6-install.exe
+          o we have not tested Windows Vista yet, and have reports of problems
+            receiving data into apps
+    * Mac OS X
+          o Apple Macbook i386 Darwin 8.9.1 kernel built from hip-0.6.tgz
+            source
+          o Apple Powerbook PPC
+
+**** 0.6 RFC/draft conformance ****
+    * RFC_5201 Host Identity Protocol (updated)
+    * RFC_5202 Using the ESP Transport Format with HIP (updated)
+    * RFC_5206 End-Host Mobility and Multihoming with HIP (updated)
+    * draft-melen-hip-mr-02.txt (new)
+Note that these drafts may be outdated, and support for these is not as well
+maintained in this release:
+    * draft-ahrenholz-hiprg-dht-01.txt
+    * draft-nikander-hiprg-hi3-00.txt
+    * draft-ietf-hip-registration-00.txt
+    * draft-ietf-hip-rvs-00.txt
+    * draft-schmitt-hip-nat-traversal-02.txt
+
+**** 0.6 bug changes ****
+These bugs have been closed with this release:
+    * #1808230 missing hip.conf causes trouble
+    * #2695595 openssl causes segfault under heavy client load
+    * #2717273 openhip 0.5.1 interop fails w/InfraHIP HIPL implementation
+    * #1464511 problems restarting service (Win XP)
+    * #1689477 hipmon GUI interacts poorly with starting daemon (XP)
+    * #1653438 killing hipd writes 127.0.1.1 to known_host_identities
+    * #1689481 Windows folder sharing performance
+    * #1689478 XP performance using HIP
+    * #1689468 IPsec and windows firewall with XP installation
+    * #1689467 hipd crashes when laptop goes to standby
+    * #1641824 behavior with missing known_host_identities.xml
+    * #1689469 known_host_identities appends IDs that are already there
+    * #2695529 hitgen directories problematic
+    * #2769083 known host warning
+    * #1679124 hip -a option doesn't work for OS X
+    * #2790916 should send LOCATOR_TYPE_UNSUPPORTED notify messages
+These bugs have been opened, are known issues:
+    * #2763282 startup delayed with many entries in known_host_identities
+    * #2763428 can't connect with IPv4 LSI after IPv6 used
+    * #2765780 SAs never initiate rekey, sa_lifetime unused
+    * #2769083 add warning about known_hosts_identities.xml
+    * #2777680 src/linux/hip_linux_umh.c built on Mac OS X
+Visit the bugtracker for more details and the latest bug status.
+
+
+***** Version 0.5.1 June 2008 *****
+This is just a small maintenance release, for interoperability.
+    * Update Protocol Number to "139" to align with published RFC_5201.
+    * Add known host identities for infrahip machines
+    * Fix a parameter ordering problem
+
+
+***** Version 0.5 October 2007 *****
+This version implements the following IETF Internet Drafts:
+    * draft-ietf-hip-base-09.txt
+    * draft-ietf-hip-esp-06.txt
+    * draft-ietf-hip-mm-05.txt
+    * draft-ahrenholz-hiprg-dht-01.txt
+In addition, one can follow draft-ietf-hip-applications-01 and use this
+implementation with legacy applications and APIs.
+This version also provides (largely unmaintained) support for some earlier
+other HIP drafts:
+    * draft-nikander-hiprg-hi3-00.txt
+    * draft-ietf-hip-registration-00.txt
+    * draft-ietf-hip-rvs-00.txt
+    * draft-schmitt-hip-nat-traversal-02.txt
+
