@@ -1,6 +1,6 @@
 OpenHIP Release Notes
 
-***** Version 0.9 February 2012 *****
+***** Version 0.9 March 2012 *****
 The changes featured in the release are:
     * relicensed using the MIT Expat license instead of the GPLv2 license
     * enforce GNU coding style using uncrustify, include vim/emacs mode lines
