@@ -236,7 +236,7 @@ int hipCfg::getLegacyNodesByEndbox(const struct sockaddr *eb, struct sockaddr_st
 int  hipCfg::endbox2Llip(const struct sockaddr *eb, struct sockaddr *llip)
 {
   char eb_s[INET6_ADDRSTRLEN];
-  string llip_s;
+  string llip_s, hit_s;
   int rc;
 
   memset(eb_s, 0, INET6_ADDRSTRLEN);
@@ -251,13 +251,18 @@ int  hipCfg::endbox2Llip(const struct sockaddr *eb, struct sockaddr *llip)
   rc = 1;
 
   pthread_mutex_lock(&hipcfgmap_mutex);
-  i = _endbox2LlipMap.find(eb_s);
-  if(i != _endbox2LlipMap.end()){
-    llip_s = (*i).second;
-    llip->sa_family=AF_INET; //only handle IPv4 address only
-    str_to_addr(llip_s.c_str(), llip);
-    //cout<<"endbox2Llip: get llip (bcwin) "<<llip_s.c_str()<<" for endbox = "<<eb_s<<endl;
-    rc = 0;
+  i = _legacyNode2EndboxMap.find(eb_s);
+  if (i != _legacyNode2EndboxMap.end()) {
+    hit_s = (*i).second;
+    //cout<<"endbox2Llip: look up bcwin for endbox = "<<hit_s<<endl;
+    i = _endbox2LlipMap.find(hit_s);
+    if(i != _endbox2LlipMap.end()){
+      llip_s = (*i).second;
+      llip->sa_family=AF_INET; //only handle IPv4 address only
+      str_to_addr(llip_s.c_str(), llip);
+      //cout<<"endbox2Llip: get llip (bcwin) "<<llip_s.c_str()<<" for endbox = "<<eb_s<<endl;
+      rc = 0;
+    }
   }
   pthread_mutex_unlock(&hipcfgmap_mutex);
 
