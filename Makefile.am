@@ -29,3 +29,7 @@
 
 SUBDIRS = src docs
 TARGETS = 
+
+.PHONY: svnclean
+svnclean: maintainer-clean
+	-rm -f stamp-h1 configure Makefile.in aclocal.m4 src/Makefile.in src/util/Makefile.in docs/Makefile.in config/depcomp config/compile config/missing config/install-sh
