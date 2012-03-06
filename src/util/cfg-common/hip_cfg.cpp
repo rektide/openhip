@@ -238,29 +238,35 @@ int  hipCfg::endbox2Llip(const struct sockaddr *eb, struct sockaddr *llip)
   char eb_s[INET6_ADDRSTRLEN];
   string llip_s, hit_s;
   int rc;
+  map <string, string>::iterator i;
 
   memset(eb_s, 0, INET6_ADDRSTRLEN);
-  rc=addr_to_str(eb, eb_s, INET6_ADDRSTRLEN);
-  if(rc)
+  rc = addr_to_str(eb, eb_s, INET6_ADDRSTRLEN);
+  if (rc)
     return -1;
-
-  //cout<<"endbox2Llip: look up bcwin for endbox = "<<eb_s<<endl;
-
-  map <string, string>::iterator i;
 
   rc = 1;
 
   pthread_mutex_lock(&hipcfgmap_mutex);
-  i = _legacyNode2EndboxMap.find(eb_s);
-  if (i != _legacyNode2EndboxMap.end()) {
-    hit_s = (*i).second;
-    //cout<<"endbox2Llip: look up bcwin for endbox = "<<hit_s<<endl;
+  if (eb->sa_family == AF_INET) {
+    cout << "endbox2Llip: looking up IP for LSI = " << eb_s << endl;
+    i = _legacyNode2EndboxMap.find(eb_s);
+    if (i != _legacyNode2EndboxMap.end()) {
+      hit_s = (*i).second;
+    }
+  } else {
+    hit_s = eb_s;
+  }
+
+  if (!hit_s.empty()) {
+    cout << "endbox2Llip: looking up IP for HIT = " << hit_s << endl;
     i = _endbox2LlipMap.find(hit_s);
-    if(i != _endbox2LlipMap.end()){
+    if (i != _endbox2LlipMap.end()) {
       llip_s = (*i).second;
-      llip->sa_family=AF_INET; //only handle IPv4 address only
+      llip->sa_family = AF_INET; //only handle IPv4 address only
       str_to_addr(llip_s.c_str(), llip);
-      //cout<<"endbox2Llip: get llip (bcwin) "<<llip_s.c_str()<<" for endbox = "<<eb_s<<endl;
+      cout << "endbox2Llip: got IP " << llip_s.c_str() <<
+              " for endbox = " << eb_s << endl;
       rc = 0;
     }
   }
