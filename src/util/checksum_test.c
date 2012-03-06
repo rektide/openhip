@@ -28,27 +28,33 @@
  *
  *  \brief  Checksum test program.
  *
+ * This file is outside of the normal build process and must be compiled
+ * by hand using gcc.
+ * 
+ * By default, it will produce a checksum value of 446 corresponding to
+ * RFC 5201, Appendix C.1.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <asm/types.h>
 
 #define HIP_OVER_UDP 0  /* set to 1 to use alternate HIP/UDP format */
 #define IPV6 1          /* set HIP_OVER_UDP to 0 */
 
 #define IPPROTO_NONE 59 /* used in HIP next header */
-#define H_PROTO_HIP 99
+#define H_PROTO_HIP 139
 #define HIP_I1 1
 #define HIP_VERSION 1
 #define IPV4_PSEUDO_SIZE 12 /* HIP is 12 bytes into IPv4 pseudo structure */
 #define IPV6_PSEUDO_SIZE 40
 #define HIT_SIZE 16
 
-#define HIT_SNDR "0x40000000000000000000000000000001"
-#define HIT_RCVR "0x40000000000000000000000000000002"
-#define IPV4_SRC "0xc0000201" /* 192.0.2.1 */
-#define IPV4_DST "0xc0000202" /* 192.0.2.2 */
+#define HIT_SNDR "0x20010010000000000000000000000001"
+#define HIT_RCVR "0x20010010000000000000000000000002"
+#define IPV4_SRC "0xc0a80001" /* 192.168.0.1 */
+#define IPV4_DST "0xc0a80002" /* 192.168.0.2 */
 
 /*
  * IPv4 pseudoheader format
@@ -150,8 +156,8 @@ typedef struct _hiphdr {
   __u8 payload_len;             /* payload length              */
   __u8 packet_type;             /* packet type                 */
   __u8 res : 4,version : 4;        /* version, reserved           */
-  __u16 control;                /* control                     */
   __u16 checksum;               /* checksum                    */
+  __u16 control;                /* control                     */
   hip_hit hit_sndr;             /* Sender's Host Identity Tag  */
   hip_hit hit_rcvr;             /* Receiver's Host Identity Tag */
   /* HIP TLV parameters follow ...  */
@@ -194,7 +200,7 @@ int main(int argc, char *argv[])
   hiph->control = 0;
   hiph->packet_type = HIP_I1;
   hiph->version = HIP_VERSION;
-  hiph->res = 0;
+  hiph->res = 1;
 #else
   /* build the HIP header for I1*/
   /* Leave 12 bytes up front for pseudoheader */
@@ -207,7 +213,7 @@ int main(int argc, char *argv[])
   hiph->payload_len = 4;       /* 2*sizeof(hip_hit)/8 */
   hiph->packet_type = HIP_I1;
   hiph->version = HIP_VERSION;
-  hiph->res = 0;
+  hiph->res = 1;
   hiph->control = 0;
   hiph->checksum = 0;
 #endif
@@ -215,7 +221,8 @@ int main(int argc, char *argv[])
   memcpy(hiph->hit_sndr, hit_sndr, HIT_SIZE);
   memcpy(hiph->hit_rcvr, hit_rcvr, HIT_SIZE);
 
-  hiph->checksum = htons(checksum_packet(&buff[0], ip_src, ip_dst));
+  hiph->checksum = checksum_packet(&buff[0], ip_src, ip_dst);
+  printf ("Checksum is decimal %d, in network byte order 0x%04x\n", ntohs(hiph->checksum), ntohs(hiph->checksum));
 
   /* Print out results */
 #if (HIP_OVER_UDP)
@@ -266,8 +273,8 @@ __u16 checksum_packet(char *data, __u32 src, __u32 dst)
 #if (IPV6)
   hiph = (hiphdr*) &data[IPV6_PSEUDO_SIZE];
   memset(pseudoh, 0, sizeof(pseudo_header));
-  memset(pseudoh->src_addr + 10, 0xFF, 2);
-  memset(pseudoh->dst_addr + 10, 0xFF, 2);
+  memset(pseudoh->src_addr + 10, 0x00, 2);
+  memset(pseudoh->dst_addr + 10, 0x00, 2);
   memcpy(pseudoh->src_addr + 12, &src, 4);
   memcpy(pseudoh->dst_addr + 12, &dst, 4);
   length = (hiph->payload_len + 1) * 8;
