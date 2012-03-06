@@ -1,14 +1,6 @@
 /**
  * \mainpage Doxygen support for OpenHIP
  *
- * The software is split across a number of different CVS modules:
- *     - <code>hip:</code>  User-space protocol engine for HIP
- *     - <code>hipd:</code>  Legacy (pre-0.4 release) branch of current 
- *     <code>hip</code> module (obsolete)
- *     - <code>patches:</code> bind (DNS), Ethereal/Wireshark, ipsec-tools, 
- *     and Linux kernel patches for HIP
- *     
- *
  * The <a href=http://www.openhip.org/wiki/index.php?title=Main_Page>OpenHIP
  * wiki</a> is presently the source of most of our project documentation.  This
  * Doxygen directory contains source code cross reference of the raw
