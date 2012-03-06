@@ -481,7 +481,7 @@ int hip_convert_lsi_to_peer(struct sockaddr *lsi, hip_hit *hitp,
               log_(WARN, "Unable to update peer IP "
                    "from hipcfg; using stored value\n");
             }
-          else if (!memcmp(SA2IP(old_addr), SA2IP(&addr),
+          else if (memcmp(SA2IP(old_addr), SA2IP(&addr),
                            SAIPLEN(&addr)))
             {
               log_(NORM, "Updating peer IP from hipcfg\n");
