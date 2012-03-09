@@ -156,143 +156,6 @@ int add_addresses_from_dns(char *name, hi_node *hi)
 }
 #endif /* HITGEN */
 
-struct rsa_entry
-{
-	RSA *rsa;
-	struct rsa_entry *next;
-} rsa_entry;
-
-static struct rsa_entry *rsa_list_head = NULL;
-static int rsa_cnt = 0;
-
-/*
- * hip_rsa_new()
- *
- * Get a RSA key from the RSA pool.
- */
-RSA *hip_rsa_new()
-{
-	RSA *rsa;
-
-	if (!HCNF.use_smartcard)
-		return RSA_new();
-
-	if (rsa_list_head) {
-		rsa = rsa_list_head->rsa;
-		rsa_list_head = rsa_list_head->next;
-		log_(NORM, "get a RSA from the rsa pool\n");
-	} else {
-		if (rsa_cnt > MAX_CONNECTIONS) {
-			log_(ERR, "exceeded MAX_CONNECTIONS while locating RSA"
-				" structures.");
-			return NULL;
-		}
-		rsa = RSA_new();
-		rsa_cnt++;
-		log_(NORM, "Total number of RSAs created: %d\n", rsa_cnt);
-	}
-
-	BN_free(rsa->e);
-	BN_free(rsa->n);
-	rsa->e = NULL;
-	rsa->n = NULL;
-
-	return rsa;
-}
-
-/*
- * hip_rsa_free()
- *
- * Return a RSA key to the RSA pool.
- */
-void hip_rsa_free(RSA *rsa)
-{
-	struct rsa_entry *rsai;
-
-	if (!HCNF.use_smartcard) {
-		RSA_free(rsa);
-		return;
-	}
-
-	rsai = (struct rsa_entry *)malloc(sizeof(struct rsa_entry));
-	memset(rsai, 0, sizeof(struct rsa_entry));
-	rsai->rsa = rsa;
-	rsai->next = rsa_list_head;
-	rsa_list_head = rsai;
-	log_(NORM, "return a RSA to rsa pool\n");
-}
-
-struct dsa_entry
-{
-	 DSA *dsa;
-	 struct dsa_entry *next;
-} dsa_entry;
-
-static struct dsa_entry *dsa_list_head = NULL;
-static int dsa_cnt = 0;
-
-/*
- * hip_dsa_new()
- *
- * Get a DSA key from the DSA pool.
- */
-DSA *hip_dsa_new()
-{
-	DSA *dsa;
-
-	if (!HCNF.use_smartcard)
-		 return DSA_new();
-
-	if (dsa_list_head){
-		dsa = dsa_list_head->dsa;
-		dsa_list_head = dsa_list_head->next;
-		log_(NORM, "get a DSA from the dsa pool\n");
-	} else {
-		if (dsa_cnt > MAX_CONNECTIONS) {
-			log_(ERR, "exceeded MAX_CONNECTIONS while locating "
-				"DSA structures.");
-			return NULL;
-		}
-		dsa = DSA_new();
-		dsa_cnt++;
-		log_(NORM, "Total number of DSAs created: %d\n", dsa_cnt);
-	}
-
-	BN_free(dsa->p);
-	BN_free(dsa->q);
-	BN_free(dsa->g);
-	BN_free(dsa->pub_key);
-	dsa->p = NULL;
-	dsa->q = NULL;
-	dsa->g = NULL;
-	dsa->pub_key = NULL;
-
-	return dsa;
-}
-
-
-/*
- * hip_dsa_free()
- *
- * Return a DSA key to the DSA pool.
- */
-void hip_dsa_free(DSA *dsa)
-{
-	struct dsa_entry *dsai;
-
-	if(!HCNF.use_smartcard) {
-		DSA_free(dsa);
-		return;
-	}
-
-	dsai = (struct dsa_entry *)malloc(sizeof(struct dsa_entry));
-	memset(dsai, 0, sizeof(struct dsa_entry));
-	dsai->dsa = dsa;
-	dsai->next = dsa_list_head;
-	dsa_list_head = dsai;
-	log_(NORM, "return a DSA to dsa pool\n");
-}
-
 /*
  * conf_transforms_to_mask()
  * 
@@ -500,7 +363,7 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
 	/* read algorithm-specific key data */
 	switch (alg) {
 	case HI_ALG_DSA:
-		hi->dsa = hip_dsa_new();
+		hi->dsa = DSA_new();
 		/* get Q, P, G, and Y */
 		offset = 1;
 		hi->dsa->q = BN_bin2bn(&data[offset], DSA_PRIV, 0);
@@ -518,7 +381,7 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
 		offset += key_len;
 		break;
 	case HI_ALG_RSA:
-		hi->rsa = hip_rsa_new();
+		hi->rsa = RSA_new();
 		offset = ((e_len > 255) ? 3 : 1);
 		hi->rsa->e = BN_bin2bn(&data[offset], e_len, 0);
 		offset += e_len;
@@ -916,9 +779,9 @@ void free_hi_node(hi_node *hi)
 	if (!hi)
 		return;
 	if (hi->dsa)
-		hip_dsa_free(hi->dsa);
+		DSA_free(hi->dsa);
 	if (hi->rsa)
-		hip_rsa_free(hi->rsa);
+		RSA_free(hi->rsa);
 	pthread_mutex_destroy(&hi->addrs_mutex);
 	if(hi->copies != NULL) {
 		(*(hi->copies))--;
@@ -3032,9 +2895,10 @@ void hip_exit(int signal)
 		log_(QOUT, "****** the HIP process has encountered a bug and "
 		    "needs to shutdown! ******\n");
 	} else {
-		if (!HCNF.use_smartcard && HCNF.save_my_identities)
+		if (HCNF.save_my_identities &&
+		    ((signal == SIGINT) || (signal == SIGTERM)) )
 			save_identities_file(TRUE); /* store my HIs with R1 counters */
-		if ( HCNF.save_known_identities &&
+		if (HCNF.save_known_identities &&
 		    ((signal == SIGINT) || (signal == SIGTERM)) )
 			save_identities_file(FALSE); 	/* store peer HIs */
 	}

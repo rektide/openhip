@@ -55,7 +55,7 @@ IfmapClient::IfmapClient(QObject *parent)
     _matchLinks = QString("scada:dn-hit or scada:underlay-ip or scada:scada-node ") +
     		  QString("or scada:policy");
     _resultsFilter = QString("scada:underlay-ip or scada:scada-node or scada:dn-hit ") + 
-    		     QString("or scada:cert or scada:role or scada:policy");
+    		     QString("or scada:certificate or scada:role or scada:policy");
     connect(_ifmap, SIGNAL(responseARC(MapResponse *)),
             this, SLOT(mapResponseOnARC(MapResponse *)));
 }
@@ -216,6 +216,11 @@ bool IfmapClient::publishCurrentState()
 
     // Cert
     if (_mapConfig.value("peer_certificate_required").compare("yes", Qt::CaseInsensitive) == 0) {
+       // Assume cert passed in to this class as string _clientCert
+       // Make sure _clientCert isn't empty?
+       Metadata dnCertMeta("certificate", _scadaNS);
+       dnCertMeta.addElement("value", _mapConfig.value("Cert"));
+       pub.addToRequest(&dnId, &dnCertMeta);
     }
 
     MapResponse *mapResponse = _ifmap->submitRequest(&pub);
@@ -444,6 +449,7 @@ void IfmapClient::updateEndboxMapping(SearchResult *searchResult)
     map<string,string> newPeerDN_HITs;
     map<string,string> newPeerDN_ULIPs;
     map<string,string> newPeerDN_LNIPs;
+    map<string,string> newPeerDN_Certs;
 
     // 0. Init newPeerDNs list with myself
     string dn = myDN.toAscii().constData();
@@ -534,10 +540,36 @@ void IfmapClient::updateEndboxMapping(SearchResult *searchResult)
 	}
     }
 
+    // 3. Get certificate metadata from identifier results
+    QList<IdentifierResult *> dnsWithCerts = searchResult->identifiersWithMetadata("certificate",_scadaNS);
+    qDebug() << fnName << "found num identifiers with certificate metadata" << dnsWithCerts.count();
+    QListIterator<IdentifierResult *> dnIt(dnsWithCerts);
+    while (dnIt.hasNext()) {
+       IdentifierResult *idResult = dnIt.next();
+       Identifier *id = idResult->identifier();
+       IdentityId *dn = (IdentityId *)id;
+       //IdentityId *dn = (IdentityId *)id->id1();
+       string sdn = dn->name().toAscii().constData();
+
+       Metadata *meta = idResult->metadata();
+       // XXX: This will have the <value></value> XML around the actual cert
+       QString metaXML = meta->toString();
+       int startPos = metaXML.indexOf("<value>");
+       int endPos = metaXML.indexOf("</value>");
+       QString cert = metaXML.mid(startPos + 7, endPos - startPos - 7);
+
+       string peerCert = cert.toAscii().constData();
+
+       qDebug() << fnName << "Got cert for" << sdn.c_str();
+       //qDebug() << peerCert.c_str();
+       // Save peerCert in data structure to pass back to hip_map_cfg
+       newPeerDN_Certs.insert(std::make_pair(sdn,peerCert));
+    }
+
     hipCfgMap *hcm = hipCfgMap::getInstance();
     string sdn = myDN.toAscii().constData();
     string shit = _mapConfig.value("HIT").toAscii().constData();
-    hcm->updateMaps(sdn, shit, newPeerDNs, newPeerDN_HITs, newPeerDN_ULIPs, newPeerDN_LNIPs);
+    hcm->updateMaps(sdn, shit, newPeerDNs, newPeerDN_HITs, newPeerDN_ULIPs, newPeerDN_LNIPs, newPeerDN_Certs);
 
     // Return from "synchronous" call
     if (! _haveInitialConfig) {

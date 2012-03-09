@@ -69,7 +69,6 @@ LDADD = @libxml2_LIBS@ -lz -ldl
 if WANT_VPLS
 SRC_USERMODE += usermode/hip_endbox.c
 SRC_UTIL +=	util/cfg-api/hip_cfg_api.c
-SRC_HITGEN +=   util/sc_utils.c
 SUBDIRS = util
 endif
 

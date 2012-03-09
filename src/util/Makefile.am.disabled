@@ -18,23 +18,15 @@
 # Author: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
 # 
 # This Makefile builds one of three possible configuration libraries,
-# controlled by the ./configure --enable-vpls={files,LDAP,IFMAP} option
+# controlled by the ./configure --enable-vpls={files,IFMAP} option
 #
 
 if WANT_VPLS_FILES_CFG
 lib_LTLIBRARIES = libhipcfgfiles.la
-SRC_HIPCFGLDAP = cfg-common/hip_cfg.cpp cfg-files/hip_cfg_files.cpp
+SRC_HIPCFGFILES = cfg-common/hip_cfg.cpp cfg-files/hip_cfg_files.cpp
 libhipcfgfiles_la_CPPFLAGS = -DHIP_VPLS -Wall -Woverloaded-virtual -Wcast-qual -DSYSCONFDIR="\"$(sysconfdir)\""
 libhipcfgfiles_la_LDFLAGS = -version_info $(VERSION) -release $(VERSION)
-libhipcfgfiles_la_SOURCES = $(SRC_HIPCFGLDAP)
-endif
-
-if WANT_VPLS_LDAP_CFG
-lib_LTLIBRARIES = libhipcfgldap.la
-SRC_HIPCFGLDAP = cfg-common/hip_cfg.cpp cfg-ldap/hip_cfg_ldap.cpp
-libhipcfgldap_la_CPPFLAGS = -DHIP_VPLS -Wall -Woverloaded-virtual -Wcast-qual -DSYSCONFDIR="\"$(sysconfdir)\""
-libhipcfgldap_la_LDFLAGS = -version_info $(VERSION) -release $(VERSION)
-libhipcfgldap_la_SOURCES = $(SRC_HIPCFGLDAP)
+libhipcfgfiles_la_SOURCES = $(SRC_HIPCFGFILES)
 endif
 
 # IFMAP client library uses Qt build system

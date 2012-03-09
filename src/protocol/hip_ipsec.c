@@ -1486,8 +1486,8 @@ void hip_handle_acquire(struct sockaddr *src, struct sockaddr *dst)
 		/* Spec says to create another incarnation here;
 		 * we need to free the data structures to reuse.
 		 * Do not change state from CLOSED or CLOSING */
-		if (hip_a->peer_hi->dsa) hip_dsa_free(hip_a->peer_hi->dsa);
-		if (hip_a->peer_hi->rsa) hip_rsa_free(hip_a->peer_hi->rsa);
+		if (hip_a->peer_hi->dsa) DSA_free(hip_a->peer_hi->dsa);
+		if (hip_a->peer_hi->rsa) RSA_free(hip_a->peer_hi->rsa);
 		if (hip_a->opaque) free(hip_a->opaque);
 		if (hip_a->rekey) free(hip_a->rekey);
 		if (hip_a->peer_rekey)	free(hip_a->peer_rekey);

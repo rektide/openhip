@@ -241,6 +241,7 @@ int main_loop(int argc, char **argv)
 	memset(HCNF.my_hi_filename, 0, sizeof(HCNF.my_hi_filename));
 	memset(HCNF.known_hi_filename, 0, sizeof(HCNF.known_hi_filename));
 #ifdef HIP_VPLS
+	HCNF.use_my_identities_file = 0;
 	HCNF.endbox_hello_time = 0;
 	HCNF.endbox_allow_core_dump = 0;
 #endif
@@ -421,13 +422,11 @@ int main_loop(int argc, char **argv)
 			HCNF.cfg_library);
 		goto hip_main_error_exit;
 	}
-	if (HCNF.use_smartcard) {
+	if (!HCNF.use_my_identities_file) {
 		if ((my_hi = hipcfg_getMyHostId()) == NULL) {
-			log_(ERR, "Error retrieving host identity from "
-				"smartcard\n");
+			log_(ERR, "Error retrieving host identity from cert\n");
 			 goto hip_main_error_exit;
 		}
-		/* use smartcard for signing */
 		append_hi_node(&my_hi_head, my_hi);
 	} else {
 #endif /* HIP_VPLS */
@@ -446,11 +445,15 @@ int main_loop(int argc, char **argv)
 			"using the 'hitgen' utility.\n", HIP_MYID_FILENAME);
 		goto hip_main_error_exit; /* fatal error */
 	}
+#ifdef HIP_VPLS
+	}
+#endif
 
 	/*
 	 * Load the known_host_identities.xml file.
 	 */
 	peer_hi_head = NULL;
+#ifndef HIP_VPLS
 	if ((locate_config_file(HCNF.known_hi_filename,
 		sizeof(HCNF.known_hi_filename),	HIP_KNOWNID_FILENAME) < 0)) {
 		log_(ERR, "Unable to locate this machine's %s file.\n",
@@ -459,6 +462,7 @@ int main_loop(int argc, char **argv)
 		log_(NORM, "Using known host IDs file:\t%s\n",
 			HCNF.known_hi_filename);
 	}
+#endif
 	if (read_identities_file(HCNF.known_hi_filename, FALSE) < 0) {
     		log_(ERR, "Problem reading the %s file which is used to "
 			"specify\n  peer HITs.\n",
@@ -467,9 +471,6 @@ int main_loop(int argc, char **argv)
 		    log_(ERR, "Because there are no peer identities, you probab"
 			"ly need to run with the -a\n  (allow any) option.\n");
 	}
-#ifdef HIP_VPLS
-	}
-#endif /* HIP_VPLS */
 
 	if (get_preferred_hi(my_hi_head)==NULL) {
 		log_(ERR, "The preferred HI specified in %s was not found.\n",
@@ -478,8 +479,6 @@ int main_loop(int argc, char **argv)
 	}
 
 #ifdef HIP_VPLS
-	endbox_init();
-	last_time = time(NULL);
 	if (!HCNF.endbox_allow_core_dump)
 		signal(SIGSEGV, hip_exit);
 #else
@@ -602,6 +601,11 @@ int main_loop(int argc, char **argv)
 #ifdef HIP_I3
 	if (OPT.i3)
 	        i3_init((hip_hit *)get_preferred_hi(my_hi_head)->hit);
+#endif
+
+#ifdef HIP_VPLS
+	endbox_init();
+	last_time = time(NULL);
 #endif
 
 	/* main event loop */

@@ -1971,33 +1971,7 @@ int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data)
 
 int build_tlv_cert(__u8 *buff)
 {
-#ifndef HIP_VPLS
 	return 0;
-#else
-	tlv_cert *cert;
-        char data[MAX_CERT_LEN];
-	__u16 cert_len;
-
-	if(!HCNF.use_smartcard)
-	  return 0;
-
-	if(hipcfg_getLocalCertUrl(data, sizeof(data))!=0){
-	   log_(NORM, "local certificate is not available.\n");
-	   return 0;
-        }
-
-        cert_len = strlen(data);
-	cert = (tlv_cert*) buff;
-	cert->type = htons(PARAM_CERT);
-	cert->length = htons(cert_len+4);
-	cert->cert_count = htons(1);
-	cert->cert_group = htons(1);
-	cert->cert_id = htons(1); //sequence number for this certificate
-	cert->cert_type = htons(3); // X509v3 URL in LDAP
-	memcpy(cert->certificate, data, cert_len); //certificate URL
-
-	return(eight_byte_align(4 + 4 + cert_len ));
-#endif /* HIP_VPLS */
 }
 
 int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)

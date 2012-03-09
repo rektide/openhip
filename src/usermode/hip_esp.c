@@ -305,6 +305,10 @@ void *hip_esp_output(void *arg)
 				is_broadcast = TRUE;
 			/* unicast packets */
 			} else if (!(entry = hip_sadb_lookup_addr(lsi))){
+#ifdef HIP_VPLS
+				if (!endbox_check_cert(lsi))
+					continue;
+#endif
 				/* No SADB entry. Send ACQUIRE if we haven't
 				 * already, i.e. a new lsi_entry was created */
 				if (buffer_packet(lsi, raw_buff, len)==TRUE)
@@ -483,6 +487,8 @@ void *hip_esp_output(void *arg)
 			/* Why send an acquire during ARP? */
 			/* Trying to do layer two */
 			if (!(entry = hip_sadb_lookup_addr(lsi))) {
+				if (!endbox_check_cert(lsi))
+					continue;
 				if (buffer_packet(lsi, raw_buff, len)==TRUE)
 					pfkey_send_acquire(lsi);
 			} else { /* Need to send packet */

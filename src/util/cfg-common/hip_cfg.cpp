@@ -106,10 +106,11 @@ void hitPair::print() const
   printf("hit1: %02x%02x, hit2: %02x%02x\n", _hit1[HIT_SIZE-2], _hit1[HIT_SIZE-1], _hit2[HIT_SIZE-2], _hit2[HIT_SIZE-1]);
 }
 
-//DM: This is called on the order of per-packet
+//DM: This is called on the order of per-packet for outgoing packets
+//OTB: For incoming, it is called only for incoming I1 packets
 int hipCfg::hit_peer_allowed(const hip_hit hit1, const hip_hit hit2)
 {
-
+  int rc = 0;
   set <hitPair>::iterator si;
   hitPair *hpp;
 /*
@@ -122,20 +123,18 @@ int hipCfg::hit_peer_allowed(const hip_hit hit1, const hip_hit hit2)
      printf("%02x", hit2[i]);
   cout<<endl;
 */
- if(memcmp(hit1, hit2, HIT_SIZE) <0){
+  // DM: 17May2010: Return 0 if hit1==hit2 does not allow EB to talk over HIP to itself
+  if (memcmp(hit1, hit2, HIT_SIZE) < 0) {
      hpp = new hitPair(hit1, hit2);
- } else if(memcmp(hit1, hit2, HIT_SIZE) >0) {
+  } else if(memcmp(hit1, hit2, HIT_SIZE) > 0) {
      hpp= new hitPair(hit2, hit1);
- } else
-    // DM: 17May2010: Return 0 if hit1==hit2 does not allow EB to talk over HIP to itself
-    return 0;
-    //return 1;
+  } else
+    return rc;
 
-  int rc = 1;
   pthread_mutex_lock(&hipcfgmap_mutex);
   si = _allowed_peers.find(*hpp);
-  if(si == _allowed_peers.end()){
-    rc = 0;
+  if(si != _allowed_peers.end()){
+    rc = 1;
   }
   pthread_mutex_unlock(&hipcfgmap_mutex);
 
@@ -521,50 +520,78 @@ int hipCfg::khi_encode_n(__u8 *in, int len, __u8 *out, int n)
 
 int hipCfg::verify_certificate(X509 *cert)
 {
-    int ret = 1;
-    X509_STORE_CTX *ctx;
+  int ret = 1;
+  X509_STORE_CTX *ctx;
 
-    ctx = X509_STORE_CTX_new();
-    if (ctx==NULL){
-      fprintf(stderr, "Error calling X509_STORE_CTX_new()\n");
+  ctx = X509_STORE_CTX_new();
+  if (ctx == NULL)
+    {
+      fprintf(stderr, "Error creating a cert store context\n");
       return 0;
     }
-    ret = X509_STORE_CTX_init(ctx, _store, cert, NULL);
-    if (ret!=1){
-      fprintf(stderr, "Error calling X509_STORE_CTX_init :\n");
+
+  ret = X509_STORE_CTX_init(ctx, _store, cert, NULL);
+  if (ret != 1)
+    {
+      fprintf(stderr, "Error initializing cert store context\n");
       X509_STORE_CTX_free(ctx);
       return 0;
     }
 
-    ret=X509_verify_cert(ctx);
-    if (ret!=1){
-      fprintf(stderr, "Error verifying signature on issued certificate:\n");
-      X509_STORE_CTX_free(ctx);
+  ret = X509_verify_cert(ctx);
+  X509_STORE_CTX_free(ctx);
+
+  if (ret != 1)
+    {
+      fprintf(stderr, "Error verifying certificate against cert chain\n");
       return 0;
     }
 
-    X509_STORE_CTX_free(ctx);
-    return 1;
+  return 1;
 }
 
+/* This function is called for each cert in the cert chain and the cert being
+ * verified. rc is set to 0 for errors with the cert and set to 1 for no
+ * errors. Return 1 to accept the cert and return 0 to not accept the cert.
+ */
 int hipCfg::callb(int rc, X509_STORE_CTX *ctx)
 {
   int err;
   X509 *err_cert;
+  X509_NAME *subject;
 
-  err=X509_STORE_CTX_get_error(ctx);
-  if(err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT)
-    return 0;
+  err = X509_STORE_CTX_get_error(ctx);
+  err_cert = X509_STORE_CTX_get_current_cert(ctx);
+  subject = X509_get_subject_name(err_cert);
 
-  if (rc==1) {
-     //printf("certificate certified at depth %d\n ", X509_STORE_CTX_get_error_depth(ctx));
-     return 1;
-   } else {
-      err_cert=X509_STORE_CTX_get_current_cert(ctx);
-      printf("error with certificate - error %d at depth %d\n%s\n",
-              err, X509_STORE_CTX_get_error_depth(ctx), X509_verify_cert_error_string(err));
-      return 0;
-   }
+  // Ignore time errors as endboxes may not be synchronized.
+
+  if (rc == 1)
+    {
+      fprintf(stderr, "Accepting cert for %s\n",
+              X509_NAME_oneline(subject, NULL, 0));
+      return 1;
+    }
+  else
+    {
+      if ((err == X509_V_ERR_CERT_NOT_YET_VALID) ||
+          (err == X509_V_ERR_CERT_HAS_EXPIRED))
+        {
+          fprintf(stderr, "Accepting cert with invalid time for %s\n",
+                  X509_NAME_oneline(subject, NULL, 0));
+          ERR_clear_error();
+          return 1;
+        }
+      else
+        {
+          fprintf(stderr, "Error with certificate %s\n",
+                  X509_NAME_oneline(subject, NULL, 0));
+          fprintf(stderr, "  rc %d, error %d at depth %d:\n  %s\n",
+                  rc, err, X509_STORE_CTX_get_error_depth(ctx),
+                  X509_verify_cert_error_string(err));
+          return 0;
+        }
+    }
 }
 
 unsigned char *vtou(void *a)
@@ -670,11 +697,6 @@ int hipCfg::getLocalCertUrl(char *url, unsigned int size)
 {
   int rc = 0;
   if(_localCertUrl.length()==0){
-    if(_hcfg->use_smartcard){
-      cout<<"fail to get local cert URL -  local cert was not posted."<<endl;
-      return -1;
-    }
-    else 
      return 1; //OK, no local Cert to provide.
   }
   if(_localCertUrl.length()>=size){

@@ -150,7 +150,7 @@ int hipCfgFiles::loadCfg(struct hip_conf *hc)
 
     _hcfg = hc;
 
-    //SSL context without smartcard engine.
+    //SSL context.
     SSL_library_init();
     SSL_load_error_strings();
     ctx = SSL_CTX_new(SSLv3_client_method());
@@ -175,10 +175,8 @@ int hipCfgFiles::loadCfg(struct hip_conf *hc)
     X509_STORE_set_default_paths(_store);
     */
 
-    if(!_hcfg->use_local_known_identities){
-	cerr << fnName << "Overriding <use_local_known_identities> setting in hip.conf" << endl;
-    }
 
+    hc->use_my_identities_file = 1;
     if(getEndboxMapsFromLocalFile()<0)
 	return -1;
 

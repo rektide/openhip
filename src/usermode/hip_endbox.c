@@ -110,7 +110,7 @@ static int is_valid_packet(__u32 src, __u32 dst, struct sockaddr *lsi)
 	struct sockaddr *eb_p;
 
 	if (!src)
-		return 0;
+		return FALSE;
 
 	memset(&default_ss, 0, sizeof(struct sockaddr_storage));
 	memset(&host_ss, 0, sizeof(struct sockaddr_storage));
@@ -131,7 +131,7 @@ static int is_valid_packet(__u32 src, __u32 dst, struct sockaddr *lsi)
 	if (rc) {
 		rc = hipcfg_getEndboxByLegacyNode(default_p, eb_p);
 		if (rc)
-			return 0;
+			return FALSE;
 	}
 
 	/* Is this legacy node one of mine or am I the default endbox? */
@@ -139,12 +139,12 @@ static int is_valid_packet(__u32 src, __u32 dst, struct sockaddr *lsi)
 	memcpy(hit1, SA2IP(eb_p), HIT_SIZE);
 	my_host_id = get_preferred_hi(my_hi_head);
 	if (compare_hits(my_host_id->hit, hit1) != 0)
-		return 0;
+		return FALSE;
 
 	/* If destination is zero, it is a multicast packet */
 
 	if (!dst)
-		return 1;
+		return TRUE;
 
 	/* Is this dest address a legacy node or is there a default endbox? */
 
@@ -157,31 +157,31 @@ static int is_valid_packet(__u32 src, __u32 dst, struct sockaddr *lsi)
 		dest_p = default_p;
 		rc = hipcfg_getEndboxByLegacyNode(default_p, eb_p);
 		if (rc)
-			return 0;
+			return FALSE;
 	}
 
 	/* If the destination is also one of ours, ignore the packet */
 
 	memcpy(hit2, SA2IP(eb_p), HIT_SIZE);
 	if (compare_hits(my_host_id->hit, hit2) == 0)
-		return 0;
+		return FALSE;
 
 	/* Are we allowed to send to remote endbox? */
 
-	rc = hipcfg_allowed_peers(hit1, hit2);
-	if (!rc)
-	   log_(NORM, "peer connection not allowed hit1: %02x%02x, hit2: "
+	if (!hipcfg_allowed_peers(hit1, hit2)) {
+		log_(NORM, "peer connection not allowed hit1: %02x%02x, hit2: "
 		"%02x%02x\n", hit1[HIT_SIZE-2], hit1[HIT_SIZE-1],
 		hit2[HIT_SIZE-2], hit2[HIT_SIZE-1]);
-	else {
+		return FALSE;
+	} else {
 		/* Get the LSI of the destination endbox */
 		eb_p->sa_family = AF_INET;
 		hipcfg_getEndboxByLegacyNode(dest_p, eb_p);
 		lsi->sa_family = AF_INET;
 		LSI4(lsi) = ntohl(LSI4(eb_p));
+		return TRUE;
 	}
 
-	return rc;
 }
 
 /*
@@ -197,10 +197,15 @@ void endbox_send_hello()
   hi_node *my_host_id;
   struct eb_hello *endbox_hello;
 
+  /* Is my host id set yet? */
+
+  my_host_id = get_preferred_hi(my_hi_head);
+  if (!my_host_id)
+    return;
+
   add_eth_header(out, g_tap_mac, dst_mac, 0x88b5);
 
   endbox_hello = (struct eb_hello *) &out[14];
-  my_host_id = get_preferred_hi(my_hi_head);
   memcpy(endbox_hello->hit, my_host_id->hit, sizeof(hip_hit));
   endbox_hello->time = htonl(HCNF.endbox_hello_time);
 
@@ -280,6 +285,37 @@ int endbox_arp_packet_check(struct arp_hdr *arph, struct sockaddr *lsi,
 	}
 	(*packet_count)++;
 	return 0;
+}
+
+/*
+ * Called from hip_esp_output()
+ */
+int endbox_check_cert(struct sockaddr *lsi)
+{
+  struct sockaddr_storage hit_ss;
+  struct sockaddr *hit_p;
+  hip_hit hit;
+
+  /* Get the HIT of the destination from the LSI */
+
+  LSI4(lsi) = ntohl(LSI4(lsi));
+  memset(&hit_ss, 0, sizeof(struct sockaddr_storage));
+  hit_p = (struct sockaddr*)&hit_ss;
+  hit_p->sa_family = AF_INET6;
+  if (hipcfg_getEndboxByLegacyNode(lsi, hit_p))
+    {
+      LSI4(lsi) = ntohl(LSI4(lsi));
+      return FALSE;
+    }
+
+  LSI4(lsi) = ntohl(LSI4(lsi));
+  memcpy(hit, SA2IP(hit_p), HIT_SIZE);
+
+  if (hipcfg_verifyCert(NULL, hit) > 0)
+    return TRUE;
+  else
+    return FALSE;
+
 }
 
 /*

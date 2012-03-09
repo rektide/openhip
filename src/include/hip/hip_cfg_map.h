@@ -48,14 +48,16 @@ public:
 		  list<string> newPeerDNs,
 		  map<string,string> newPeerDN_HITs,
 		  map<string,string> newPeerDN_ULIPs,
-		  map<string,string> newPeerDN_LNIPs);
+		  map<string,string> newPeerDN_LNIPs,
+		  map<string,string> newPeerDN_Certs);
 
 private:
   hipCfgMap();
 
   int getCertFromMap(const char *url, char *buf, int size);
-  int getCertDN();
   int getHITFromLocalFile();
+  int getHITFromCert(const char *cert_file_name);
+  int getCACert(const char *ca_cert_file_name);
 
   int stringListContains(list<string> haystack, string needle);
 
@@ -74,8 +76,8 @@ signals:
 
 private:
   static hipCfgMap *_instance;
-  string _scDN;
-  string _scCN;
+  string _DN;
+  string _CN;
 
   QMap<QString,QString> _mapConfig;
 

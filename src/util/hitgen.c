@@ -45,20 +45,6 @@
 #include <hip/hip_types.h>
 #include <hip/hip_funcs.h>
 #include <hip/hip_globals.h>
-#ifdef HIP_VPLS
-#include <openssl/ssl.h>
-#include <openssl/crypto.h>     /* OpenSSL's crypto library     */
-#include <openssl/bn.h>         /* Big Numbers                  */
-#include <openssl/des.h>        /* 3DES support                 */
-#include <openssl/blowfish.h>   /* BLOWFISH support             */
-#include <openssl/aes.h>        /* AES support                  */
-#include <openssl/dsa.h>        /* DSA support                  */
-#include <openssl/dh.h>         /* Diffie-Hellman contexts      */
-#include <openssl/sha.h>        /* SHA1 algorithms              */
-#include <openssl/rand.h>       /* RAND_seed()                  */
-#include <openssl/err.h>        /* ERR_ functions               */
-#include <openssl/engine.h>
-#endif
 
 /* dummy globals to fix undefined variables when building */
 #ifdef __UMH__ 
@@ -248,213 +234,6 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 	return(0);
 }
 
-
-#ifdef HIP_VPLS
-int output_HI(xmlNodePtr root_node, hi_options *opts)
-{
-	int err, rc;
-	char tmp[22], hit_hex[INET6_ADDRSTRLEN], lsi_str[INET_ADDRSTRLEN];
-	unsigned char *hitp;
-	struct sockaddr_storage hit;
-	struct sockaddr_in lsi;
-	xmlNodePtr hi;
-	unsigned long e;
-	hi_node hostid;
-	extern ENGINE *engine_init(char *);
-	extern SSL_CTX *ssl_ctx_init(ENGINE *e, const char *pin);
-
-	/* Crypto stuff */
-	BIO *bp;
-	DSA *dsa=NULL;
-	RSA *rsa=NULL;
-	EVP_PKEY *pkey = NULL;
- 	char pin[12]="123456";
-	ENGINE *engine = NULL;
-        SSL_CTX *ctx = NULL;
-        SSL *con = NULL;
-	struct {
-          const char * cert_id;
-          X509 * cert;
-        } parms;
-
-	printf("Generating a %d-bit %s key\n",
-	    opts->bitsize, HI_TYPESTR(opts->type));
-	if (opts->bitsize < 512) {
-		printf("Error: bit size too small. ");
-		printf("512 bits is the minimum size\n");
-		return(-1);
-	} else if (opts->bitsize % 64) {
-		printf("Error: the bit size must be a mupltiple of 64.\n");
-		return(-1);
-	}
-
-	/* TODO: If hitgen is regularly used with smartcard, the opensc engine and
-	 * opensc module should be parameterized in engine_init call */
-        /* Initialize OpenSC engine for OpenSSL */
-        engine = engine_init(pin);
-        if (engine == NULL) {
-    	    fprintf(stderr,"Error in engine init\n");
-    	    exit(1);
-        }
-    
-        /* Initialize OpenSSL context, sending PIN for smartcard */
-        ctx = ssl_ctx_init(engine, pin);
-        if (ctx == NULL) {
-    	    fprintf(stderr,"Error in ssl init, bailing...\n");
-    	    exit(1);
-        }
-    
-        /* Initialize the OpenSSL connection */
-        con = SSL_new(ctx);
-        if (con == NULL) {
-            fprintf(stderr,"Error calling SSL_new()\n");
-    	    exit(1);
-        }
-
-        int slot, id;
-	char buff[100];
-	/* TODO: If hitgen is regularly used with smartcard, slot and id should be
-	 * parameterized */
-	slot=4;
-	id=45;
-	sprintf(buff, "%d:%d", slot, id);
-        parms.cert_id = buff;
-	parms.cert = NULL;
-	rc=ENGINE_ctrl_cmd(engine, "LOAD_CERT_CTRL", 0, &parms, NULL, 1);
-        if(parms.cert)
-	  printf("get cert - %s\n", buff);
-
-        pkey=SSL_get_privatekey(con);
-        if(pkey==NULL){
-            fprintf(stderr,"Error call SSL_get_privatekey\n");
-    	    exit(1);
-        }
-
-        rsa=EVP_PKEY_get1_RSA(pkey);
-        dsa=EVP_PKEY_get1_DSA(pkey);
-
-	/* 
-	 * generate the HI
-	 */
-	printf("Generating %s keys for HI...", HI_TYPESTR(opts->type));
-	if(dsa){
-	        printf("Generating DSA parameters (p,q,g)...");
-		dsa = DSA_generate_parameters(opts->bitsize, seed, sizeof(seed),
-					NULL, NULL, cb, stdout);
-		printf("\n");
-		if (dsa == NULL) {
-			fprintf(stderr, "DSA_generate_parameters failed\n");
-			exit(1);
-		}
-		printf("Generating DSA keys for HI...");
-		err = DSA_generate_key(dsa);
-		if (err < 0) {
-			fprintf(stderr, "DSA_generate_key() failed.\n");
-			exit(1);
-		}
-	}
-	else if(rsa) {
-		e = HIP_RSA_DFT_EXP;
-		/* rsa = RSA_generate_key(opts->bitsize, e, cb, stdout);
-		if (!rsa) {
-			fprintf(stderr, "RSA_generate_key() failed.\n");
-			exit(1);
-		}
-	        */
-	} else {
-		printf("Error: generate_HI() got invalid HI type\n");
-		exit(1);
-	}
-
-	/*
-	 * store everything in XML nodes
-	 */
-	hi = xmlNewChild(root_node, NULL, BAD_CAST "host_identity", NULL);
-	xmlNewProp(hi, BAD_CAST "alg", BAD_CAST HI_TYPESTR(opts->type));
-	sprintf(tmp, "%d", opts->type);
-	xmlNewProp(hi, BAD_CAST "alg_id", BAD_CAST tmp);
-	sprintf(tmp, "%d", opts->bitsize/8);
-	xmlNewProp(hi, BAD_CAST "length", BAD_CAST tmp);
-	xmlNewProp(hi, BAD_CAST "anon", BAD_CAST (yesno(opts->anon)));
-	xmlNewProp(hi, BAD_CAST "incoming", BAD_CAST (yesno(opts->incoming)));
-	if (opts->r1count > 0) {
-		sprintf(tmp, "%llu", opts->r1count);
-		xmlNewProp(hi, BAD_CAST "r1count", BAD_CAST tmp);
-	}
-	xmlNewChild(hi, NULL, BAD_CAST "name", BAD_CAST opts->name);
-	
-	if(dsa){
-		xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST BN_bn2hex(dsa->p));
-		xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST BN_bn2hex(dsa->q));
-		xmlNewChild(hi, NULL, BAD_CAST "G", BAD_CAST BN_bn2hex(dsa->g));
-		xmlNewChild(hi, NULL, BAD_CAST "PUB", 
-		    BAD_CAST BN_bn2hex(dsa->pub_key));
-		xmlNewChild(hi, NULL,BAD_CAST "PRIV",
-		    BAD_CAST BN_bn2hex(dsa->priv_key));
-	} else if(rsa){
-		xmlNewChild(hi, NULL, BAD_CAST "N", BAD_CAST BN_bn2hex(rsa->n));
-		xmlNewChild(hi, NULL, BAD_CAST "E", BAD_CAST BN_bn2hex(rsa->e));
-/* output public key parameters only
-		xmlNewChild(hi, NULL, BAD_CAST "D", BAD_CAST BN_bn2hex(rsa->d));
-		xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST BN_bn2hex(rsa->p));
-		xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST BN_bn2hex(rsa->q));
-		xmlNewChild(hi, NULL, BAD_CAST "dmp1",
-		    BAD_CAST BN_bn2hex(rsa->dmp1));
-		xmlNewChild(hi, NULL, BAD_CAST "dmq1",
-		    BAD_CAST BN_bn2hex(rsa->dmq1));
-		xmlNewChild(hi, NULL, BAD_CAST "iqmp",
-		    BAD_CAST BN_bn2hex(rsa->iqmp));
-*/
-	}
-
-	/*
-	 * calculate and store the HIT
-	 */
-	memset(&hostid, 0, sizeof(hi_node));
-	memset(&hit, 0, sizeof(struct sockaddr_storage));
-	memset(hit_hex, 0, INET6_ADDRSTRLEN);
-
-	hostid.algorithm_id = opts->type;
-	hostid.size = (opts->bitsize)/8;
-	hostid.rsa = rsa;
-	hostid.dsa = dsa;
-
-	hit.ss_family = AF_INET6;
-	hitp = (unsigned char*)(SA2IP(&hit));
-	if (hi_to_hit(&hostid, hitp) < 0) {
-		printf("Error generating HIT!\n");
-		exit(1);
-	}
-	
-	if (addr_to_str(SA(&hit), (__u8*)hit_hex, INET6_ADDRSTRLEN)) {
-		printf("Error generating HIT! Do you have the IPv6 protocol "
-			"installed?\n");
-		exit(1);
-	}
-	xmlNewChild(hi, NULL, BAD_CAST "HIT", BAD_CAST hit_hex);
-
-	/*
-	 * calculate the LSI from the HIT
-	 */
-	memset(&lsi, 0, sizeof(struct sockaddr_in));
-	memset(lsi_str, 0, INET_ADDRSTRLEN);
-	lsi.sin_family = AF_INET;
-	lsi.sin_addr.s_addr = ntohl(HIT2LSI(hitp)); 
-	if (addr_to_str(SA(&lsi), (__u8*)lsi_str, INET_ADDRSTRLEN))
-		printf("Error generating LSI from HIT!\n");
-	xmlNewChild(hi, NULL, BAD_CAST "LSI", BAD_CAST lsi_str);
-
-	if (D_VERBOSE==OPT.debug) {
-		bp = BIO_new_fp(stdout, BIO_NOCLOSE);
-		if (dsa) DSAparams_print(bp, dsa);
-		if (rsa) RSA_print(bp, rsa, 0);
-		BIO_free(bp);
-	}
-
-	return(0);
-}
-
-#endif
 
 /* 
  * Delete whitespace from an XML document, which is necessary if you
@@ -693,9 +472,6 @@ int main(int argc, char *argv[])
 	char rnd_seed[255];
 	int i, have_filename=0, do_publish=0, do_conf=0, do_noinput=0;
 	int do_append=0;
-#ifdef HIP_VPLS
-	int do_sc_out=0;
-#endif
 	hi_options opts;
 	xmlDocPtr doc = NULL;
 	xmlNodePtr root_node = NULL;
@@ -802,12 +578,6 @@ int main(int argc, char *argv[])
 			do_append = 1;
 			argv++, argc--;
 			continue;
-#ifdef HIP_VPLS
-		} else if (strcmp(*argv, "-scout") == 0) {
-			do_sc_out = 1;
-			argv++, argc--;
-			continue;
-#endif
 		}
 		print_hitgen_usage();
 		exit(1);
@@ -866,9 +636,6 @@ int main(int argc, char *argv[])
 	// dtd = xmlCreateIntSubset(doc,BAD_CAST "root",NULL,BAD_CAST "x.dtd");
 	// xmlNewChild(parent, NsPtr ns, name, content)
 	// 
-#ifdef HIP_VPLS
-     if(!do_sc_out){
-#endif
 	if (do_noinput) {
 #ifdef __WIN32__
 		if (hLib) {
@@ -902,20 +669,12 @@ int main(int argc, char *argv[])
 			printf("Warning: could not read any input.\n");
 	}
 	RAND_seed(rnd_seed, sizeof rnd_seed); 
-#ifdef HIP_VPLS
-     } 
-#endif
 
 	if (opts.bitsize) {
 		/* generate only one HI for the specified length */
 		if (!opts.type)
 			opts.type = HI_ALG_DSA;
 		sprintf(opts.name, "%s-%d", basename, opts.bitsize);
-#ifdef HIP_VPLS
-		if(do_sc_out)
-		  output_HI(root_node, &opts);
-		else
-#endif
 		generate_HI(root_node, &opts);
 	} else {
 		/* generate a HI for each of the default lengths */
@@ -924,11 +683,6 @@ int main(int argc, char *argv[])
 				opts.type = HI_ALG_RSA;
 			opts.bitsize = default_sizes[i];
 			sprintf(opts.name, "%s-%d", basename, opts.bitsize);
-#ifdef HIP_VPLS
-			if(do_sc_out)
-			  output_HI(root_node, &opts);
-			else
-#endif
 			generate_HI(root_node, &opts);
 		}
 	}

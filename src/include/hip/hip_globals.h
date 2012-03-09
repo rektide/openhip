@@ -71,6 +71,3 @@ extern int netlsp[2];
 
 const unsigned char khi_context_id[16];
 
-/* smartcard signing */
-extern RSA *sc_rsa;
-extern DSA *sc_dsa;

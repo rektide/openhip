@@ -376,13 +376,20 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 		/* Find peer HIT */
 		peer_host_id = find_host_identity(peer_hi_head, hiti);
 #ifdef HIP_VPLS
-		if (!peer_host_id && hipcfg_allowed_peers(hiti, hitr)) {
-			log_(NORMT,"Accepted an allowed peer "
-			    "Endbox HIT in I1\n");
+		if(!hipcfg_allowed_peers(hitr, hiti)) {
+			log_(NORMT,"ACL denied for HIP peer\n");
+			return -1;
+		}
+		if (hipcfg_verifyCert(NULL, hiti) <= 0) {
+			log_(NORMT,"Cert verification failed for HIP peer\n");
+			return -1;
+		}
+		log_(NORMT,"Accepted an allowed peer Endbox HIT in I1\n");
+		if (!peer_host_id) {
 			/* Read in initiator's HIT to table */
 			add_peer_hit(hiti, src);
-		} else 
-#endif
+		}
+#else
 		if (!peer_host_id) {
 			/* could be opportunistic */
 			if (!OPT.allow_any) {
@@ -397,11 +404,6 @@ int hip_handle_I1(__u8 *buff, hip_assoc* hip_a, struct sockaddr *src,
 				/* Read in initiator's HIT to table */
 				add_peer_hit(hiti, src);
 			}
-		}
-#ifdef HIP_VPLS
-		if(!hipcfg_allowed_peers(hiti, hitr)){
-			log_(NORMT,"ACL denied for HIP peer\n");
-			return -1;
 		}
 #endif
 	} else {
@@ -593,10 +595,10 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 				}
 				if (saved_peer_hi.rsa &&
 				    (saved_peer_hi.rsa != hip_a->peer_hi->rsa))
-					hip_rsa_free(saved_peer_hi.rsa);
+					RSA_free(saved_peer_hi.rsa);
 				if (saved_peer_hi.dsa &&
 				    (saved_peer_hi.dsa != hip_a->peer_hi->dsa))
-					hip_dsa_free(saved_peer_hi.dsa);
+					DSA_free(saved_peer_hi.dsa);
 				memset(hip_a->keymat, 0, KEYMAT_SIZE);
 				hip_a->keymat_index = 0;
 			} else { /* state I1_SENT or CLOSED */
@@ -734,9 +736,9 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 	return(status);
 restore_saved_peer_hi:
 	if (hip_a->peer_hi->dsa && (hip_a->peer_hi->dsa != saved_peer_hi.dsa))
-		hip_dsa_free(hip_a->peer_hi->dsa);
+		DSA_free(hip_a->peer_hi->dsa);
 	if (hip_a->peer_hi->rsa && (hip_a->peer_hi->rsa != saved_peer_hi.rsa))
-		hip_rsa_free(hip_a->peer_hi->rsa);
+		RSA_free(hip_a->peer_hi->rsa);
 	memcpy(hip_a->peer_hi, &saved_peer_hi, sizeof(saved_peer_hi));
 	return(-1);
 }
