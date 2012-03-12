@@ -382,7 +382,7 @@ void *hip_esp_output(void *arg)
 #endif
               if (check_esp_seqno_overflow(entry))
                 {
-                  start_expire(entry->spi);
+                  esp_start_expire(entry->spi);
                 }
               err = hip_esp_encrypt(raw_buff,
                                     raw_len,
@@ -562,7 +562,7 @@ void *hip_esp_output(void *arg)
           pthread_mutex_lock(&entry->rw_lock);
           if (check_esp_seqno_overflow(entry))
             {
-              start_expire(entry->spi);
+              esp_start_expire(entry->spi);
             }
           err = hip_esp_encrypt(raw_buff, raw_len,
                                 data, &len, entry, &now);

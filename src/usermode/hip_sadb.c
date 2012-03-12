@@ -65,6 +65,7 @@
  */
 extern int readsp[2];
 extern long g_read_usec;
+extern void esp_start_expire(__u32 spi);
 
 /* the SADB hash table
  * each entry has a rw_lock, and there is one lock for each hash chain */
@@ -1073,7 +1074,7 @@ void hip_sadb_expire(struct timeval *now)
       pthread_mutex_unlock(&hip_sadb_locks[i]);
       if (spi > 0)
         {
-          start_expire(spi);
+          esp_start_expire(spi);
         }
     }
 }
