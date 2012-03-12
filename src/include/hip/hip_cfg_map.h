@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2011 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -32,7 +32,7 @@ class IfmapThread;
 
 class hipCfgMap : public QObject, public hipCfg
 {
-    Q_OBJECT
+  Q_OBJECT
 public:
   int loadCfg(struct hip_conf *hc);
   int closeCfg();
@@ -42,14 +42,14 @@ public:
 
   static hipCfgMap *getInstance();
 
-  // Used by ifmap_client to get results back to this thread
-  void updateMaps(string myDN, 
-		  string myHIT,
-		  list<string> newPeerDNs,
-		  map<string,string> newPeerDN_HITs,
-		  map<string,string> newPeerDN_ULIPs,
-		  map<string,string> newPeerDN_LNIPs,
-		  map<string,string> newPeerDN_Certs);
+  /* Used by ifmap_client to get results back to this thread */
+  void updateMaps(string myDN,
+                  string myHIT,
+                  list<string> newPeerDNs,
+                  map<string,string> newPeerDN_HITs,
+                  map<string,string> newPeerDN_ULIPs,
+                  map<string,string> newPeerDN_LNIPs,
+                  map<string,string> newPeerDN_Certs);
 
 private:
   hipCfgMap();
@@ -61,7 +61,7 @@ private:
 
   int stringListContains(list<string> haystack, string needle);
 
-  // returns number of config items read, or -1 on error
+  /* returns number of config items read, or -1 on error */
   int readIPMConfigFile();
   bool readIPMConfigXML(QIODevice *device);
   void addConfigItem(QString key, QString value);

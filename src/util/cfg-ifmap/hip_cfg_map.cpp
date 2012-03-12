@@ -1,7 +1,7 @@
 /*
  * Host Identity Protocol
  * Copyright (C) 2011 the Boeing Company
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -47,104 +47,104 @@ hipCfgMap *hipCfgMap::_instance = NULL;
 extern "C" {
 int hipcfg_init(struct hip_conf *hc)
 {
-  //printf("cfg-local hipcfg_init called\n");
-  hipCfg *hs=hipCfgMap::getInstance();
+  /* printf("cfg-local hipcfg_init called\n"); */
+  hipCfg *hs = hipCfgMap::getInstance();
   int rc = hs->loadCfg(hc);
   printf("cfg-local hipcfg_init returned: %d\n", rc);
-  return rc;
+  return(rc);
 }
 
 int hipcfg_close()
 {
-  //printf("cfg-local hipcfg_init called\n");
-  hipCfg *hs=hipCfgMap::getInstance();
-  return hs->closeCfg();
+  /* printf("cfg-local hipcfg_init called\n"); */
+  hipCfg *hs = hipCfgMap::getInstance();
+  return(hs->closeCfg());
 }
 
 int hipcfg_allowed_peers(const hip_hit hit1, const hip_hit hit2)
 {
-  //printf("cfg-local hit_peer_allowed\n");
+  /* printf("cfg-local hit_peer_allowed\n"); */
   /* this is the (approximately) per-packet check */
-  hipCfg *hs=hipCfgMap::getInstance();
-  return hs->hit_peer_allowed(hit1, hit2);
+  hipCfg *hs = hipCfgMap::getInstance();
+  return(hs->hit_peer_allowed(hit1, hit2));
 }
 
 int hipcfg_peers_allowed(hip_hit *hits1, hip_hit *hits2, int max_cnt)
 {
-  //printf("cfg-local peers_allowed\n");
-  hipCfg *hs=hipCfgMap::getInstance();
-  return hs->peers_allowed(hits1, hits2, max_cnt);
+  /* printf("cfg-local peers_allowed\n"); */
+  hipCfg *hs = hipCfgMap::getInstance();
+  return(hs->peers_allowed(hits1, hits2, max_cnt));
 }
 
 int hipcfg_setUnderlayIpAddress(const char *ip)
 {
-  hipCfg *hs=hipCfgMap::getInstance();
-  return hs->setUnderlayIpAddress(ip);
+  hipCfg *hs = hipCfgMap::getInstance();
+  return(hs->setUnderlayIpAddress(ip));
 }
 
-int hipcfg_getEndboxByLegacyNode(const struct sockaddr *host, struct sockaddr *eb)
+int hipcfg_getEndboxByLegacyNode(const struct sockaddr *host,
+                                 struct sockaddr *eb)
 {
-  int rc=0;
-  
-  hipCfg *hs=hipCfgMap::getInstance();
+  int rc = 0;
+
+  hipCfg *hs = hipCfgMap::getInstance();
   rc = hs->legacyNodeToEndbox(host, eb);
-  return rc;
+  return(rc);
 }
 
 int hipcfg_getLlipByEndbox(const struct sockaddr *eb, struct sockaddr *llip)
 {
-  int rc=0;
-  //printf("entering hipcfg_getLlipByEndbox...\n");
-  hipCfg *hs=hipCfgMap::getInstance();
+  int rc = 0;
+  /* printf("entering hipcfg_getLlipByEndbox...\n"); */
+  hipCfg *hs = hipCfgMap::getInstance();
   rc = hs->endbox2Llip(eb, llip);
-  return rc;
+  return(rc);
 }
 
 int hipcfg_getLegacyNodesByEndbox(const struct sockaddr *eb,
-   struct sockaddr_storage *hosts, int size)
+                                  struct sockaddr_storage *hosts, int size)
 {
-  int rc=0;
-  //printf("entering hipcfg_getLegacyNodesByEndbox...\n");
-  hipCfg *hs=hipCfgMap::getInstance();
+  int rc = 0;
+  /* printf("entering hipcfg_getLegacyNodesByEndbox...\n"); */
+  hipCfg *hs = hipCfgMap::getInstance();
   rc = hs->getLegacyNodesByEndbox(eb, hosts, size);
-  return rc;
+  return(rc);
 }
 
 int hipcfg_verifyCert(const char *url, const hip_hit hit)
 {
   int rc = 0;
-  hipCfg *hs=hipCfgMap::getInstance();
+  hipCfg *hs = hipCfgMap::getInstance();
   rc = hs->verifyCert(url, hit);
-  return rc;
+  return(rc);
 }
-
 
 int hipcfg_getLocalCertUrl(char *url, int size)
 {
-  int rc=0;
-  hipCfg *hs=hipCfgMap::getInstance();
+  int rc = 0;
+  hipCfg *hs = hipCfgMap::getInstance();
   rc = hs->getLocalCertUrl(url, size);
-  return rc;
+  return(rc);
 }
 
 int hipcfg_postLocalCert(const char *hit)
 {
   int rc = 0;
-  hipCfg *hs=hipCfgMap::getInstance();
+  hipCfg *hs = hipCfgMap::getInstance();
   rc = hs->postLocalCert(hit);
-  return rc;
+  return(rc);
 }
 
 hi_node *hipcfg_getMyHostId()
 {
-  hipCfgMap *hs=hipCfgMap::getInstance();
-  return hs->getMyHostId();
+  hipCfgMap *hs = hipCfgMap::getInstance();
+  return(hs->getMyHostId());
 }
 
 int hipcfg_getPeerNodes(struct peer_node *peerNodes, int max_count)
 {
-  hipCfgMap *hs=hipCfgMap::getInstance();
-  return hs->getPeerNodes(peerNodes, max_count);
+  hipCfgMap *hs = hipCfgMap::getInstance();
+  return(hs->getPeerNodes(peerNodes, max_count));
 }
 
 } /* extern "C" */
@@ -158,23 +158,24 @@ hipCfgMap::hipCfgMap()
   _rsa = NULL;
   _hcfg = NULL;
 
-  const char *argv = {"hip_cfg_map"};
+  const char *argv = { "hip_cfg_map" };
   int argc = 1;
 
   _qtApp = new QCoreApplication(argc,(char **)&argv);
   _ifmapThread = new IfmapThread(0);
   _ifmapThread->start();
 
-  //sleep(1); // To let thread start
+  /* sleep(1); // To let thread start */
 
 }
 
 hipCfgMap *hipCfgMap::getInstance()
 {
-  if(_instance==NULL){
-    _instance = new hipCfgMap();
-  }
-  return _instance;
+  if (_instance == NULL)
+    {
+      _instance = new hipCfgMap();
+    }
+  return(_instance);
 }
 
 int hipCfgMap::closeCfg()
@@ -186,14 +187,17 @@ int hipCfgMap::closeCfg()
   cerr << fnName << "Deleting MAP Client" << endl;
   _ifmapThread->deleteMapClient();
 
-  _ifmapThread->exit(0);  // exit thread's event loop
-  if (_ifmapThread->wait(1000)) {  // Wait 1000msec for thread to exit
-        rc = 0;
-    } else {
-        rc = 1;
+  _ifmapThread->exit(0);  /* exit thread's event loop */
+  if (_ifmapThread->wait(1000))    /* Wait 1000msec for thread to exit */
+    {
+      rc = 0;
+    }
+  else
+    {
+      rc = 1;
     }
 
-  return rc;
+  return(rc);
 }
 
 int hipCfgMap::readIPMConfigFile()
@@ -205,203 +209,312 @@ int hipCfgMap::readIPMConfigFile()
     {
       qDebug() << fnName << "Error opening IPM Config File" << cfile.fileName();
       qDebug() << fnName << "-->" << cfile.error();
-      return -1;
+      return(-1);
     }
 
   if (!readIPMConfigXML(&cfile))
     {
       qDebug() << fnName << "Error reading XML in IPM Config File"
                << cfile.fileName();
-      return -1;
+      return(-1);
     }
 
   static QString mapkey = "map_server_url";
-  if (! _mapConfig.contains(mapkey))
+  if (!_mapConfig.contains(mapkey))
     {
       qDebug() << fnName << "Error: No MAP Server url specified";
-      return -1;
+      return(-1);
     }
 
   static QString ulki = "use_local_known_identities";
-  if (! _mapConfig.contains(ulki))
+  if (!_mapConfig.contains(ulki))
     {
       qDebug() << fnName << "Disabling <use_local_known_identites> by default";
       _mapConfig.insert(ulki,"no");
     }
 
   static QString pcr = "peer_certificate_required";
-  if (! _mapConfig.contains(pcr))
+  if (!_mapConfig.contains(pcr))
     {
       qDebug() << fnName << "Disabling <peer_certificate_required> by default";
       _mapConfig.insert(pcr, "no");
     }
   else if (_mapConfig.value(pcr).compare("yes", Qt::CaseInsensitive) == 0)
     {
-      // Make sure the following are set:
+      /* Make sure the following are set: */
       /*
-      <my_certificate_file/>
-      <my_private_key_file/>
-      <my_private_key_passwd/>
-      <my_ca_chain_file/>
-      */
+       *  <my_certificate_file/>
+       *  <my_private_key_file/>
+       *  <my_private_key_passwd/>
+       *  <my_ca_chain_file/>
+       */
       static QString mcf = "my_certificate_file";
-      if (! _mapConfig.contains(mcf))
+      if (!_mapConfig.contains(mcf))
         {
           qDebug() << fnName << "my_certificate_file not set";
-          return -1;
+          return(-1);
         }
       static QString mpkf = "my_private_key_file";
-      if (! _mapConfig.contains(mpkf))
-      {
-        qDebug() << fnName << "my_private_key_file not set";
-        return -1;
-      }
+      if (!_mapConfig.contains(mpkf))
+        {
+          qDebug() << fnName << "my_private_key_file not set";
+          return(-1);
+        }
       static QString mpkp = "my_private_key_passwd";
-      if (! _mapConfig.contains(mpkp))
-      {
-        qDebug() << fnName << "my_private_key_passwd not set";
-        return -1;
-      }
+      if (!_mapConfig.contains(mpkp))
+        {
+          qDebug() << fnName << "my_private_key_passwd not set";
+          return(-1);
+        }
       static QString mccf = "my_ca_chain_file";
-      if (! _mapConfig.contains(mccf))
-      {
-        qDebug() << fnName << "my_ca_chain_file not set";
-        return -1;
-      }
+      if (!_mapConfig.contains(mccf))
+        {
+          qDebug() << fnName << "my_ca_chain_file not set";
+          return(-1);
+        }
     }
 
-  return _mapConfig.count();
+  return(_mapConfig.count());
 }
 
 void hipCfgMap::addConfigItem(QString key, QString value)
 {
-    const char *fnName = "hipCfgMap::addConfigItem:";
-    if (! value.isEmpty()) {
-        qDebug() << fnName << "Adding:" << key << "-->" << value;
-        _mapConfig.insert(key, value);
+  const char *fnName = "hipCfgMap::addConfigItem:";
+  if (!value.isEmpty())
+    {
+      qDebug() << fnName << "Adding:" << key << "-->" << value;
+      _mapConfig.insert(key, value);
     }
 }
 
-// Implementing this Qt-4.6 method in order to use Qt-4.5 on OpenWRT
+/* Implementing this Qt-4.6 method in order to use Qt-4.5 on OpenWRT */
 bool hipCfgMap::readNextStartElement(QXmlStreamReader &xmlReader)
 {
-    while (xmlReader.readNext() != QXmlStreamReader::Invalid) {
-        if (xmlReader.isEndElement())
-            return false;
-        else if (xmlReader.isStartElement())
-            return true;
+  while (xmlReader.readNext() != QXmlStreamReader::Invalid)
+    {
+      if (xmlReader.isEndElement())
+        {
+          return(false);
+        }
+      else if (xmlReader.isStartElement())
+        {
+          return(true);
+        }
     }
-    return false;
+  return(false);
 }
 
-// Implementing this Qt-4.6 method in order to use Qt-4.5 on OpenWRT
-void hipCfgMap::skipCurrentElement(QXmlStreamReader &xmlReader) {
-    int depth = 1;
-    while (depth && xmlReader.readNext() != QXmlStreamReader::Invalid) {
-        if (xmlReader.isEndElement())
-            --depth;
-        else if (xmlReader.isStartElement())
-            ++depth;
+/* Implementing this Qt-4.6 method in order to use Qt-4.5 on OpenWRT */
+void hipCfgMap::skipCurrentElement(QXmlStreamReader &xmlReader)
+{
+  int depth = 1;
+  while (depth && xmlReader.readNext() != QXmlStreamReader::Invalid)
+    {
+      if (xmlReader.isEndElement())
+        {
+          --depth;
+        }
+      else if (xmlReader.isStartElement())
+        {
+          ++depth;
+        }
     }
 }
 
 bool hipCfgMap::readIPMConfigXML(QIODevice *device)
 {
-    const char *fnName = "hipCfgMap::readIPMConfigXML:";
-    QXmlStreamReader xmlReader(device);
+  const char *fnName = "hipCfgMap::readIPMConfigXML:";
+  QXmlStreamReader xmlReader(device);
 
-    if (readNextStartElement(xmlReader)) {
-        if (xmlReader.name() == "ipm_configuration" &&
-            xmlReader.attributes().value("version") == "1.0") {
+  if (readNextStartElement(xmlReader))
+    {
+      if ((xmlReader.name() == "ipm_configuration") &&
+          (xmlReader.attributes().value("version") == "1.0"))
+        {
 
-            xmlReader.readNext();
+          xmlReader.readNext();
 
-            while (readNextStartElement(xmlReader)) {
-                if (xmlReader.name() == "use_local_known_identities") {
-                    QString value = xmlReader.readElementText();
-                    if (value.compare("yes", Qt::CaseInsensitive) == 0 ||
-                        value.compare("no", Qt::CaseInsensitive) == 0) {
-                        addConfigItem(xmlReader.name().toString(), value);
-                    } else {
-                        xmlReader.raiseError(QObject::tr("Incorrect value for <use_local_known_identities>"));
+          while (readNextStartElement(xmlReader))
+            {
+              if (xmlReader.name() == "use_local_known_identities")
+                {
+                  QString value = xmlReader.readElementText();
+                  if ((value.compare("yes", Qt::CaseInsensitive) == 0) ||
+                      (value.compare("no", Qt::CaseInsensitive) == 0))
+                    {
+                      addConfigItem(xmlReader.name().toString(), value);
                     }
-                } else if (xmlReader.name() == "peer_certificate_required") {
-                    QString value = xmlReader.readElementText();
-                    if (value.compare("yes", Qt::CaseInsensitive) == 0 ||
-                        value.compare("no", Qt::CaseInsensitive) == 0) {
-                        addConfigItem(xmlReader.name().toString(), value);
-                    } else {
-                        xmlReader.raiseError(QObject::tr("Incorrect value for <peer_certificate_required>"));
+                  else
+                    {
+                      xmlReader.raiseError(QObject::tr(
+                                             "Incorrect value for <use_local_known_identities>"));
                     }
-                } else if (xmlReader.name() == "peer_ca") {
-                    addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                } else if (xmlReader.name() == "my_certificate_file") {
-                    addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                } else if (xmlReader.name() == "my_ca_chain_file") {
-                    addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                } else if (xmlReader.name() == "my_private_key_file") {
-                    addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                } else if (xmlReader.name() == "my_private_key_passwd") {
-                    addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                } else if (xmlReader.name() == "map_proxy_passwd") {
-                    addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                } else if (xmlReader.name() == "ipm_map_configuration" &&
-                           xmlReader.attributes().value("version") == "1.0") {
-                    while (readNextStartElement(xmlReader)) {
-                        if (xmlReader.name() == "map_server_url") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else if (xmlReader.name() == "map_server_vendor") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else if (xmlReader.name() == "map_ignore_ssl_errors") {
-			    QString value = xmlReader.readElementText();
-			    if (value.compare("yes", Qt::CaseInsensitive) == 0 ||
-				value.compare("no", Qt::CaseInsensitive) == 0) {
-				addConfigItem(xmlReader.name().toString(), value);
-			    } else {
-				xmlReader.raiseError(QObject::tr("Incorrect value for <map_ignore_ssl_errors>"));
-			    }
-                        } else if (xmlReader.name() == "map_server_ca_file") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else if (xmlReader.name() == "map_certificate_file") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else if (xmlReader.name() == "map_private_key_file") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else if (xmlReader.name() == "map_private_key_passwd") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else if (xmlReader.name() == "map_http_username") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else if (xmlReader.name() == "map_http_password") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else if (xmlReader.name() == "map_proxy_server") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else if (xmlReader.name() == "map_proxy_port") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else if (xmlReader.name() == "map_proxy_user") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else if (xmlReader.name() == "map_proxy_passwd") {
-                            addConfigItem(xmlReader.name().toString(), xmlReader.readElementText());
-                        } else {
-                            skipCurrentElement(xmlReader);
+                }
+              else if (xmlReader.name() == "peer_certificate_required")
+                {
+                  QString value = xmlReader.readElementText();
+                  if ((value.compare("yes", Qt::CaseInsensitive) == 0) ||
+                      (value.compare("no", Qt::CaseInsensitive) == 0))
+                    {
+                      addConfigItem(xmlReader.name().toString(), value);
+                    }
+                  else
+                    {
+                      xmlReader.raiseError(QObject::tr(
+                                             "Incorrect value for <peer_certificate_required>"));
+                    }
+                }
+              else if (xmlReader.name() == "peer_ca")
+                {
+                  addConfigItem(
+                    xmlReader.name().toString(), xmlReader.readElementText());
+                }
+              else if (xmlReader.name() == "my_certificate_file")
+                {
+                  addConfigItem(
+                    xmlReader.name().toString(), xmlReader.readElementText());
+                }
+              else if (xmlReader.name() == "my_ca_chain_file")
+                {
+                  addConfigItem(
+                    xmlReader.name().toString(), xmlReader.readElementText());
+                }
+              else if (xmlReader.name() == "my_private_key_file")
+                {
+                  addConfigItem(
+                    xmlReader.name().toString(), xmlReader.readElementText());
+                }
+              else if (xmlReader.name() == "my_private_key_passwd")
+                {
+                  addConfigItem(
+                    xmlReader.name().toString(), xmlReader.readElementText());
+                }
+              else if (xmlReader.name() == "map_proxy_passwd")
+                {
+                  addConfigItem(
+                    xmlReader.name().toString(), xmlReader.readElementText());
+                }
+              else if ((xmlReader.name() == "ipm_map_configuration") &&
+                       (xmlReader.attributes().value("version") == "1.0"))
+                {
+                  while (readNextStartElement(xmlReader))
+                    {
+                      if (xmlReader.name() == "map_server_url")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else if (xmlReader.name() == "map_server_vendor")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else if (xmlReader.name() == "map_ignore_ssl_errors")
+                        {
+                          QString value = xmlReader.readElementText();
+                          if ((value.compare("yes",
+                                             Qt::CaseInsensitive) == 0) ||
+                              (value.compare("no", Qt::CaseInsensitive) == 0))
+                            {
+                              addConfigItem(xmlReader.name().toString(), value);
+                            }
+                          else
+                            {
+                              xmlReader.raiseError(QObject::tr(
+                                                     "Incorrect value for <map_ignore_ssl_errors>"));
+                            }
+                        }
+                      else if (xmlReader.name() == "map_server_ca_file")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else if (xmlReader.name() == "map_certificate_file")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else if (xmlReader.name() == "map_private_key_file")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else if (xmlReader.name() == "map_private_key_passwd")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else if (xmlReader.name() == "map_http_username")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else if (xmlReader.name() == "map_http_password")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else if (xmlReader.name() == "map_proxy_server")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else if (xmlReader.name() == "map_proxy_port")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else if (xmlReader.name() == "map_proxy_user")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else if (xmlReader.name() == "map_proxy_passwd")
+                        {
+                          addConfigItem(
+                            xmlReader.name().toString(),
+                            xmlReader.readElementText());
+                        }
+                      else
+                        {
+                          skipCurrentElement(xmlReader);
                         }
                     }
-                } else {
-                    skipCurrentElement(xmlReader);
-		}
+                }
+              else
+                {
+                  skipCurrentElement(xmlReader);
+                }
 
-                xmlReader.readNext();
-	    }
-        } else {
-	    xmlReader.raiseError(QObject::tr("The file is not an IPM Config file version 1.0"));
-	}
-       
+              xmlReader.readNext();
+            }
+        }
+      else
+        {
+          xmlReader.raiseError(QObject::tr(
+                                 "The file is not an IPM Config file version 1.0"));
+        }
+
     }
 
-    if (xmlReader.error()) {
-        qDebug() << fnName << "XML Error:";
-        qDebug() << fnName << "-->" << xmlReader.errorString();
+  if (xmlReader.error())
+    {
+      qDebug() << fnName << "XML Error:";
+      qDebug() << fnName << "-->" << xmlReader.errorString();
     }
 
-    return !xmlReader.error();
+  return(!xmlReader.error());
 }
 
 int hipCfgMap::loadCfg(struct hip_conf *hc)
@@ -412,20 +525,21 @@ int hipCfgMap::loadCfg(struct hip_conf *hc)
   if (hc == NULL)
     {
       cerr << fnName << "ERROR: HCNF not set" << endl;
-      return -1;
+      return(-1);
     }
 
   _hcfg = hc;
 
-  // Load MAP config file options
+  /* Load MAP config file options */
 
   if (readIPMConfigFile() < 0)
     {
-      return -1;
+      return(-1);
     }
 
   if (_mapConfig.value("peer_certificate_required").compare("yes",
-                                                    Qt::CaseInsensitive) == 0)
+                                                            Qt::CaseInsensitive)
+      == 0)
     {
       qDebug() << fnName << "Loading SSL functionality";
       SSL_library_init();
@@ -435,72 +549,72 @@ int hipCfgMap::loadCfg(struct hip_conf *hc)
       if (ctx == NULL)
         {
           cerr << fnName << "Error creating SSL context" << endl;
-          return -1;
+          return(-1);
         }
 
       _ssl = SSL_new(ctx);
       if (_ssl == NULL)
         {
           cerr << fnName << "Error open SSL connect" << endl;
-          return -1;
+          return(-1);
         }
 
       _store = X509_STORE_new();
-      if(!_store)
+      if (!_store)
         {
           cerr << fnName << "Error calling X509_STORE_new" << endl;
-          return -1;
+          return(-1);
         }
 
       X509_STORE_set_verify_cb_func(_store, hipCfgMap::callb);
       X509_STORE_set_default_paths(_store);
 
-      // Read my HIP Identity from certificate file
+      /* Read my HIP Identity from certificate file */
 
       static QString mcf = "my_certificate_file";
       qDebug() << fnName << "Reading cert file" << _mapConfig.value(mcf);
       if (getHITFromCert(_mapConfig.value(mcf).toAscii().constData()))
         {
-          return -1;
+          return(-1);
         }
       static QString mccf = "my_ca_chain_file";
       qDebug() << fnName << "Reading CA cert file"
                << _mapConfig.value(mccf);
       if (getCACert(_mapConfig.value(mccf).toAscii().constData()))
         {
-          return -1;
+          return(-1);
         }
     }
-  else // Get HIT from my_host_identities.xml
+  else /* Get HIT from my_host_identities.xml */
     {
       hc->use_my_identities_file = 1;
       if (getHITFromLocalFile() != 0)
         {
-          return -1;
+          return(-1);
         }
     }
 
-  // Use an on-disk known_host_identites.xml file to initialize the
-  // overlay configuration.  Then if MAP never comes up, at least we've
-  // got something going.
+  /* Use an on-disk known_host_identites.xml file to initialize the */
+  /* overlay configuration.  Then if MAP never comes up, at least we've */
+  /* got something going. */
 
   static QString ulki = "use_local_known_identities";
   if (_mapConfig.value(ulki).compare("yes", Qt::CaseInsensitive) == 0)
     {
       if (getEndboxMapsFromLocalFile() < 0)
         {
-          cerr << fnName 
+          cerr << fnName
                << "Error initializing state from local known identities file"
                << endl;
         }
     }
 
-  // Setup Qt signal-slot connections:
+  /* Setup Qt signal-slot connections: */
 
   bool connected = false;
   while (!connected)
     {
-      // Give thread time to start
+      /* Give thread time to start */
       sleep(1);
 
       connected = connect(this, SIGNAL(connectToMap(QMap<QString,QString> *)),
@@ -508,31 +622,31 @@ int hipCfgMap::loadCfg(struct hip_conf *hc)
                           SLOT(connectToMap(QMap<QString,QString> *)));
     }
 
-  // Now that thread is up, other connections should be made instantly
+  /* Now that thread is up, other connections should be made instantly */
   connected = connect(this, SIGNAL(setUnderlayIp(QString)),
                       (QObject *)_ifmapThread->_client,
                       SLOT(setUnderlayIp(QString)));
   if (!connected)
     {
       qDebug() << fnName << "Error: Could not connect setUnderlayIp signal";
-	return -1;
+      return(-1);
     }
 
   /*
-  // connectToMap asynchronously
-  qDebug() << fnName << "About to emit connectToMap";
-  emit connectToMap(&_mapConfig);
-  sleep(20);
-  */
+   *  // connectToMap asynchronously
+   *  qDebug() << fnName << "About to emit connectToMap";
+   *  emit connectToMap(&_mapConfig);
+   *  sleep(20);
+   */
 
-  // Make connectToMap act like a synchronous call
+  /* Make connectToMap act like a synchronous call */
   mapMutex.lock();
   emit connectToMap(&_mapConfig);
-  //mapWaitCond.wait(&mapMutex);
+  /* mapWaitCond.wait(&mapMutex); */
   mapMutex.unlock();
 
   qDebug() << fnName << "About to exit loadCfg";
-  return 0;
+  return(0);
 }
 
 /* return 1 if the certificate is verified and the hit matches
@@ -541,7 +655,7 @@ int hipCfgMap::loadCfg(struct hip_conf *hc)
  *        or -1 if other error.
  * Note: If the certificate verified, the timestamp and hit are set.
  */
-//DM: url in hipCfgMap is a DN
+/* DM: url in hipCfgMap is a DN */
 int hipCfgMap::verifyCert(const char *url, const hip_hit hit)
 {
   char cert[2048];
@@ -554,10 +668,10 @@ int hipCfgMap::verifyCert(const char *url, const hip_hit hit)
   const char *fnName = "hipCfgMap::verifyCert: ";
 
   if (_mapConfig.value("peer_certificate_required").compare(
-                       "no", Qt::CaseInsensitive) == 0)
+        "no", Qt::CaseInsensitive) == 0)
     {
       qDebug() << fnName << "peer certificate not required";
-      return 1;
+      return(1);
     }
 
   hit2hitstr(hit_s, hit);
@@ -567,7 +681,7 @@ int hipCfgMap::verifyCert(const char *url, const hip_hit hit)
       if (pn_i == _hit_to_peers.end())
         {
           qDebug() << fnName << "Unable to find DN for" << hit_s;
-          return -1;
+          return(-1);
         }
       struct peer_node *p = (*pn_i).second;
       url = p->name;
@@ -579,61 +693,64 @@ int hipCfgMap::verifyCert(const char *url, const hip_hit hit)
       hitstr2hit(cached_hit, (char *)(*m_i).second.getHit());
       if (memcmp(cached_hit, hit, HIT_SIZE) == 0)
         {
-          //qDebug() << fnName << "Cert already verified for" << url;
-	  return 1;
-	}
+          /* qDebug() << fnName << "Cert already verified for" << url; */
+          return(1);
+        }
     }
   else
     {
       qDebug() << fnName << "Unable to find cert for" << url;
-      return -1;
+      return(-1);
     }
-  
+
   memcpy(cert, (*m_i).second.getCert(), (*m_i).second.certLength());
   bio_mem = BIO_new_mem_buf(cert, -1);
 
   x509Cert = PEM_read_bio_X509(bio_mem, NULL, 0, NULL);
   if (x509Cert == NULL)
-  {
-     qDebug() << fnName << "Error reading certificate data for" << url;
-     return -1;
-  }
+    {
+      qDebug() << fnName << "Error reading certificate data for" << url;
+      return(-1);
+    }
 
   if (verify_certificate(x509Cert) != 1)
-  {
-    qDebug() << fnName << "Cert not verified for" << url;
-    return -1;
-  }
+    {
+      qDebug() << fnName << "Cert not verified for" << url;
+      return(-1);
+    }
 
-  // Obtain public key (host identity) from the certificate
+  /* Obtain public key (host identity) from the certificate */
   hi_node hi;
   EVP_PKEY *pubkey = NULL;
   pubkey = X509_get_pubkey(x509Cert);
   if (pubkey == NULL)
     {
-      qDebug() << fnName << "Error getting X509 public key from certificate for"
+      qDebug() << fnName <<
+      "Error getting X509 public key from certificate for"
                << url;
-      return -1;
+      return(-1);
     }
 
   memset(&hi, 0, sizeof(hi_node));
   if (mkHIfromPkey(EVP_PKEY_get1_RSA(pubkey),EVP_PKEY_get1_DSA(pubkey),&hi) < 0)
-    return -1;
+    {
+      return(-1);
+    }
 
-  //verify hit derived from the certificate is the same from
-  //the peer hit who has signed R1 or I2 packet.
+  /* verify hit derived from the certificate is the same from */
+  /* the peer hit who has signed R1 or I2 packet. */
   if (memcmp(hi.hit, hit, HIT_SIZE) != 0)
-  {
-    qDebug() << fnName << "HIT does not match for" << url;
-    return 0;
-  }
+    {
+      qDebug() << fnName << "HIT does not match for" << url;
+      return(0);
+    }
 
   (*m_i).second.setVerified(hit_s);
 
-  return 1; 
+  return(1);
 }
 
-//DM: url in hipCfgMap is DN
+/* DM: url in hipCfgMap is DN */
 int hipCfgMap::getCertFromMap(const char *url, char *buf, int size)
 {
   const char *fnName = "hipCfgMap::getCertFromMap: ";
@@ -646,35 +763,35 @@ int hipCfgMap::getCertFromMap(const char *url, char *buf, int size)
     {
       if (size <= (*m_i).second.certLength())
         {
-          //qDebug() << fnName << "Cert found for" << url;
+          /* qDebug() << fnName << "Cert found for" << url; */
           memcpy(buf, (*m_i).second.getCert(), (*m_i).second.certLength());
-          return 1;
+          return(1);
         }
       else
         {
           qDebug() << fnName << "Buffer size" << size << "less than cert size"
                    << (*m_i).second.certLength();
-          return -1;
+          return(-1);
         }
     }
   else
     {
       qDebug() << fnName << "Unable to find cert for" << url;
-      return -1;
+      return(-1);
     }
 }
 
-// Publish cert to MAP
+/* Publish cert to MAP */
 int hipCfgMap::postLocalCert(const char *hit)
 {
   const char *fnName = "hipCfgMap::postLocalCert: ";
 
   qDebug() << fnName << "Called with HIT" << hit;
 
-  return 0;
+  return(0);
 }
 
-// Publish Current Underlay IP Address
+/* Publish Current Underlay IP Address */
 int hipCfgMap::setUnderlayIpAddress(const char *ip)
 {
   const char *fnName = "hipCfgMap::setUnderlayIpAddress: ";
@@ -682,16 +799,16 @@ int hipCfgMap::setUnderlayIpAddress(const char *ip)
   cout << fnName << "Will publish current ip" << endl;
   emit setUnderlayIp(ip);
 
-  return 0;
+  return(0);
 }
 
 void hipCfgMap::updateMaps(string myDN,
-			   string myHIT,
-			   list<string> newPeerDNs,
-			   map<string,string> newPeerDN_HITs,
-			   map<string,string> newPeerDN_ULIPs,
-			   map<string,string> newPeerDN_LNIPs,
-			   map<string,string> newPeerDN_Certs)
+                           string myHIT,
+                           list<string> newPeerDNs,
+                           map<string,string> newPeerDN_HITs,
+                           map<string,string> newPeerDN_ULIPs,
+                           map<string,string> newPeerDN_LNIPs,
+                           map<string,string> newPeerDN_Certs)
 {
   const char *fnName = "hipCfgMap::updateMaps:";
   hip_hit myHITh;
@@ -705,18 +822,18 @@ void hipCfgMap::updateMaps(string myDN,
   map <string, struct peer_node *> hit_to_peers;
   map <string, certInfo> certs;
 
-  // Get hex representation of my HIT
+  /* Get hex representation of my HIT */
   hitstr2hit(myHITh, _mapConfig.value("HIT").toAscii().constData());
 
   list<string>::iterator si;
   map<string,string>::iterator mi;
-  for (si = newPeerDNs.begin(); si != newPeerDNs.end(); si++ )
+  for (si = newPeerDNs.begin(); si != newPeerDNs.end(); si++)
     {
       string peerDN = *si;
       qDebug() << fnName << "Updating maps for peerDN" << peerDN.c_str();
       string peerHIT;
 
-      // DN-HIT Mapping
+      /* DN-HIT Mapping */
       mi = newPeerDN_HITs.find(peerDN);
       if (mi != newPeerDN_HITs.end())
         {
@@ -732,7 +849,7 @@ void hipCfgMap::updateMaps(string myDN,
             }
           else if (memcmp(myHITh, peerHITh, HIT_SIZE) > 0)
             {
-              // Reverse order
+              /* Reverse order */
               hitPair hp(peerHITh, myHITh);
               allowed_peers.insert(hp);
             }
@@ -746,9 +863,9 @@ void hipCfgMap::updateMaps(string myDN,
           qDebug() << fnName << "Could not find peerHIT for peerDN:"
                    << peerDN.c_str();
           continue;
-	}
+        }
 
-      // HIT-ULIP Mapping
+      /* HIT-ULIP Mapping */
       mi = newPeerDN_ULIPs.find(peerDN);
       if (mi != newPeerDN_ULIPs.end())
         {
@@ -763,7 +880,7 @@ void hipCfgMap::updateMaps(string myDN,
                    << peerDN.c_str();
         }
 
-      // Find all legacy nodes belonging to the peer endbox
+      /* Find all legacy nodes belonging to the peer endbox */
       map<string,string>::iterator lni;
       for (lni = newPeerDN_LNIPs.begin(); lni != newPeerDN_LNIPs.end(); lni++)
         {
@@ -777,25 +894,25 @@ void hipCfgMap::updateMaps(string myDN,
             }
         }
 
-        // Endbox LSI to HIT mapping
-        char peerLSI[INET_ADDRSTRLEN];
-        if (!hitstr2lsistr(peerLSI, (char *)peerHIT.c_str()))
-          {
-            mi = legacyNode2EndboxMap.find(peerLSI);
-            if (mi == legacyNode2EndboxMap.end())
-              {
-                legacyNode2EndboxMap.insert(std::make_pair(peerLSI, peerHIT));
-                qDebug() << fnName << "Adding (" << peerLSI << ", "
-                         << peerHIT.c_str() << ") into legacyNode2EndboxMap";
-              }
-          }
-        else
-          {
-            qDebug() << fnName << "Error converting HIT to LSI for DN:"
-                     << peerDN.c_str();
+      /* Endbox LSI to HIT mapping */
+      char peerLSI[INET_ADDRSTRLEN];
+      if (!hitstr2lsistr(peerLSI, (char *)peerHIT.c_str()))
+        {
+          mi = legacyNode2EndboxMap.find(peerLSI);
+          if (mi == legacyNode2EndboxMap.end())
+            {
+              legacyNode2EndboxMap.insert(std::make_pair(peerLSI, peerHIT));
+              qDebug() << fnName << "Adding (" << peerLSI << ", "
+                       << peerHIT.c_str() << ") into legacyNode2EndboxMap";
+            }
+        }
+      else
+        {
+          qDebug() << fnName << "Error converting HIT to LSI for DN:"
+                   << peerDN.c_str();
         }
 
-      // Find all certs belonging to the peer endbox
+      /* Find all certs belonging to the peer endbox */
       map<string,string>::iterator certi;
       for (certi = newPeerDN_Certs.begin(); certi != newPeerDN_Certs.end();
            certi++)
@@ -810,150 +927,170 @@ void hipCfgMap::updateMaps(string myDN,
             }
         }
 
-        // Endbox HIT to hip peer entry
-        qDebug() << fnName << "Adding entry to hit_to_peers HIT:"
-                 << peerHIT.c_str();
-        struct peer_node *p = new(struct peer_node);
-        memset(p, 0, sizeof(struct peer_node));
-        hitstr2hit(p->hit, (char *)peerHIT.c_str());
-        strcpy(p->name, (char *)peerDN.c_str());
-        //TODO: These parameters should be specified somewhere?
-        p->algorithm_id = 0;
-        p->r1_gen_count = 10;
-        p->anonymous = 0;
-        p->allow_incoming = 1;
-        p->skip_addrcheck = 0;
-        // Make pair
-        hit_to_peers.insert(std::make_pair(peerHIT, p));
+      /* Endbox HIT to hip peer entry */
+      qDebug() << fnName << "Adding entry to hit_to_peers HIT:"
+               << peerHIT.c_str();
+      struct peer_node *p = new(struct peer_node);
+      memset(p, 0, sizeof(struct peer_node));
+      hitstr2hit(p->hit, (char *)peerHIT.c_str());
+      strcpy(p->name, (char *)peerDN.c_str());
+      /* TODO: These parameters should be specified somewhere? */
+      p->algorithm_id = 0;
+      p->r1_gen_count = 10;
+      p->anonymous = 0;
+      p->allow_incoming = 1;
+      p->skip_addrcheck = 0;
+      /* Make pair */
+      hit_to_peers.insert(std::make_pair(peerHIT, p));
     }
 
-    // This needs to be mutex'd because ifmap_client calls this function from
-    // its own thread to update these objects.
-    pthread_mutex_lock(&hipcfgmap_mutex);
-    _allowed_peers = allowed_peers;
-    _endbox2LlipMap = endbox2LlipMap;
-    _legacyNode2EndboxMap = legacyNode2EndboxMap;
-    _certs = certs;
+  /* This needs to be mutex'd because ifmap_client calls this function from */
+  /* its own thread to update these objects. */
+  pthread_mutex_lock(&hipcfgmap_mutex);
+  _allowed_peers = allowed_peers;
+  _endbox2LlipMap = endbox2LlipMap;
+  _legacyNode2EndboxMap = legacyNode2EndboxMap;
+  _certs = certs;
 
-    // Delete existing peer_node structs
-    map <string, struct peer_node *>::iterator i;
-    for (i=_hit_to_peers.begin(); i!=_hit_to_peers.end(); i++)
-      {
-        struct peer_node *p = (*i).second;
-        delete p;
-      }
-    _hit_to_peers = hit_to_peers;
-    pthread_mutex_unlock(&hipcfgmap_mutex);
+  /* Delete existing peer_node structs */
+  map <string, struct peer_node *>::iterator i;
+  for (i = _hit_to_peers.begin(); i != _hit_to_peers.end(); i++)
+    {
+      struct peer_node *p = (*i).second;
+      delete p;
+    }
+  _hit_to_peers = hit_to_peers;
+  pthread_mutex_unlock(&hipcfgmap_mutex);
 }
 
 int hipCfgMap::stringListContains(list<string> haystack, string needle)
 {
-    list<string>::iterator si;
-    int loc = 0;
-    for (si = haystack.begin(); si != haystack.end(); si++ ) {
-        string h = *si;
-	if (needle.compare(h) == 0) {
-	    return loc;
-	}
-	loc++;
+  list<string>::iterator si;
+  int loc = 0;
+  for (si = haystack.begin(); si != haystack.end(); si++)
+    {
+      string h = *si;
+      if (needle.compare(h) == 0)
+        {
+          return(loc);
+        }
+      loc++;
     }
 
-    return -1;
+  return(-1);
 }
 
 int hipCfgMap::getHITFromLocalFile()
 {
-    const char *fnName = "hipCfgMap::getHITFromLocalFile: ";
-    string hit_s;
-    xmlDocPtr doc;
-    xmlNodePtr node;
-    char *data;
-    struct sockaddr_storage ss_addr;
-    struct sockaddr *addr;
-    struct sockaddr_in lsi;
-    char lsi_str[INET_ADDRSTRLEN];
-    int rc = 0;
-    bool haveDN = false;
+  const char *fnName = "hipCfgMap::getHITFromLocalFile: ";
+  string hit_s;
+  xmlDocPtr doc;
+  xmlNodePtr node;
+  char *data;
+  struct sockaddr_storage ss_addr;
+  struct sockaddr *addr;
+  struct sockaddr_in lsi;
+  char lsi_str[INET_ADDRSTRLEN];
+  int rc = 0;
+  bool haveDN = false;
 
-    _hostid  = new hi_node();
-    memset(_hostid, 0, sizeof(hi_node));
+  _hostid  = new hi_node();
+  memset(_hostid, 0, sizeof(hi_node));
 
-    //the following parameters may need to be configurate  -TBD
-    _hostid->anonymous = 0;
-    _hostid->allow_incoming = 1;
-    _hostid->r1_gen_count = 10;
-    _hostid->skip_addrcheck = TRUE;
+  /* the following parameters may need to be configurate  -TBD */
+  _hostid->anonymous = 0;
+  _hostid->allow_incoming = 1;
+  _hostid->r1_gen_count = 10;
+  _hostid->skip_addrcheck = TRUE;
 
-    char my_hi_filename[255] = "my_host_identities.xml";
+  char my_hi_filename[255] = "my_host_identities.xml";
 
-    if (locate_config_file(my_hi_filename,
-                           sizeof(my_hi_filename),
-                           HIP_MYID_FILENAME) == 0) {
-        cout<<"Will attempt to parse file: "<<my_hi_filename<<endl;
-    } else {
-        cout << "Could not find my_hi_filename" << endl;
-        return -1;
+  if (locate_config_file(my_hi_filename,
+                         sizeof(my_hi_filename),
+                         HIP_MYID_FILENAME) == 0)
+    {
+      cout << "Will attempt to parse file: " << my_hi_filename << endl;
+    }
+  else
+    {
+      cout << "Could not find my_hi_filename" << endl;
+      return(-1);
     }
 
-    doc = xmlParseFile(my_hi_filename);
-    if(doc == NULL) {
-        cout<<"Error parsing xml file "<<my_hi_filename<<endl;
-        return(-1);
+  doc = xmlParseFile(my_hi_filename);
+  if (doc == NULL)
+    {
+      cout << "Error parsing xml file " << my_hi_filename << endl;
+      return(-1);
     }
 
-    addr = (struct sockaddr*) &ss_addr;
-    node = xmlDocGetRootElement(doc);
-    for (node = node->children; node; node = node->next){
-       if(strcmp((char *)node->name, "host_identity")==0) {
+  addr = (struct sockaddr*) &ss_addr;
+  node = xmlDocGetRootElement(doc);
+  for (node = node->children; node; node = node->next)
+    {
+      if (strcmp((char *)node->name, "host_identity") == 0)
+        {
 
-	   for (xmlNodePtr cnode = node->children; cnode; cnode = cnode->next) {
-	     if(strcmp((char *)cnode->name, "text")==0)
-		continue;
-	     data = (char *)xmlNodeGetContent(cnode);
-	     if(strcmp((char *)cnode->name, "name")==0) {
-	       //Setting distinguished-name to name
-	       _DN = string(data);
-               _mapConfig.insert("DistinguishedName", QString(_DN.c_str()));
-	       haveDN = true;
-	       cout << fnName << "Setting distinguished name: " << _DN << endl;
-	     }
-	     if(strcmp((char *)cnode->name, "HIT")==0) {
-	       memset(addr, 0,sizeof(struct sockaddr_storage));
-	       addr->sa_family = AF_INET6;
-	       if (str_to_addr(data, addr) <= 0) {
-		    cout<< fnName << "Warning parsing HIT "<< data<< " is invalid"<<endl;
-		    xmlFree(data);
-		    rc = -1;
-		    continue;
-	       }
-	       hit_s = data;
-               cout << fnName << "Got HIT from " << my_hi_filename << ": "
-	       		      << hit_s << endl;
-               _mapConfig.insert("HIT", QString(hit_s.c_str()));
-	       rc = hitstr2hit(_hostid->hit, (char *)hit_s.c_str());
-	     }
-	     xmlFree(data);
-	   }
+          for (xmlNodePtr cnode = node->children; cnode; cnode = cnode->next)
+            {
+              if (strcmp((char *)cnode->name, "text") == 0)
+                {
+                  continue;
+                }
+              data = (char *)xmlNodeGetContent(cnode);
+              if (strcmp((char *)cnode->name, "name") == 0)
+                {
+                  /* Setting distinguished-name to name */
+                  _DN = string(data);
+                  _mapConfig.insert("DistinguishedName", QString(_DN.c_str()));
+                  haveDN = true;
+                  cout << fnName << "Setting distinguished name: " << _DN <<
+                  endl;
+                }
+              if (strcmp((char *)cnode->name, "HIT") == 0)
+                {
+                  memset(addr, 0,sizeof(struct sockaddr_storage));
+                  addr->sa_family = AF_INET6;
+                  if (str_to_addr(data, addr) <= 0)
+                    {
+                      cout << fnName << "Warning parsing HIT " << data <<
+                      " is invalid" << endl;
+                      xmlFree(data);
+                      rc = -1;
+                      continue;
+                    }
+                  hit_s = data;
+                  cout << fnName << "Got HIT from " << my_hi_filename << ": "
+                       << hit_s << endl;
+                  _mapConfig.insert("HIT", QString(hit_s.c_str()));
+                  rc = hitstr2hit(_hostid->hit, (char *)hit_s.c_str());
+                }
+              xmlFree(data);
+            }
 
-       }
+        }
     }
 
-    xmlFreeDoc(doc);
+  xmlFreeDoc(doc);
 
-    memset(&lsi, 0, sizeof(struct sockaddr_in));
-    memset(lsi_str, 0, INET_ADDRSTRLEN);
-    lsi.sin_family = AF_INET;
-    lsi.sin_addr.s_addr = ntohl(HIT2LSI(_hostid->hit)); 
-    if (addr_to_str(SA(&lsi), lsi_str, INET_ADDRSTRLEN)){
-        printf("Error generating LSI from HIT!\n");
-        return -1;
+  memset(&lsi, 0, sizeof(struct sockaddr_in));
+  memset(lsi_str, 0, INET_ADDRSTRLEN);
+  lsi.sin_family = AF_INET;
+  lsi.sin_addr.s_addr = ntohl(HIT2LSI(_hostid->hit));
+  if (addr_to_str(SA(&lsi), lsi_str, INET_ADDRSTRLEN))
+    {
+      printf("Error generating LSI from HIT!\n");
+      return(-1);
     }
-    memcpy(&_hostid->lsi, &lsi, sizeof(struct sockaddr_in));
+  memcpy(&_hostid->lsi, &lsi, sizeof(struct sockaddr_in));
 
-    // Make sure we were able to find DN from file
-    if (haveDN != true) rc = -1;
+  /* Make sure we were able to find DN from file */
+  if (haveDN != true)
+    {
+      rc = -1;
+    }
 
-    return rc;
+  return(rc);
 }
 
 int hipCfgMap::getHITFromCert(const char *my_cert_filename)
@@ -995,7 +1132,7 @@ int hipCfgMap::getHITFromCert(const char *my_cert_filename)
       goto clean_up;
     }
 
-  // Get the common name from the subject of the certificate
+  /* Get the common name from the subject of the certificate */
 
   subject = X509_get_subject_name(x509Cert);
   if (!subject)
@@ -1011,7 +1148,7 @@ int hipCfgMap::getHITFromCert(const char *my_cert_filename)
   strncpy(CN, (const char *)cn_str->data, sizeof(CN));
   qDebug() << fnName << "CN from cert file" << CN;
 
-  // Get the public key and HIT from the certificate
+  /* Get the public key and HIT from the certificate */
 
   pubkey = X509_get_pubkey(x509Cert);
   if (!pubkey)
@@ -1043,7 +1180,8 @@ int hipCfgMap::getHITFromCert(const char *my_cert_filename)
   if (hi.algorithm_id == HI_ALG_RSA)
     {
       rsa_key = PEM_read_RSAPrivateKey(key_fp, NULL, NULL,
-                        (char *)_mapConfig.value(mpkp).toAscii().constData());
+                                       (char *)_mapConfig.value(
+                                         mpkp).toAscii().constData());
       fclose(key_fp);
       if (!rsa_key)
         {
@@ -1055,7 +1193,8 @@ int hipCfgMap::getHITFromCert(const char *my_cert_filename)
   else if (hi.algorithm_id == HI_ALG_DSA)
     {
       dsa_key = PEM_read_DSAPrivateKey(key_fp, NULL, NULL,
-                        (char *)_mapConfig.value(mpkp).toAscii().constData());
+                                       (char *)_mapConfig.value(
+                                         mpkp).toAscii().constData());
       fclose(key_fp);
       if (!dsa_key)
         {
@@ -1085,7 +1224,7 @@ int hipCfgMap::getHITFromCert(const char *my_cert_filename)
     }
 
   result = BIO_get_mem_data(bio_mem, &data_p);
-  // The encoded cert string doesn't appear to be NULL terminated
+  /* The encoded cert string doesn't appear to be NULL terminated */
   data_p[result] = 0;
 
   hit2hitstr(hit_str, hi.hit);
@@ -1099,7 +1238,7 @@ int hipCfgMap::getHITFromCert(const char *my_cert_filename)
   _localCertUrl = _DN;
 
   _mapConfig.insert("DistinguishedName",
-                     QString(X509_NAME_oneline(subject, NULL, 0)));
+                    QString(X509_NAME_oneline(subject, NULL, 0)));
   _mapConfig.insert("HIT", QString(hit_str));
   _mapConfig.insert("LSI", QString(lsi_str));
   _mapConfig.insert("Cert", QString(data_p));
@@ -1140,13 +1279,13 @@ int hipCfgMap::getHITFromCert(const char *my_cert_filename)
       DSA_free(dsa_key);
     }
 
-  // Do the following parameters need to be configured?  -TBD
+  /* Do the following parameters need to be configured?  -TBD */
   _hostid->anonymous = 0;
   _hostid->allow_incoming = 1;
   _hostid->r1_gen_count = 10;
   _hostid->skip_addrcheck = TRUE;
 
-  //postLocalCert(hit_str);
+  /* postLocalCert(hit_str); */
   return_value = 0;
 
 clean_up:

@@ -23,39 +23,44 @@
 /*
  * Prints out HIT for debugging
  */
-void print_hit(const hip_hit *hit) {
+void print_hit(const hip_hit *hit)
+{
   int i;
   unsigned char *c;
-  
+
   c = (unsigned char*) hit;
   printf("0x");
-  for (i=0; i < HIT_SIZE; i++) {
-    printf("%.2x", c[i]);
-  }
+  for (i = 0; i < HIT_SIZE; i++)
+    {
+      printf("%.2x", c[i]);
+    }
 }
 
 /*
  * Create i3 trigger id from ascii hex string
  */
-void read_id(ID *id, char *hstr) {
+void read_id(ID *id, char *hstr)
+{
   int i;
   char h[3];
-  int  dummy;
+  int dummy;
 
-  for (i = 0; i < ID_LEN; i++) {
-    /* covert from string into hexa number */
-    h[0] = hstr[2*i];
-    h[1] = hstr[2*i + 1];
-    h[2] = 0;
-    sscanf(h, "%x", &dummy);
-    id->x[i] = dummy;
-  }
+  for (i = 0; i < ID_LEN; i++)
+    {
+      /* covert from string into hexa number */
+      h[0] = hstr[2 * i];
+      h[1] = hstr[2 * i + 1];
+      h[2] = 0;
+      sscanf(h, "%x", &dummy);
+      id->x[i] = dummy;
+    }
 }
 
 /*
  * Calculate checksum for IP header, example from Stevens
  */
-unsigned short in_cksum(unsigned short *addr, int len) {
+unsigned short in_cksum(unsigned short *addr, int len)
+{
   int nleft = len;
   int sum = 0;
   unsigned short *w = addr;
@@ -66,28 +71,31 @@ unsigned short in_cksum(unsigned short *addr, int len) {
    * sequential 16 bit words to it, and at the end, fold back all the
    * carry bits from the top 16 bits into the lower 16 bits.
    */
-  while (nleft > 1)  {
-    sum += *w++;
-    nleft -= 2;
-  }
-  
+  while (nleft > 1)
+    {
+      sum += *w++;
+      nleft -= 2;
+    }
+
   /* 4mop up an odd byte, if necessary */
-  if (nleft == 1) {
-    *(unsigned char *)(&answer) = *(unsigned char *)w ;
-    sum += answer;
-  }
-  
+  if (nleft == 1)
+    {
+      *(unsigned char *)(&answer) = *(unsigned char *)w;
+      sum += answer;
+    }
+
   /* 4add back carry outs from top 16 bits to low 16 bits */
-  sum = (sum >> 16) + (sum & 0xffff);	/* add hi 16 to low 16 */
-  sum += (sum >> 16);			/* add carry */
-  answer = ~sum;				/* truncate to 16 bits */
+  sum = (sum >> 16) + (sum & 0xffff);   /* add hi 16 to low 16 */
+  sum += (sum >> 16);                   /* add carry */
+  answer = ~sum;                                /* truncate to 16 bits */
   return(answer);
 }
 
 /*
- * Callback for i3 
+ * Callback for i3
  */
-void no_matching_trigger(void *ctx_data, void *data, void *fun_ctx) {
+void no_matching_trigger(void *ctx_data, void *data, void *fun_ctx)
+{
   ID *id = (ID *) ctx_data;
 
   printf("Following ID not found, ");
@@ -95,10 +103,11 @@ void no_matching_trigger(void *ctx_data, void *data, void *fun_ctx) {
 }
 
 /*
-* Send a packet to i3 assuming the responder's hit is inserted as a trigger 
-*/
-int send_i3(__u8 *data, int size, hip_hit *hit, struct sockaddr* src, 
-	    struct sockaddr* dst) {
+ * Send a packet to i3 assuming the responder's hit is inserted as a trigger
+ */
+int send_i3(__u8 *data, int size, hip_hit *hit, struct sockaddr* src,
+            struct sockaddr* dst)
+{
   ID id;
   cl_buf  *clb;
   struct ip *iph;
@@ -109,11 +118,11 @@ int send_i3(__u8 *data, int size, hip_hit *hit, struct sockaddr* src,
 
   dglen = size + sizeof(struct ip);
   clb = cl_alloc_buf(dglen);
-  
+
   iph = (struct ip *) clb->data;
   memcpy((char *)iph + sizeof(struct ip), data, size);
- 
-  /* create IP header for tunneling HIP packet through i3 */                   
+
+  /* create IP header for tunneling HIP packet through i3 */
   iph->ip_v = 4;
   iph->ip_hl = sizeof(struct ip) >> 2;
   iph->ip_tos = 0;
@@ -125,7 +134,7 @@ int send_i3(__u8 *data, int size, hip_hit *hit, struct sockaddr* src,
   iph->ip_src = ((struct sockaddr_in *)src)->sin_addr;
   iph->ip_dst = ((struct sockaddr_in *)dst)->sin_addr;
   iph->ip_sum = in_cksum((unsigned short *)iph, sizeof (struct ip));
-    
+
   clb->data_len = dglen;
 
   bzero(&id, ID_LEN);
@@ -142,13 +151,16 @@ int send_i3(__u8 *data, int size, hip_hit *hit, struct sockaddr* src,
 
 #ifdef HI3_DEBUG
   printf("Passing following packet of %d to i3\n", clb->data_len);
-  for (i=0; i < clb->data_len; i++)
-    printf("%.2x ", ((unsigned char *) clb->data)[i]);
+  for (i = 0; i < clb->data_len; i++)
+    {
+      printf("%.2x ", ((unsigned char *) clb->data)[i]);
+    }
   printf("\n");
 #endif
-  
-  cl_send(&id, clb, 0);  
+
+  cl_send(&id, clb, 0);
   cl_free_buf(clb);
-  
-  return size;
+
+  return(size);
 }
+

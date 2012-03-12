@@ -40,11 +40,11 @@
 #include "hip.h"
 
 #define CFGFILE "i3-cfg-PL.xml"
-//#define HI3_DEBUG 
+/* #define HI3_DEBUG */
 
 int cl_register_callback(unsigned short, void (*)(), void*);
 int send_i3(__u8 *, int, hip_hit *, struct sockaddr*, struct sockaddr*);
-void hip_handle_packet(struct msghdr* , int, __u16);
+void hip_handle_packet(struct msghdr*, int, __u16);
 int i3_init(hip_hit*);
 void init_id_fromstr(ID *, char *);
 void print_hit(const hip_hit *);
