@@ -362,6 +362,12 @@ void *hip_esp_output(void *arg)
             }
           else if (!(entry = hip_sadb_lookup_addr(lsi)))
             {
+#ifdef HIP_VPLS
+              if (!endbox_check_cert(lsi))
+                {
+                  continue;
+                }
+#endif
               /* No SADB entry. Send ACQUIRE if we haven't
                * already, i.e. a new lsi_entry was created */
               if (buffer_packet(lsi, raw_buff,
@@ -645,6 +651,10 @@ void *hip_esp_output(void *arg)
           /* Trying to do layer two */
           if (!(entry = hip_sadb_lookup_addr(lsi)))
             {
+              if (!endbox_check_cert(lsi))
+                {
+                  continue;
+                }
               if (buffer_packet(lsi, raw_buff,
                                 len) == TRUE)
                 {

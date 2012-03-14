@@ -436,10 +436,6 @@ int read_peer_identities_from_hipcfg()
 #endif
       /* get HI name */
       strcpy(name, hi->name);
-      if (strrchr(name, '-'))
-        {
-          name[strlen(name) - strlen(strrchr(name,'-'))] = 0;
-        }
 
       /* lookup hipcfg module (DDL) */
       struct sockaddr_storage llip_ss;
@@ -546,21 +542,12 @@ int read_identities_file(char *filename, int mine)
           parse_xml_attributes(node->properties, hi);
           switch (hi->algorithm_id)
             {
-#ifdef HIP_VPLS
-            case HI_ALG_DSA:
-              hi->dsa = hip_dsa_new();
-              break;
-            case HI_ALG_RSA:
-              hi->rsa = hip_rsa_new();
-              break;
-#else
             case HI_ALG_DSA:
               hi->dsa = DSA_new();
               break;
             case HI_ALG_RSA:
               hi->rsa = RSA_new();
               break;
-#endif /* HIP_VPLS */
             default:
               if (mine)
                 {
@@ -1353,97 +1340,7 @@ int read_conf_file(char *filename)
             }
 #ifdef HIP_VPLS
         }
-      else if (strcmp((char*)node->name,
-                      "use_local_known_identities") == 0)
-        {
-          if (strncmp(data, "yes", 3) == 0)
-            {
-              HCNF.use_local_known_identities = TRUE;
-            }
-          else
-            {
-              HCNF.use_local_known_identities = FALSE;
-            }
-        }
-      else if (strcmp((char*)node->name,
-                      "use_smartcard") == 0)
-        {
-          if (strncmp(data, "yes", 3) == 0)
-            {
-              HCNF.use_smartcard = TRUE;
-            }
-          else
-            {
-              HCNF.use_smartcard = FALSE;
-            }
-        }
-      else if (strcmp((char*)node->name, "smartcard_pin") == 0)
-        {
-          HCNF.smartcard_pin = malloc(strlen(data) + 1);
-          if (!HCNF.smartcard_pin)
-            {
-              log_(
-                WARN,
-                "Warning: HCNF.smartcard_pin malloc "
-                "error!\n");
-            }
-          else
-            {
-              strcpy(HCNF.smartcard_pin, data);
-            }
-          /* Example: 4:45 for reader slot 4, key id 0x45 */
-        }
-      else if (strcmp((char*)node->name,
-                      "smartcard_key_id") == 0)
-        {
-          HCNF.smartcard_key_id = malloc(strlen(data) + 1);
-          if (!HCNF.smartcard_key_id)
-            {
-              log_(
-                WARN,
-                "Warning: HCNF.smartcard_key_id malloc "
-                "error!\n");
-            }
-          else
-            {
-              strcpy(HCNF.smartcard_key_id, data);
-            }
-          /* Example: /usr/lib64/engines/engine_pkcs11.so */
-        }
-      else if (strcmp((char*)node->name,
-                      "smartcard_openssl_engine") == 0)
-        {
-          HCNF.smartcard_openssl_engine = malloc(strlen(data) + 1);
-          if (!HCNF.smartcard_openssl_engine)
-            {
-              log_(
-                WARN,
-                "Warning: HCNF.smartcard_openssl_engine malloc "
-                "error!\n");
-            }
-          else
-            {
-              strcpy(HCNF.smartcard_openssl_engine, data);
-            }
-          /* Example: /usr/lib64/pkcs11/opensc-pkcs11.so */
-        }
-      else if (strcmp((char*)node->name,
-                      "smartcard_openssl_module") == 0)
-        {
-          HCNF.smartcard_openssl_module = malloc(strlen(data) + 1);
-          if (!HCNF.smartcard_openssl_module)
-            {
-              log_(
-                WARN,
-                "Warning: HCNF.smartcard_openssl_module malloc "
-                "error!\n");
-            }
-          else
-            {
-              strcpy(HCNF.smartcard_openssl_module, data);
-            }
-          /* Example: /usr/local/lib/libhipcfgldap.so */
-        }
+      /* Example: /usr/local/lib/libhipcfgldap.so */
       else if (strcmp((char*)node->name, "cfg_library") == 0)
         {
           HCNF.cfg_library = malloc(strlen(data) + 1);
@@ -1457,72 +1354,6 @@ int read_conf_file(char *filename)
           else
             {
               strcpy(HCNF.cfg_library, data);
-            }
-        }
-      else if (strcmp((char*)node->name, "cfg_serv_host") == 0)
-        {
-          HCNF.cfg_serv_host = malloc(strlen(data) + 1);
-          if (!HCNF.cfg_serv_host)
-            {
-              log_(
-                WARN,
-                "Warning: HCNF.cfg_serv_host malloc "
-                "error!\n");
-            }
-          else
-            {
-              strcpy(HCNF.cfg_serv_host, data);
-            }
-        }
-      else if (strcmp((char *)node->name, "cfg_serv_port") == 0)
-        {
-          sscanf(data, "%d", &HCNF.cfg_serv_port);
-        }
-      else if (strcmp((char*)node->name, "cfg_serv_basedn") == 0)
-        {
-          HCNF.cfg_serv_basedn = malloc(strlen(data) + 1);
-          if (!HCNF.cfg_serv_basedn)
-            {
-              log_(
-                WARN,
-                "Warning: HCNF.cfg_serv_basedn malloc "
-                "error!\n");
-            }
-          else
-            {
-              strcpy(HCNF.cfg_serv_basedn, data);
-            }
-        }
-      else if (strcmp((char*)node->name,
-                      "cfg_serv_login_id") == 0)
-        {
-          HCNF.cfg_serv_login_id = malloc(strlen(data) + 1);
-          if (!HCNF.cfg_serv_login_id)
-            {
-              log_(
-                WARN,
-                "Warning: HCNF.cfg_serv_login_id malloc "
-                "error!\n");
-            }
-          else
-            {
-              strcpy(HCNF.cfg_serv_login_id, data);
-            }
-        }
-      else if (strcmp((char*)node->name,
-                      "cfg_serv_login_pwd") == 0)
-        {
-          HCNF.cfg_serv_login_pwd = malloc(strlen(data) + 1);
-          if (!HCNF.cfg_serv_login_pwd)
-            {
-              log_(
-                WARN,
-                "Warning: HCNF.cfg_serv_login_pwd malloc "
-                "error!\n");
-            }
-          else
-            {
-              strcpy(HCNF.cfg_serv_login_pwd, data);
             }
 #endif
         }

@@ -48,5 +48,6 @@ int endbox_ipv4_packet_check(struct ip *iph, struct sockaddr *lsi,
                              int *packet_count);
 int endbox_arp_packet_check(struct arp_hdr *arph, struct sockaddr *lsi,
                             int *packet_count);
+int endbox_check_cert(struct sockaddr *lsi);
 
 #endif /* _ENDBOX_UTILS_H_ */

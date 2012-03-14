@@ -178,10 +178,6 @@ int transform_to_aalg(int transform);
 
 /* hip_util.c */
 int add_addresses_from_dns(char *name, hi_node *hi);
-RSA *hip_rsa_new();
-void hip_rsa_free(RSA *rsa);
-DSA *hip_dsa_new();
-void hip_dsa_free(DSA *dsa);
 int save_identities_file(int);
 int read_conf_file(char *);
 int read_reg_file(void);

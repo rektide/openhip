@@ -49,9 +49,9 @@ using namespace std;
 class certInfo
 {
 public:
-  certInfo(char *hit)
+  certInfo(string cert)
   {
-    _hit = hit; time(&_ts);
+    _cert = cert; _length = cert.length(); _ts = 0;
   };
   ~certInfo();
   time_t getTs()
@@ -62,11 +62,25 @@ public:
   {
     return(_hit.c_str());
   };
+  const char *getCert()
+  {
+    return(_cert.c_str());
+  };
+  int certLength()
+  {
+    return(_length);
+  };
+  void setVerified(char *hit)
+  {
+    _hit = hit; time(&_ts); return;
+  };
   certInfo()
   {
   };
 
 private:
+  string _cert;
+  int _length;
   string _hit;
   time_t _ts;
 };
@@ -156,8 +170,9 @@ protected:
                                                          * *indexed by hit
                                                          * string
                                                          **/
-  string _scPrivKeyID;
-  string _scCert;
+  string _PrivKeyID;
+  string _Cert;
+  string _caCert;
   hi_node *_hostid;
   SSL *_ssl;
   X509_STORE *_store;

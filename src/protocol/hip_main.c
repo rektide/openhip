@@ -233,6 +233,7 @@ int main_loop(int argc, char **argv)
   memset(HCNF.my_hi_filename, 0, sizeof(HCNF.my_hi_filename));
   memset(HCNF.known_hi_filename, 0, sizeof(HCNF.known_hi_filename));
 #ifdef HIP_VPLS
+  HCNF.use_my_identities_file = 0;
   HCNF.endbox_hello_time = 0;
   HCNF.endbox_allow_core_dump = 0;
 #endif
@@ -445,15 +446,13 @@ int main_loop(int argc, char **argv)
            HCNF.cfg_library);
       goto hip_main_error_exit;
     }
-  if (HCNF.use_smartcard)
+  if (!HCNF.use_my_identities_file)
     {
       if ((my_hi = hipcfg_getMyHostId()) == NULL)
         {
-          log_(ERR, "Error retrieving host identity from "
-               "smartcard\n");
+          log_(ERR, "Error retrieving host identity from cert\n");
           goto hip_main_error_exit;
         }
-      /* use smartcard for signing */
       append_hi_node(&my_hi_head, my_hi);
     }
   else
@@ -479,11 +478,15 @@ int main_loop(int argc, char **argv)
            "using the 'hitgen' utility.\n", HIP_MYID_FILENAME);
       goto hip_main_error_exit;           /* fatal error */
     }
+#ifdef HIP_VPLS
+}
+#endif
 
   /*
    * Load the known_host_identities.xml file.
    */
   peer_hi_head = NULL;
+#ifndef HIP_VPLS
   if ((locate_config_file(HCNF.known_hi_filename,
                           sizeof(HCNF.known_hi_filename),
                           HIP_KNOWNID_FILENAME) < 0))
@@ -496,6 +499,7 @@ int main_loop(int argc, char **argv)
       log_(NORM, "Using known host IDs file:\t%s\n",
            HCNF.known_hi_filename);
     }
+#endif
   if (read_identities_file(HCNF.known_hi_filename, FALSE) < 0)
     {
       log_(ERR, "Problem reading the %s file which is used to "
@@ -507,10 +511,6 @@ int main_loop(int argc, char **argv)
                "the -a\n  (allow any) option likely needed.\n");
         }
     }
-#ifdef HIP_VPLS
-}
-
-#endif /* HIP_VPLS */
 
   if (get_preferred_hi(my_hi_head) == NULL)
     {
@@ -520,8 +520,6 @@ int main_loop(int argc, char **argv)
     }
 
 #ifdef HIP_VPLS
-  endbox_init();
-  last_time = time(NULL);
   if (!HCNF.endbox_allow_core_dump)
     {
       signal(SIGSEGV, hip_exit);
@@ -631,6 +629,11 @@ int main_loop(int argc, char **argv)
 #endif /* IPV6_HIP */
 
   log_(NORMT, "Listening for HIP control packets...\n");
+
+#ifdef HIP_VPLS
+  endbox_init();
+  last_time = time(NULL);
+#endif
 
   /* main event loop */
   for (;;)

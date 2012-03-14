@@ -196,17 +196,6 @@ int read_conf_file(char *filename, struct hip_conf *hc)
         {
           ;
         }
-      else if (strcmp((char*)node->name, "use_smartcard") == 0)
-        {
-          if (strncmp(data, "yes", 3) == 0)
-            {
-              hc->use_smartcard = TRUE;
-            }
-          else
-            {
-              hc->use_smartcard = FALSE;
-            }
-        }
       else if (strcmp((char*)node->name,
                       "peer_certificate_required") == 0)
         {
@@ -217,79 +206,6 @@ int read_conf_file(char *filename, struct hip_conf *hc)
           else
             {
               hc->peer_certificate_required = FALSE;
-            }
-        }
-      else if (strcmp((char*)node->name,
-                      "use_local_known_identities") == 0)
-        {
-          if (strncmp(data, "yes", 3) == 0)
-            {
-              hc->use_local_known_identities = TRUE;
-            }
-          else
-            {
-              hc->use_local_known_identities = FALSE;
-            }
-        }
-      else if (strcmp((char*)node->name, "cfg_serv_host") == 0)
-        {
-          hc->cfg_serv_host = malloc(strlen(data) + 1);
-          if (!hc->cfg_serv_host)
-            {
-              printf(
-                "Warning: HCNF.cfg_serv_host malloc error!\n");
-            }
-          else
-            {
-              strcpy(hc->cfg_serv_host, data);
-            }
-        }
-      else if (strcmp((char *)node->name, "cfg_serv_port") == 0)
-        {
-          sscanf(data, "%d", &hc->cfg_serv_port);
-        }
-      else if (strcmp((char*)node->name, "cfg_serv_basedn") == 0)
-        {
-          hc->cfg_serv_basedn = malloc(strlen(data) + 1);
-          if (!hc->cfg_serv_basedn)
-            {
-              printf(
-                "Warning: HCNF.cfg_serv_basedn malloc "
-                "error!\n");
-            }
-          else
-            {
-              strcpy(hc->cfg_serv_basedn, data);
-            }
-        }
-      else if (strcmp((char*)node->name,
-                      "cfg_serv_login_id") == 0)
-        {
-          hc->cfg_serv_login_id = malloc(strlen(data) + 1);
-          if (!hc->cfg_serv_login_id)
-            {
-              printf(
-                "Warning: HCNF.cfg_serv_login_id malloc "
-                "error!\n");
-            }
-          else
-            {
-              strcpy(hc->cfg_serv_login_id, data);
-            }
-        }
-      else if (strcmp((char*)node->name,
-                      "cfg_serv_login_pwd") == 0)
-        {
-          hc->cfg_serv_login_pwd = malloc(strlen(data) + 1);
-          if (!hc->cfg_serv_login_pwd)
-            {
-              printf(
-                "Warning: HCNF.cfg_serv_login_pwd malloc "
-                "error!\n");
-            }
-          else
-            {
-              strcpy(hc->cfg_serv_login_pwd, data);
             }
         }
       else if (strlen((char *)node->name))

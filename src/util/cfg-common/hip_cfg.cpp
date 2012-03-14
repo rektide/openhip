@@ -127,10 +127,11 @@ void hitPair::print() const
          _hit1[HIT_SIZE - 1], _hit2[HIT_SIZE - 2], _hit2[HIT_SIZE - 1]);
 }
 
-/* DM: This is called on the order of per-packet */
+/* DM: This is called on the order of per-packet for outgoing packets */
+/* OTB: For incoming, it is called only for incoming I1 packets */
 int hipCfg::hit_peer_allowed(const hip_hit hit1, const hip_hit hit2)
 {
-
+  int rc = 0;
   set <hitPair>::iterator si;
   hitPair *hpp;
 /*
@@ -143,6 +144,8 @@ int hipCfg::hit_peer_allowed(const hip_hit hit1, const hip_hit hit2)
  *    printf("%02x", hit2[i]);
  *  cout<<endl;
  */
+  /* DM: 17May2010: Return 0 if hit1==hit2 does not allow EB to talk over
+   * HIP to itself */
   if (memcmp(hit1, hit2, HIT_SIZE) < 0)
     {
       hpp = new hitPair(hit1, hit2);
@@ -153,18 +156,14 @@ int hipCfg::hit_peer_allowed(const hip_hit hit1, const hip_hit hit2)
     }
   else
     {
-      /* DM: 17May2010: Return 0 if hit1==hit2 does not allow EB to talk over
-       * HIP to itself */
-      return(0);
+      return(rc);
     }
-  /* return 1; */
 
-  int rc = 1;
   pthread_mutex_lock(&hipcfgmap_mutex);
   si = _allowed_peers.find(*hpp);
-  if (si == _allowed_peers.end())
+  if (si != _allowed_peers.end())
     {
-      rc = 0;
+      rc = 1;
     }
   pthread_mutex_unlock(&hipcfgmap_mutex);
 
@@ -285,6 +284,7 @@ int hipCfg::endbox2Llip(const struct sockaddr *eb, struct sockaddr *llip)
   char eb_s[INET6_ADDRSTRLEN];
   string llip_s, hit_s;
   int rc;
+  map <string, string>::iterator i;
 
   memset(eb_s, 0, INET6_ADDRSTRLEN);
   rc = addr_to_str(eb, eb_s, INET6_ADDRSTRLEN);
@@ -293,25 +293,34 @@ int hipCfg::endbox2Llip(const struct sockaddr *eb, struct sockaddr *llip)
       return(-1);
     }
 
-  /* cout<<"endbox2Llip: look up bcwin for endbox = "<<eb_s<<endl; */
-
-  map <string, string>::iterator i;
-
   rc = 1;
 
   pthread_mutex_lock(&hipcfgmap_mutex);
-  i = _legacyNode2EndboxMap.find(eb_s);
-  if (i != _legacyNode2EndboxMap.end())
+  if (eb->sa_family == AF_INET)
     {
-      hit_s = (*i).second;
-      //cout<<"endbox2Llip: look up ssid for endbox = "<<hit_s<<endl;
+      cout << "endbox2Llip: looking up IP for LSI = " << eb_s << endl;
+      i = _legacyNode2EndboxMap.find(eb_s);
+      if (i != _legacyNode2EndboxMap.end())
+        {
+          hit_s = (*i).second;
+        }
+    }
+  else
+    {
+      hit_s = eb_s;
+    }
+
+  if (!hit_s.empty())
+    {
+      cout << "endbox2Llip: looking up IP for HIT = " << hit_s << endl;
       i = _endbox2LlipMap.find(hit_s);
-      if(i != _endbox2LlipMap.end())
+      if (i != _endbox2LlipMap.end())
         {
           llip_s = (*i).second;
-          llip->sa_family=AF_INET; //only handle IPv4 address
+          llip->sa_family=AF_INET; /* only handle IPv4 address */
           str_to_addr(llip_s.c_str(), llip);
-          //cout<<"endbox2Llip: get llip (ssid) "<<llip_s.c_str()<<" for endbox = "<<eb_s<<endl;
+          cout << "endbox2Llip: got IP " << llip_s.c_str() <<
+                  " for endbox = " << eb_s << endl;
           rc = 0;
         }
     }
@@ -606,53 +615,69 @@ int hipCfg::verify_certificate(X509 *cert)
   ctx = X509_STORE_CTX_new();
   if (ctx == NULL)
     {
-      fprintf(stderr, "Error calling X509_STORE_CTX_new()\n");
+      fprintf(stderr, "Error creating a cert store context\n");
       return(0);
     }
   ret = X509_STORE_CTX_init(ctx, _store, cert, NULL);
   if (ret != 1)
     {
-      fprintf(stderr, "Error calling X509_STORE_CTX_init :\n");
+      fprintf(stderr, "Error initializing cert store context\n");
       X509_STORE_CTX_free(ctx);
       return(0);
     }
 
   ret = X509_verify_cert(ctx);
+  X509_STORE_CTX_free(ctx);
   if (ret != 1)
     {
-      fprintf(stderr, "Error verifying signature on issued certificate:\n");
-      X509_STORE_CTX_free(ctx);
+      fprintf(stderr, "Error verifying signature against cert chain\n");
       return(0);
     }
 
-  X509_STORE_CTX_free(ctx);
   return(1);
 }
 
+/* This function is called for each cert in the cert chain and the cert being
+ * verified. rc is set to 0 for errors with the cert and set to 1 for no
+ * errors. Return 1 to accept the cert and return 0 to not accept the cert.
+ */
 int hipCfg::callb(int rc, X509_STORE_CTX *ctx)
 {
   int err;
   X509 *err_cert;
+  X509_NAME *subject;
 
   err = X509_STORE_CTX_get_error(ctx);
-  if (err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT)
-    {
-      return(0);
-    }
+  err_cert = X509_STORE_CTX_get_current_cert(ctx);
+  subject = X509_get_subject_name(err_cert);
+
+  /* Ignore time errors as endboxes may not be synchronized. */
 
   if (rc == 1)
     {
-      /* printf("certificate certified at depth %d\n ",
-       * X509_STORE_CTX_get_error_depth(ctx)); */
+      fprintf(stderr, "Accepting cert for %s\n",
+              X509_NAME_oneline(subject, NULL, 0));
       return(1);
     }
   else
     {
-      err_cert = X509_STORE_CTX_get_current_cert(ctx);
-      printf("error with certificate - error %d at depth %d\n%s\n",
-             err, X509_STORE_CTX_get_error_depth(
-               ctx), X509_verify_cert_error_string(err));
-      return(0);
+      if ((err == X509_V_ERR_CERT_NOT_YET_VALID) ||
+          (err == X509_V_ERR_CERT_HAS_EXPIRED))
+        {
+          fprintf(stderr, "Accepting cert with invalid time for %s\n",
+                  X509_NAME_oneline(subject, NULL, 0));
+          ERR_clear_error();
+          return(1);
+        }
+      else
+        {
+          fprintf(stderr, "Error with certificate %s\n",
+                  X509_NAME_oneline(subject, NULL, 0));
+          fprintf(stderr, "  rc %d, error %d at depth %d:\n  %s\n",
+                  rc, err, X509_STORE_CTX_get_error_depth(ctx),
+                  X509_verify_cert_error_string(err));
+          return(0);
+        }
     }
 }
 
@@ -776,16 +801,7 @@ int hipCfg::getLocalCertUrl(char *url, unsigned int size)
   int rc = 0;
   if (_localCertUrl.length() == 0)
     {
-      if (_hcfg->use_smartcard)
-        {
-          cout << "fail to get local cert URL -  local cert was not posted." <<
-          endl;
-          return(-1);
-        }
-      else
-        {
-          return(1); /* OK, no local Cert to provide. */
-        }
+      return(1); /* OK, no local Cert to provide. */
     }
   if (_localCertUrl.length() >= size)
     {

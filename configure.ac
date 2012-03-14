@@ -100,7 +100,7 @@ CFLAGS="$CFLAGS -Wall -DCONFIG_HIP -DSYSCONFDIR=\"\\\"\$(sysconfdir)\\\"\" -DLOC
 
 AC_MSG_CHECKING(if --enable-vpls option is specified)
 AC_ARG_ENABLE(vpls,
-	[  --enable-vpls=config  enable VPLS with configuration via {files, LDAP, IFMAP}],
+	[  --enable-vpls=config  enable VPLS with configuration via {files, IFMAP}],
 	[enable_vpls=$enable_vpls
 	 AC_MSG_RESULT(yes)],
 	[enable_vpls=default
@@ -120,10 +120,9 @@ AC_ARG_ENABLE(mobile-router,
 if test "$enable_vpls" = "yes"; then
 	enable_vpls="files" ;# default value
 fi
-if test "$enable_vpls" = "files" -o "$enable_vpls" = "LDAP" -o "$enable_vpls" = "IFMAP"; then
+if test "$enable_vpls" = "files" -o "$enable_vpls" = "IFMAP"; then
 	want_vpls=true
 	want_vpls_files_cfg=false
-	want_vpls_LDAP_cfg=false
 	want_vpls_IFMAP_cfg=false
 	CFLAGS=" -DHIP_VPLS $CFLAGS"
 
@@ -139,11 +138,6 @@ if test "$enable_vpls" = "files" -o "$enable_vpls" = "LDAP" -o "$enable_vpls" = 
 	if test "$enable_vpls" = "files"; then
 		AC_MSG_RESULT([Will use file-based configuration library libhipcfgfiles.so])
 		want_vpls_files_cfg=true
-	elif test "$enable_vpls" = "LDAP"; then
-		AC_CHECK_LIB([ldap],ldap_add_ext,,AC_MSG_ERROR([LDAP-based configuration library requested but OpenLDAP development libraries not found. Aborting.]))
-		AC_CHECK_LIB([ldapcpp],main,,AC_MSG_ERROR([LDAP-based configuration library requested but LDAP C++ library not found. Aborting]))
-		AC_MSG_RESULT([Will use LDAP-based configuration library libhipcfgldap.so])
-		want_vpls_LDAP_cfg=true
 	elif test "$enable_vpls" = "IFMAP"; then
 		AC_MSG_RESULT([Will use IFMAP-based configuration library libhipcfgmap.so])
 		want_vpls_IFMAP_cfg=true
@@ -179,8 +173,6 @@ AM_CONDITIONAL(WANT_OSX, test x$want_osx = xtrue)
 AM_CONDITIONAL(WANT_VPLS, test x$want_vpls = xtrue)
 AM_CONDITIONAL(WANT_VPLS_FILES_CFG, 
 	test x$want_vpls_files_cfg = xtrue)
-AM_CONDITIONAL(WANT_VPLS_LDAP_CFG,
-	test x$want_vpls_LDAP_cfg = xtrue)
 AM_CONDITIONAL(WANT_VPLS_IFMAP_CFG,
 	test x$want_vpls_IFMAP_cfg = xtrue)
 
