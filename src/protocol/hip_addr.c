@@ -897,6 +897,8 @@ int devname_to_index(char *dev, __u64 *mac)
   int status;
   char done;
 
+  memset(buf, 0, sizeof(buf));
+  memset(&nladdr, 0, sizeof(nladdr));
   struct iovec iov = { buf, sizeof(buf) };
   /* message response */
   struct msghdr msg = {
@@ -906,6 +908,7 @@ int devname_to_index(char *dev, __u64 *mac)
     0
   };
   /* send a link dump message */
+  memset(&req, 0, sizeof(req));
   req.n.nlmsg_len = sizeof(req);
   req.n.nlmsg_type = RTM_GETLINK;
   req.n.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;

@@ -579,6 +579,7 @@ int main_loop(int argc, char **argv)
 #endif
 
   /* IPv4 HIP socket */
+  memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
