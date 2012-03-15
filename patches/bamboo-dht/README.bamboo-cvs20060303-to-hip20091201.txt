@@ -19,6 +19,12 @@ be configured to disallow all invalid and non-HIP records. Such a server is
 described by the Internet-Draft:
   http://www.watersprings.org/pub/id/draft-ahrenholz-hiprg-dht-06.txt
 
+-------------------------------------------------------------------------------
+LICENSE
+-------------------------------------------------------------------------------
+
+The Bamboo DHT server and this patch file is licensed under the BSD license, 
+a copy of which may be found in the LICENSE file of this directory.
 
 --------------------------------------------------------------------------------
 INSTALLATION

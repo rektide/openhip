@@ -1,23 +1,33 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2005-09 the Boeing Company
+ * Copyright (c) 2005-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_dht.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *
- *  hip_dht.c
- *
- *  Author:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
- *
- * DHT interface for publishing IP addresses using the HIT as the key.
- * This was written to work with draft-ahrenholz-hiprg-dht-06.txt.
+ *  \brief  DHT interface for publishing IP addresses using the HIT as the key.
+ *          This was written to work with draft-ahrenholz-hiprg-dht-06.txt.
  *
  */
 
@@ -131,7 +141,7 @@ static struct dht_val *dht_vals = NULL;
  * \fn hip_dht_update_my_entries()
  *
  * \param flags		integer used to signal init and cleanup of DHT
- *      0 = normal update, 1 = startup, 2 = shutdown
+ *                      0 = normal update, 1 = startup, 2 = shutdown
  *
  * Publish (HIT, IP) and (name, HIT) combinations to a DHT,
  * to support both type of lookups. This is called upon startup and periodically
@@ -174,14 +184,14 @@ void hip_dht_update_my_entries(int flags)
 
   if (hip_dht_select_server(server) < 0)
     {
-      return;          /* prevents unneccessary thread creation */
+      return;           /* prevents unneccessary thread creation */
 
     }
   /* only publish our preferred address */
   addr = NULL;
   for (l = my_addr_head; l; l = l->next)
     {
-      if (IS_LSI(&l->addr))           /* skip any LSIs */
+      if (IS_LSI(&l->addr))             /* skip any LSIs */
         {
           continue;
         }
@@ -192,7 +202,7 @@ void hip_dht_update_my_entries(int flags)
       addr = SA(&l->addr);
       break;
     }
-  if (!addr)       /* no preferred address */
+  if (!addr)         /* no preferred address */
     {
       return;
     }
@@ -259,7 +269,7 @@ int hip_dht_resolve_hi(hi_node *hi, int retry)
 #endif
   if (hip_dht_select_server(addr) < 0)
     {
-      return(0);          /* prevents unneccessary thread creation */
+      return(0);           /* prevents unneccessary thread creation */
 
     }
   /* When retry is turned on, a separate thread will be forked that
@@ -289,13 +299,16 @@ int hip_dht_resolve_hi(hi_node *hi, int retry)
     {
       if (hi->name_len == 0)
         {
-          log_(NORM, "HIT and name not present, unable to perform"
+          log_(NORM,
+               "HIT and name not present, unable to perform"
                " DHT lookup.\n");
           return(-1);
         }
-      log_(NORM, "HIT not present for peer %s, performing DHT lookup "
+      log_(NORM,
+           "HIT not present for peer %s, performing DHT lookup "
            "using the name '%s'.\n",
-           logaddr(SA(&hi->lsi)), hi->name);
+           logaddr(SA(&hi->lsi)),
+           hi->name);
       if ((err = hip_dht_lookup_hit_by_name(hi->name, &hi->hit,
                                             retry)) < 0)
         {
@@ -428,10 +441,10 @@ int hip_dht_lookup_hit_by_name(char *name, hip_hit *hit, int retry)
  *
  * \param hit		pointer to HIT for use with the lookup
  * \param addr		pointer to sockaddr_storage for storing the returned
- *      LOCATOR
+ *                      LOCATOR
  * \param retry		if TRUE we will retry failed connection attempts
  *
- * \return    Returns 0 on success, -1 on error.
+ * \return              Returns 0 on success, -1 on error.
  *
  * \brief Given a HIT, lookup an address using a DHT server.
  */
@@ -498,13 +511,15 @@ int hip_dht_lookup_address(hip_hit *hit, struct sockaddr *addr, int retry)
       type = ntohs(tlv->type);
       length = ntohs(tlv->length);
       /* first verify SIGNATURE */
-      if (!sig_verified && peer_hi && (type == PARAM_HIP_SIGNATURE))
+      if (!sig_verified && peer_hi &&
+          (type == PARAM_HIP_SIGNATURE))
         {
           len = eight_byte_align(location);
           hiph->checksum = 0;
           hiph->hdr_len = (len / 8) - 1;
           if (validate_signature(hdrr, len, tlv,
-                                 peer_hi->dsa, peer_hi->rsa) < 0)
+                                 peer_hi->dsa,
+                                 peer_hi->rsa) < 0)
             {
               log_(WARN, "HDRR has invalid signature.\n");
               err = -1;
@@ -568,7 +583,8 @@ int hip_dht_lookup_address(hip_hit *hit, struct sockaddr *addr, int retry)
                   err = -1;
                   break;
                 }
-              if (((struct sockaddr_in*)addr)->sin_addr.s_addr
+              if (((struct sockaddr_in*)addr)->sin_addr.
+                  s_addr
                   == INADDR_BROADCAST)
                 {
                   err = -1;
@@ -662,9 +678,10 @@ int hip_dht_publish_hit(hi_node *hi, char *name, int retry)
   mode = XMLRPC_MODE_PUT;
   mode |= (retry) ? XMLRPC_MODE_RETRY_ON : XMLRPC_MODE_RETRY_OFF;
   return(hip_xmlrpc_getput(mode, XMLRPC_APP_HIT, server,
-                           (char *)name_hash, SHA_DIGEST_LENGTH, /* key */
+                           (char *)name_hash, SHA_DIGEST_LENGTH,       /* key */
                            (char *)&hdrr, &len,                 /* value */
-                           (char *)secret, 2 * SHA_DIGEST_LENGTH, DHT_DEF_TTL));
+                           (char *)secret, 2 * SHA_DIGEST_LENGTH,
+                           DHT_DEF_TTL));
 }
 
 /*
@@ -727,7 +744,7 @@ int hip_dht_publish_addr(hi_node *hi, struct sockaddr *addr, int retry)
  * \fn hip_dht_select_server()
  *
  * \param addr	pointer to store address of the server
- * \return  Returns 0 on success, -1 on error.
+ * \return      Returns 0 on success, -1 on error.
  *
  * \brief Select the address of the DHT server to use.
  */
@@ -754,7 +771,7 @@ int hip_dht_select_server(struct sockaddr *addr)
  * \param hit_key	buffer for storing HIT_KEY; should be DHT_VAL_SIZE long
  *
  * \brief Create a HIT_KEY from a HIT by taking the middle 100 bits and adding
- *    padding.
+ *        padding.
  */
 void hit2hit_key(hip_hit *hit, __u8 *hit_key)
 {
@@ -906,10 +923,10 @@ int parse_hdrr(__u8 *hdrr, int len)
  *
  * \param mode		determines get or put, app, retry on/off
  *		         If retry is off only one attempt should be made,
- *       on means the connect() should keep retrying
+ *                       on means the connect() should keep retrying
  * \param app		string to use in the XML RPC application field
  * \param server	server address and port to connect to
- * \param key     DHT key used for get or put
+ * \param key           DHT key used for get or put
  * \param key_len	length of DHT key in bytes
  * \param value		DHT value used for put, ptr for storing value for get
  * \param value_len	ptr to length of value buffer, length of get is returned
@@ -941,7 +958,8 @@ int hip_xmlrpc_getput(int mode, char *app, struct sockaddr *server,
 
   int retry = ((mode & 0x00F0) == XMLRPC_MODE_RETRY_ON);
 
-  if ((key_len > (2 * DHT_KEY_SIZE)) || (*value_len > (2 * DHT_VAL_SIZE)))
+  if ((key_len > (2 * DHT_KEY_SIZE)) ||
+      (*value_len > (2 * DHT_VAL_SIZE)))
     {
       return(-1);
     }
@@ -1123,7 +1141,8 @@ connect_retry:
           goto connect_retry;
         }
 #else
-      if (retry && ((errno == ETIMEDOUT) || (errno == EHOSTUNREACH)))
+      if (retry &&
+          ((errno == ETIMEDOUT) || (errno == EHOSTUNREACH)))
         {
           goto connect_retry;
         }
@@ -1180,7 +1199,7 @@ connect_retry:
         {
           return(-8);
         }
-      else           /* advance ptr to Content-Length */
+      else               /* advance ptr to Content-Length */
         {
           p += 16;
         }
@@ -1194,7 +1213,7 @@ connect_retry:
   else
     {
       /* select timeout */
-      if (retry)           /* XXX testme: retry select instead? */
+      if (retry)             /* XXX testme: retry select instead? */
         {
           goto connect_retry;
         }
@@ -1226,7 +1245,7 @@ putget_exit:
  * \fn xml_new_param()
  *
  * \param node_parent	XML node object that will be parent of the new child
- *      created here
+ *                      created here
  * \param type		type tag embedded in XML
  * \param value		value tag embedded in XML
  *
@@ -1284,17 +1303,17 @@ int build_http_post_header(char *buff, int content_len, struct sockaddr *addr)
  * \fn hip_xmlrpc_parse_response()
  *
  * \param mode		is this an XML RPC GET/PUT? store response in hit/addr?
- * \param xmldata   pointer to XML character data
+ * \param xmldata       pointer to XML character data
  * \param len		length of XML data
  * \param value		ptr for storing response value
  * \param value_len	ptr to the length of the value buffer and for
- *      storing response value length
+ *                      storing response value length
  *
  * \return		For GETs, the address or HIT is returned in addr or hit,
- *	    and 0 is returned for success.
- *	    For PUTs, the XML RPC return code is returned,
- *      which is 0 for success, or 1 or 2.
- *      -1 is returned on error.
+ *	                and 0 is returned for success.
+ *	                For PUTs, the XML RPC return code is returned,
+ *                      which is 0 for success, or 1 or 2.
+ *                      -1 is returned on error.
  */
 int hip_xmlrpc_parse_response(int mode, char *xmldata, int len,
                               char *value, int *value_len)
@@ -1314,7 +1333,7 @@ int hip_xmlrpc_parse_response(int mode, char *xmldata, int len,
   node = xmlDocGetRootElement(doc);                     /* <methodResponse> */
   if (node->children)
     {
-      node = node->children;                            /* <params> */
+      node = node->children;                              /* <params> */
     }
   node = node->children;
   if (!node)                                            /* <param> */
@@ -1394,7 +1413,8 @@ int hip_xmlrpc_parse_response(int mode, char *xmldata, int len,
           /*			data, strlen((char *)data)); */
           EVP_DecodeInit(&ctx);
           retval = EVP_DecodeUpdate(&ctx, (__u8 *)value, &i,
-                                    (__u8 *)data, strlen((char *)data));
+                                    (__u8 *)data,
+                                    strlen((char *)data));
           if (retval < 0)
             {
               xmlFree(data);
@@ -1512,10 +1532,11 @@ int hip_xmlrpc_rm(struct dht_val *v)
 
 /* Testing code -- compile with:
  * gcc -g -Wall -o hip_dht hip_dht.c hip_globals.o hip_util.o -lcrypto
- *-L/usr/lib -lxml2 -lz -liconv -lm -I/usr/include/libxml2 -DTEST_XMLRPC
+ **-L/usr/lib -lxml2 -lz -liconv -lm -I/usr/include/libxml2 -DTEST_XMLRPC
  * gcc -g -Wall -o hip_dht hip_dht.c ../hip-hip_globals.o ../hip-hip_util.o
- *-lcrypto -L/usr/lib -lxml2 -lz -liconv -lm -I../include -I/usr/include/libxml2
- *-DTEST_XMLRPC
+ **-lcrypto -L/usr/lib -lxml2 -lz -liconv -lm -I../include
+ *-I/usr/include/libxml2
+ **-DTEST_XMLRPC
  */
 #ifdef TEST_XMLRPC
 sockaddr_list *add_address_to_list(sockaddr_list **list, struct sockaddr *addr,

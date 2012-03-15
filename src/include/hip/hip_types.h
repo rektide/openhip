@@ -1,24 +1,33 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-05 the Boeing Company
+ * Copyright (c) 2002-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_types.h
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- *    Definitions for the HIP protocol.
- *
- *  Version:	@(#)hip_types.h	1.5	08/12/04
- *
- *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+ *  \authors	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *		Tom Henderson, <thomas.r.henderson@boeing.com>
  *
+ *  \brief  Data type definitions for the HIP protocol.
  *
  */
 
@@ -116,10 +125,6 @@
 
 #define H_PROTO_UDP 17
 
-/* PFKEY message sizes*/
-#define SADB_RESPONSE_BUFFER    20
-#define SADB_MSG_SIZE_ADD       304
-#define SADB_MSG_SIZE_DELETE    150
 
 /*
  * Miscellaneous constants and enums
@@ -136,6 +141,19 @@
 #ifndef HIP_UPDATE_BIND_CHECKS
 #define HIP_UPDATE_BIND_CHECKS 5
 #endif
+
+/* Messages from the ESP input/output thread to hipd */
+typedef enum {
+  ESP_ACQUIRE_LSI = 1,
+  ESP_EXPIRE_SPI,
+  ESP_UDP_CTL,
+  ESP_ADDR_LOSS,
+} ESP_MESSAGES;
+
+typedef struct _espmsg {
+  __u8 message_type;
+  __u32 message_data;
+} espmsg;
 
 /* Unoffical Registration states */
 
@@ -189,8 +207,8 @@ typedef enum {
 #define HIT_PREFIX_SHA1_32BITS 0x20010010
 /* convert lower 24-bits of HIT to LSI */
 #define HIT2LSI(a) (0x01000000L | \
-                    ((a[HIT_SIZE - \
-                        3] << 16) + (a[HIT_SIZE - 2] << 8) + (a[HIT_SIZE - 1])))
+                    ((a[HIT_SIZE - 3] << 16) + \
+                     (a[HIT_SIZE - 2] << 8) + (a[HIT_SIZE - 1])))
 
 /* compute the exponent of registration lifetime */
 #define YLIFE(x) ((float)x - (float)64) / (float)8
@@ -231,9 +249,9 @@ typedef struct _hiphdr {
   __u8 packet_type;             /* packet type                 */
 
 #if defined(__MACOSX__) && defined(__BIG_ENDIAN__)
-  __u8 version : 4,res : 4;    /* Endian - not OSX specific */
+  __u8 version : 4,res : 4;       /* Endian - not OSX specific */
 #else
-  __u8 res : 4,version : 4;    /* version, reserved        */
+  __u8 res : 4,version : 4;       /* version, reserved        */
 #endif
   __u16 checksum;               /* checksum                    */
   __u16 control;                /* control                     */
@@ -259,13 +277,20 @@ struct key_entry {
 };
 
 struct rekey_info {
-  __u32 update_id;              /* to be ACKed      */
+  __u32 update_id;              /* to be ACKed                  */
   __u32 new_spi;                /* SPI that will be adopted	*/
   __u16 keymat_index;           /* keymat index			*/
-  __u8 need_ack;      /* set to FALSE when update_id has been ACKed */
+  __u8 need_ack;       /* set to FALSE when update_id has been ACKed */
   __u8 dh_group_id;             /* new DH group given by peer	*/
   DH *dh;                       /* new DH given by the peer	*/
   struct timeval rk_time;       /* creation time, so struct can be freed */
+};
+
+/* timers for tracking loss multihoming state */
+struct multihoming_info {
+  struct timeval mh_time;               /* time since we are in multi-h. state*/
+  struct timeval mh_last_loss;          /* time of last loss report */
+  struct sockaddr_storage mh_addr;       /* address having reported loss */
 };
 
 /*
@@ -323,6 +348,7 @@ typedef struct _hip_assoc {
   struct rekey_info *rekey;       /* new parameters to use after REKEY	*/
   struct rekey_info *peer_rekey;       /* peer's REKEY data from UPDATE */
   struct _tlv_from *from_via;       /* including FROM in I1 or VIA RVS in R1 */
+  struct multihoming_info *mh;       /* state for loss multihoming */
   /* Other crypto */
   __u16 hip_transform;
   __u16 esp_transform;
@@ -344,6 +370,8 @@ typedef struct _hip_assoc {
 } hip_assoc;
 #define HIPA_SRC(h) ((struct sockaddr*)&h->hi->addrs.addr)
 #define HIPA_DST(h) ((struct sockaddr*)&h->peer_hi->addrs.addr)
+#define HIPA_SRC_LSI(h) ((struct sockaddr*)&h->hi->lsi)
+#define HIPA_DST_LSI(h) ((struct sockaddr*)&h->peer_hi->lsi)
 
 /*
  * list of struct sockaddrs
@@ -409,7 +437,7 @@ typedef struct _hi_node {
    */
   hip_cond_t      *rvs_cond;
   int             *rvs_count;       /* Number of RVS DNS petitions still to
-                                     *resolve */
+                                     * resolve */
   int             *copies;       /* Number of copies of the mutex structures */
 
   /*
@@ -456,7 +484,7 @@ typedef struct _hi_node {
 struct peer_node
 {
   hip_hit hit;
-  int size; /* Size in bytes of the Host Identity   */
+  int size;       /* Size in bytes of the Host Identity   */
   __u64 r1_gen_count;
   char algorithm_id;
   char anonymous;
@@ -806,9 +834,7 @@ struct hip_opt {
 #ifdef MOBILE_ROUTER
   int mr;
 #endif
-#ifdef HIP_I3
-  int i3;
-#endif
+  int mh;
 };
 
 #ifdef MOBILE_ROUTER
@@ -849,6 +875,7 @@ struct hip_conf {
   char *master_interface;
   char *master_interface2;
   struct sockaddr_storage preferred;       /* preferred address */
+  struct sockaddr_storage ignored_addr;       /* address to ignore */
   char *preferred_iface;                /* preferred interface name */
   struct name *outbound_ifaces;         /* if mobile router */
   __u8 save_known_identities;           /* save known_host_id's on exit */
@@ -862,7 +889,7 @@ struct hip_conf {
   char *cfg_library;                    /* filename of configuration library */
   __u8 use_my_identities_file;          /* use my_host_identities file */
   __u32 endbox_hello_time;              /* frequency of endbox hellos on overlay
-                                         **/
+                                         */
   __u32 endbox_allow_core_dump;         /* whether or not to allow endbox to
                                          *core dump */
 #endif /* HIP_VPLS */

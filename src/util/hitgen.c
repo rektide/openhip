@@ -1,21 +1,33 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-07  the Boeing Company
+ * Copyright (c) 2002-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hitgen.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+ *              Tom Henderson <thomas.r.henderson@boeing.com>
  *
- *  hitgen.c   Generates DSA and RSA Host Identities
- *
- *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
- *      Tom Henderson <thomas.r.henderson@boeing.com>
+ *  \brief  Generates DSA and RSA Host Identities and HIP configuration files.
  *
  */
 
@@ -34,10 +46,10 @@
 #include <errno.h>
 #ifndef __WIN32__
 #include <unistd.h>
-#include <sys/wait.h>           /* wait_pid()       */
+#include <sys/wait.h>           /* wait_pid()                   */
 #include <sys/time.h>           /* gettimeofday()		*/
 #else
-#include <io.h>                 /* access()       */
+#include <io.h>                 /* access()                     */
 #include <winsock2.h>
 #include <ws2tcpip.h>           /* INET6_ADDRSTRLEN		*/
 #endif
@@ -328,8 +340,10 @@ void publish_hits(char *out_filename)
   else
     {
       doc = xmlNewDoc(BAD_CAST "1.0");
-      node = xmlNewComment(BAD_CAST "The following HITs can be "
-                           "copied into a " HIP_KNOWNID_FILENAME " file.");
+      node = xmlNewComment(
+        BAD_CAST "The following HITs can be "
+        "copied into a " HIP_KNOWNID_FILENAME
+        " file.");
       xmlDocSetRootElement(doc, node);
       root_node = xmlNewNode(NULL, BAD_CAST "known_host_identities");
       xmlAddSibling(node, root_node);
@@ -352,7 +366,7 @@ void publish_hits(char *out_filename)
             {
               data = attr->children->content;
             }
-          else               /* no attribute value */
+          else                 /* no attribute value */
             {
               continue;
             }
@@ -488,8 +502,10 @@ void print_hitgen_usage()
          HIP_MYID_FILENAME);
   printf("\t\t file and create a file named ");
   printf("'hostname_host_identities.pub.xml'\n");
-  printf(" -conf \t\t generates a default '%s' file (overwrites existing)"
-         "\n", HIP_CONF_FILENAME);
+  printf(
+    " -conf \t\t generates a default '%s' file (overwrites existing)"
+    "\n",
+    HIP_CONF_FILENAME);
   printf("Configuration files are stored in '%s'.\n", SYSCONFDIR);
   printf("By default, identities are generated and written to '%s'\n",
          HIP_MYID_FILENAME);
@@ -534,8 +550,9 @@ int main(int argc, char *argv[])
   HMODULE hLib = LoadLibrary("ADVAPI32.DLL");
   BOOLEAN (APIENTRY *pfn)(void*,
                           ULONG) =
-    (BOOLEAN (APIENTRY*)(void*,ULONG))GetProcAddress(hLib,
-                                                     "SystemFunction036");
+    (BOOLEAN (APIENTRY*)(void*,ULONG))GetProcAddress(
+      hLib,
+      "SystemFunction036");
 
   WSAStartup(wVer, &wsaData);
 #endif /* __WIN32__ */
@@ -726,9 +743,10 @@ int main(int argc, char *argv[])
     }
 
   /* DTD support */
-  /* dtd = xmlCreateIntSubset(doc,BAD_CAST "root",NULL,BAD_CAST "x.dtd"); */
+  /* dtd = xmlCreateIntSubset(doc,BAD_CAST "root",NULL,BAD_CAST "x.dtd");
+   */
   /* xmlNewChild(parent, NsPtr ns, name, content) */
-  /*  */
+  /* */
   if (do_noinput)
     {
 #ifdef __WIN32__
@@ -749,8 +767,9 @@ int main(int argc, char *argv[])
       FILE *f = fopen("/dev/urandom", "r");
       if (f)
         {
-          printf("\nUsing /dev/urandom to seed the random number "
-                 "generator.\n");
+          printf(
+            "\nUsing /dev/urandom to seed the random number "
+            "generator.\n");
           if (fread(rnd_seed, sizeof(rnd_seed), 1, f) != 1)
             {
               printf("Warning: error reading /dev/urandom\n");
@@ -759,8 +778,9 @@ int main(int argc, char *argv[])
         }
       else
         {
-          printf("\nUsing the system clock to seed the random num"
-                 "ber generator.\n");
+          printf(
+            "\nUsing the system clock to seed the random num"
+            "ber generator.\n");
           gettimeofday((struct timeval*)rnd_seed, NULL);
         }
 #endif

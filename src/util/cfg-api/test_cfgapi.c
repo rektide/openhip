@@ -1,18 +1,35 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2009 the Boeing Company
+ * Copyright (c) 2009-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  test_cfgapi.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors	Jin Fang <jin.fang@boeing.com>
+ *
+ *  \brief  Configuration API test program.
  *
  */
+
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -294,7 +311,8 @@ int main(void)
     }
   else
     {
-      printf("certificate not verified url %s - using cached cert\n", url);
+      printf("certificate not verified url %s - using cached cert\n",
+             url);
     }
 
 
@@ -317,7 +335,9 @@ int main(void)
       for (i = 0; i < rc; i++)
         {
           printf("peers_allowed: hit1 %02x%02x hit2 %02x%02x\n",
-                 *(hits1[i] + 14), *(hits1[i] + 15), *(hits2[i] + 14),
+                 *(hits1[i] + 14),
+                 *(hits1[i] + 15),
+                 *(hits2[i] + 14),
                  *(hits2[i] + 15));
         }
     }
@@ -362,20 +382,22 @@ int main(void)
   eb_p->sa_family = AF_INET;
   rc = hipcfg_getEndboxByLegacyNode(host_p, eb_p);
   inet_ntop(eb_p->sa_family, SA2IP(eb_p), eb_s, sizeof(eb_s));
-  printf("valid case hipcfg_getEndboxByLegacyNode rc: %d host: %s eb: %s\n",
-         rc,
-         host_s,
-         eb_s);
+  printf(
+    "valid case hipcfg_getEndboxByLegacyNode rc: %d host: %s eb: %s\n",
+    rc,
+    host_s,
+    eb_s);
 
   strcpy(eb_s, "2001:1d:52a7:1633:48ae:b657:e975:9efa");
   eb_p->sa_family = AF_INET6;
   inet_pton(eb_p->sa_family, eb_s, SA2IP(eb_p));
   rc = hipcfg_getLlipByEndbox(eb_p, host_p);
   inet_ntop(host_p->sa_family, SA2IP(host_p), host_s, sizeof(host_s));
-  printf("valid case hipcfg_getLlipByEndbox rc: %d endbox: %s bcwin: %s\n",
-         rc,
-         eb_s,
-         host_s);
+  printf(
+    "valid case hipcfg_getLlipByEndbox rc: %d endbox: %s bcwin: %s\n",
+    rc,
+    eb_s,
+    host_s);
 
   strcpy(eb_s, "1.117.158.250");
   eb_p->sa_family = AF_INET;
@@ -390,7 +412,8 @@ int main(void)
       for (i = 0; i < rc; i++)
         {
           host_p = (struct sockaddr *)&hosts[i];
-          inet_ntop(host_p->sa_family, SA2IP(host_p), host_s, sizeof(host_s));
+          inet_ntop(host_p->sa_family, SA2IP(
+                      host_p), host_s, sizeof(host_s));
           printf(" %s", host_s);
         }
       printf("\n");
@@ -415,12 +438,14 @@ int main(void)
   for (i = 0; i < rc; i++)
     {
       hit2hitstr(hit_s, nodes[i].hit);
-      printf("peer node: hit: %s, assetTag: %s\n", hit_s, nodes[i].name);
+      printf("peer node: hit: %s, assetTag: %s\n",
+             hit_s,
+             nodes[i].name);
     }
 
   if (hi == NULL)
     {
-      exit(0); /* no further test if not use smartcard */
+      exit(0);           /* no further test if not use smartcard */
 
     }
   rc = hipcfg_getLocalCertUrl(url, sizeof(url));
@@ -489,7 +514,8 @@ int main(void)
             }
           else
             {
-              printf("successfully signed a message digest.\n");
+              printf(
+                "successfully signed a message digest.\n");
             }
         }
 

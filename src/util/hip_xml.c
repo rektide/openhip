@@ -1,24 +1,34 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-06 the Boeing Company
+ * Copyright (c) 2002-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_xml.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- *  hip_xml.c
- *
- *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+ *  \authors	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *              Tom Henderson <thomas.r.henderson@boeing.com>
  *
- * Functions involving reading/writing HIP configuration files:
- * my_host_identities.xml, known_host_identities.xml, and hip.conf.
+ *  \brief  Functions involving reading/writing HIP configuration files:
+ *          my_host_identities.xml, known_host_identities.xml, and hip.conf.
  *
  */
 
@@ -34,7 +44,7 @@
 #else
 #include <unistd.h>
 #include <sys/time.h>
-#include <arpa/inet.h>          /* inet_addr()      */
+#include <arpa/inet.h>          /* inet_addr()                  */
 #include <netinet/in.h>         /* INADDR_NONE                  */
 #include <netinet/ip.h>         /* INADDR_NONE                  */
 #include <netinet/ip6.h>
@@ -68,10 +78,10 @@
  * HIP configuration directory. Store the path name into the supplied buffer.
  *
  * filename	string to store resulting full path name; may contain user-
- *    specified file name
+ *              specified file name
  * filename_size  max length of filename buffer
  * default_name filename to use (without path) when user does not specify the
- *    filename
+ *              filename
  *
  * Returns 0 if file or symlink exists, -1 if there is no suitable file.
  *
@@ -153,7 +163,7 @@ void parse_xml_attributes(xmlAttrPtr attr, hi_node *hi)
         {
           value = (char *)attr->children->content;
         }
-      else           /* no attribute value */
+      else             /* no attribute value */
         {
           continue;
         }
@@ -336,22 +346,28 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
             {
               list = &hi->addrs;
               /* additional address entry */
-              if ((strcmp((char *)node->name, "addr") == 0) &&
+              if ((strcmp((char *)node->name,
+                          "addr") == 0) &&
                   (VALID_FAM(&list->addr)))
                 {
                   l = add_address_to_list(&list, addr, 0);
                   l->status = UNVERIFIED;
                   /* LSI */
                 }
-              else if (strcmp((char *)node->name,"LSI") == 0)
+              else if (strcmp((char *)node->name,
+                              "LSI") == 0)
                 {
                   memcpy(&hi->lsi, addr, SALEN(addr));
                   /* rendevous server (RVS)  */
                 }
-              else if (strcmp((char *)node->name,"RVS") == 0)
+              else if (strcmp((char *)node->name,
+                              "RVS") == 0)
                 {
-                  add_address_to_list(hi->rvs_addrs, addr, 0);
-                  /* first (preferred) entry in address list */
+                  add_address_to_list(hi->rvs_addrs,
+                                      addr,
+                                      0);
+                  /* first (preferred) entry in address
+                   *list */
                 }
               else
                 {
@@ -420,10 +436,6 @@ int read_peer_identities_from_hipcfg()
 #endif
       /* get HI name */
       strcpy(name, hi->name);
-/*
- *               if (strrchr(name, '-'))
- *                  name[strlen(name)-strlen(strrchr(name,'-'))] = 0;
- */
 
       /* lookup hipcfg module (DDL) */
       struct sockaddr_storage llip_ss;
@@ -494,8 +506,8 @@ int read_peer_identities_from_hipcfg()
  *
  * filename	name of the XML file to open
  * mine		is this my list of Host Identities?
- *    if TRUE, store HIs/HITs into my_hi_list, otherwise
- *    store into peer_hi_list.
+ *              if TRUE, store HIs/HITs into my_hi_list, otherwise
+ *              store into peer_hi_list.
  *
  */
 int read_identities_file(char *filename, int mine)
@@ -583,7 +595,8 @@ int read_identities_file(char *filename, int mine)
               strcpy(name, hi->name);
               if (strrchr(name, '-'))
                 {
-                  name[strlen(name) - strlen(strrchr(name,'-'))] = 0;
+                  name[strlen(name) -
+                       strlen(strrchr(name,'-'))] = 0;
                 }
 
               /* address(es) listed in identities file */
@@ -594,7 +607,8 @@ int read_identities_file(char *filename, int mine)
                 }
               else
                 {
-                  if (add_addresses_from_dns(name, hi) < 0)
+                  if (add_addresses_from_dns(name,
+                                             hi) < 0)
                     {
                       hip_dht_resolve_hi(hi, TRUE);
                     }
@@ -678,7 +692,7 @@ void print_hi_to_buff(uint8_t **bufp, int *buf_len, hi_node *hi, int mine)
       *bufp = malloc(new_size);
       if (!*bufp)
         {
-          return;                   /* malloc error */
+          return;                     /* malloc error */
         }
       memset(*bufp, 0, new_size);
 
@@ -827,14 +841,21 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
 
       eb_p->sa_family = AF_INET6;
       inet_pton(AF_INET6, hit_hex, SA2IP(eb_p));
-      rc = hipcfg_getLegacyNodesByEndbox(eb_p, hosts, MAX_LEGACY_HOSTS);
+      rc = hipcfg_getLegacyNodesByEndbox(eb_p,
+                                         hosts,
+                                         MAX_LEGACY_HOSTS);
       if (rc > 0)
         {
           for (i = 0; i < rc; i++)
             {
               host_p = (struct sockaddr *)&hosts[i];
-              inet_ntop(host_p->sa_family, SA2IP(host_p), host_s, sizeof(host_s));
-              xmlNewChild(hi, NULL, BAD_CAST "legacyNodesIp", BAD_CAST host_s);
+              inet_ntop(host_p->sa_family, SA2IP(
+                          host_p), host_s,
+                        sizeof(host_s));
+              xmlNewChild(hi,
+                          NULL,
+                          BAD_CAST "legacyNodesIp",
+                          BAD_CAST host_s);
             }
         }
       else
@@ -868,7 +889,7 @@ int save_identities_file(int mine)
     {
       count++;
     }
-  if (count == 0)       /* no identities to save */
+  if (count == 0)         /* no identities to save */
     {
       return(0);
     }
@@ -879,9 +900,10 @@ int save_identities_file(int mine)
            mine ? HCNF.my_hi_filename : HCNF.known_hi_filename);
   root_node = xmlNewNode(NULL, mine ? BAD_CAST "my_host_identities" :
                          BAD_CAST "known_host_identities");
-  comment = xmlNewComment(BAD_CAST "This file has been saved by the HIP "
-                          "daemon. User edits may be lost\n    when the HIP "
-                          "daemon terminates. Comments are not preserved. ");
+  comment = xmlNewComment(
+    BAD_CAST "This file has been saved by the HIP "
+    "daemon. User edits may be lost\n    when the HIP "
+    "daemon terminates. Comments are not preserved. ");
   xmlDocSetRootElement(doc, comment);
   xmlAddSibling(comment, root_node);
 
@@ -912,7 +934,10 @@ int save_identities_file(int mine)
     {
       for (i = 0; i < rc; i++)
         {
-          np = xmlNewChild(root_node, NULL, BAD_CAST "peer_allowed", NULL);
+          np = xmlNewChild(root_node,
+                           NULL,
+                           BAD_CAST "peer_allowed",
+                           NULL);
           hit_to_str(hit_hex, hits1[i]);
           xmlNewChild(np, NULL, BAD_CAST "hit1", BAD_CAST hit_hex);
           hit_to_str(hit_hex, hits2[i]);
@@ -962,11 +987,13 @@ int read_conf_file(char *filename)
         {
           /* silently ignore XML comments */
         }
-      else if (strcmp((char *)node->name, "cookie_difficulty") == 0)
+      else if (strcmp((char *)node->name,
+                      "cookie_difficulty") == 0)
         {
           sscanf(data, "%d", &HCNF.cookie_difficulty);
         }
-      else if (strcmp((char *)node->name, "cookie_lifetime") == 0)
+      else if (strcmp((char *)node->name,
+                      "cookie_lifetime") == 0)
         {
           sscanf(data, "%d", &HCNF.cookie_lifetime);
         }
@@ -1008,15 +1035,18 @@ int read_conf_file(char *filename)
           HCNF.dh_group = (__u8)tmp;
 #ifdef HIP_VPLS
         }
-      else if (strcmp((char *)node->name, "master_interface") == 0)
+      else if (strcmp((char *)node->name,
+                      "master_interface") == 0)
         {
           HCNF.master_interface = strdup(data);
         }
-      else if (strcmp((char *)node->name, "master_interface2") == 0)
+      else if (strcmp((char *)node->name,
+                      "master_interface2") == 0)
         {
           HCNF.master_interface2 = strdup(data);
         }
-      else if (strcmp((char *)node->name, "endbox_hello_time") == 0)
+      else if (strcmp((char *)node->name,
+                      "endbox_hello_time") == 0)
         {
           sscanf(data, "%d", &HCNF.endbox_hello_time);
         }
@@ -1040,7 +1070,8 @@ int read_conf_file(char *filename)
         {
           sscanf(data, "%d", &HCNF.r1_lifetime);
         }
-      else if (strcmp((char *)node->name, "failure_timeout") == 0)
+      else if (strcmp((char *)node->name,
+                      "failure_timeout") == 0)
         {
           sscanf(data, "%d", &HCNF.failure_timeout);
         }
@@ -1103,7 +1134,8 @@ int read_conf_file(char *filename)
                    data);
             }
         }
-      else if (strcmp((char *)node->name, "dht_server_port") == 0)
+      else if (strcmp((char *)node->name,
+                      "dht_server_port") == 0)
         {
           sscanf(data, "%d", &tmp);
           addr = (struct sockaddr*)&HCNF.dht_server;
@@ -1112,7 +1144,7 @@ int read_conf_file(char *filename)
               ((struct sockaddr_in6*)addr)->sin6_port =
                 htons((__u16)tmp);
             }
-          else               /* if no DHT address yet, default to IPv4 */
+          else                 /* if no DHT address yet, default to IPv4 */
             {
               ((struct sockaddr_in*)addr)->sin_port =
                 htons((__u16)tmp);
@@ -1166,7 +1198,8 @@ int read_conf_file(char *filename)
               HCNF.disable_dns_thread = FALSE;
             }
         }
-      else if (strcmp((char *)node->name, "enable_broadcast") == 0)
+      else if (strcmp((char *)node->name,
+                      "enable_broadcast") == 0)
         {
           if (strncmp(data, "yes", 3) == 0)
             {
@@ -1190,13 +1223,15 @@ int read_conf_file(char *filename)
               HCNF.disable_udp = FALSE;
             }
         }
-      else if (strcmp((char *)node->name, "min_reg_lifetime") == 0)
+      else if (strcmp((char *)node->name,
+                      "min_reg_lifetime") == 0)
         {
           /* real_min_lifetime (sec) = 2^((min_lifetime-64)/8) */
           sscanf(data, "%d", &tmp);
           HCNF.min_reg_lifetime = (__u8)tmp;
         }
-      else if (strcmp((char *)node->name, "max_reg_lifetime") == 0)
+      else if (strcmp((char *)node->name,
+                      "max_reg_lifetime") == 0)
         {
           /* real_max_lifetime (sec) = 2^((max_lifetime-64)/8) */
           sscanf(data, "%d", &tmp);
@@ -1214,7 +1249,20 @@ int read_conf_file(char *filename)
                    data);
             }
         }
-      else if (strcmp((char*)node->name, "preferred_interface") == 0)
+      else if (strcmp((char*)node->name, "ignored_addr") == 0)
+        {
+          addr = (struct sockaddr*)&HCNF.ignored_addr;
+          memset(addr, 0, sizeof(struct sockaddr_storage));
+          addr->sa_family = ((strchr(data, ':') == NULL) ?
+                             AF_INET : AF_INET6);
+          if (str_to_addr((__u8*)data, addr) <= 0)
+            {
+              log_(WARN, "Invalid ignored address '%s'\n",
+                   data);
+            }
+        }
+      else if (strcmp((char*)node->name,
+                      "preferred_interface") == 0)
         {
           HCNF.preferred_iface = malloc(strlen(data) + 1);
           if (!HCNF.preferred_iface)
@@ -1228,7 +1276,8 @@ int read_conf_file(char *filename)
             }
 #ifdef MOBILE_ROUTER
         }
-      else if (strcmp((char*)node->name, "outbound_interface") == 0)
+      else if (strcmp((char*)node->name,
+                      "outbound_interface") == 0)
         {
           struct name *temp = malloc(sizeof(struct name));
           if (!temp)
@@ -1290,14 +1339,17 @@ int read_conf_file(char *filename)
               HCNF.peer_certificate_required = FALSE;
             }
 #ifdef HIP_VPLS
-          /* Example: /usr/local/lib/libhipcfgfiles.so */
         }
+      /* Example: /usr/local/lib/libhipcfgldap.so */
       else if (strcmp((char*)node->name, "cfg_library") == 0)
         {
           HCNF.cfg_library = malloc(strlen(data) + 1);
           if (!HCNF.cfg_library)
             {
-              log_(WARN, "Warning: HCNF.cfg_library malloc " "error!\n");
+              log_(
+                WARN,
+                "Warning: HCNF.cfg_library malloc "
+                "error!\n");
             }
           else
             {
@@ -1307,8 +1359,10 @@ int read_conf_file(char *filename)
         }
       else if (strlen((char *)node->name))
         {
-          log_(WARN, "Warning: unknown configuration option '%s' "
-               "was ignored.\n", node->name);
+          log_(WARN,
+               "Warning: unknown configuration option '%s' "
+               "was ignored.\n",
+               node->name);
         }
       xmlFree(data);
     }

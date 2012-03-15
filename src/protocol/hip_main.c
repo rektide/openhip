@@ -1,33 +1,35 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-06 the Boeing Company
+ * Copyright (c) 2002-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_main.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- *  hip_main.c
- *
- *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
+ *  \authors Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  *           Tom Henderson <thomas.r.henderson@boeing.com>
  *
- * Main program for HIP daemon.
+ *  \brief  Main program for HIP daemon.
  *
  */
-
-/*
- * Style:  KNF where possible, K&R style braces around control structures
- * Style:  indent using tabs-- multi-line continuation 4 spaces
- * Style:  no tabs in middle of lines
- * Style:  this code authored with tabstop=8
- */
-
 #include <stdio.h>           /* stderr, etc                  */
 #include <stdlib.h>          /* rand()                       */
 #include <errno.h>           /* strerror(), errno            */
@@ -71,11 +73,6 @@
 #include <openssl/dh.h>      /* Diffie-Hellman contexts      */
 #include <openssl/sha.h>     /* SHA1 algorithms              */
 #include <openssl/rand.h>    /* RAND_seed()                  */
-#if defined(__UMH__) || defined(__MACOSX__)
-#include <win32/pfkeyv2.h>
-#else
-#include <linux/pfkeyv2.h>      /* PF_KEY_V2 support */
-#endif
 #include <hip/hip_types.h>
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
@@ -84,13 +81,11 @@
 #include <hip/hip_cfg_api.h>
 #endif
 
-#ifdef HIP_I3
-#include "i3_hip.h"
-int (*select_func)(int, fd_set*, fd_set*, fd_set*, struct timeval *);
-#endif
-
 #ifdef __MACOSX__
 extern void del_divert_rule(int);
+#endif
+#ifdef __WIN32__
+extern int socketpair(int, int, int, int sv[2]);
 #endif
 
 #ifndef __MACOSX__
@@ -104,7 +99,6 @@ extern void del_divert_rule(int);
 int main(int argc, char *argv[]);
 
 /* HIP packets */
-/*I3: static */
 #ifdef __WIN32__
 void hip_handle_packet(__u8* buff, int length, struct sockaddr *src);
 #else
@@ -134,15 +128,13 @@ void endbox_init();
  *     - crypto init -- generate Diffie Hellman material
  *     - generate R1s
  *     - some timer for timeout activies (rotate R1, expire states)
- *     - create HIP and PFKEY sockets
+ *     - create HIP and ESP sockets
  *     - go to endless loop, selecting on the sockets
  */
 
 int main_loop(int argc, char **argv)
 {
   struct timeval time1, timeout;       /* Used in select() loop */
-
-  /* HIP and PFKEY socket data structures */
 #ifndef __WIN32__
   struct msghdr msg;
   struct iovec iov;
@@ -194,9 +186,7 @@ int main_loop(int argc, char **argv)
 #ifdef MOBILE_ROUTER
   OPT.mr = FALSE;
 #endif
-#ifdef HIP_I3
-  OPT.i3 = FALSE;
-#endif
+  OPT.mh = FALSE;
 
   /*
    * Set default configuration
@@ -314,9 +304,12 @@ int main_loop(int argc, char **argv)
               exit(1);
             }
           af = ((strchr(*argv, ':') == NULL) ? AF_INET : AF_INET6);
-          OPT.trigger = (struct sockaddr*)malloc((af == AF_INET) ?
-                                                 sizeof(struct sockaddr_in) :
-                                                 sizeof(struct sockaddr_in6));
+          OPT.trigger = (struct sockaddr*)malloc(
+            (af == AF_INET) ?
+            sizeof(struct
+                   sockaddr_in) :
+            sizeof(struct
+                   sockaddr_in6));
           memset(OPT.trigger, 0, sizeof(OPT.trigger));
           OPT.trigger->sa_family = af;
           if (str_to_addr((__u8*)*argv, OPT.trigger) < 1)
@@ -332,18 +325,6 @@ int main_loop(int argc, char **argv)
           log_(WARN, "The -u option has been deprecated. UDP "
                "encapsulation is enabled by default and can be"
                "disabled in hip.conf.\n");
-          argv++, argc--;
-          continue;
-        }
-      if (strcmp(*argv, "-i3") == 0)
-        {
-#ifndef HIP_I3
-          log_(ERR, "Error: -i3 option specified but I3 support "
-               "not enabled at compile time.\n");
-          exit(1);
-#else
-          OPT.i3 = TRUE;
-#endif /* HIP_I3 */
           argv++, argc--;
           continue;
         }
@@ -375,7 +356,8 @@ int main_loop(int argc, char **argv)
               HCNF.reg_types[HCNF.num_reg_types] = REGTYPE_MR;
               HCNF.num_reg_types++;
 #else
-              log_(ERR, "Error: mobile router option specifie"
+              log_(ERR,
+                   "Error: mobile router option specifie"
                    "d but daemon has not been configured a"
                    "nd built with --enable-mobile-router "
                    "option.\n");
@@ -385,9 +367,17 @@ int main_loop(int argc, char **argv)
           else
             {
               OPT.rvs = TRUE;
-              HCNF.reg_types[HCNF.num_reg_types] = REGTYPE_RVS;
+              HCNF.reg_types[HCNF.num_reg_types] =
+                REGTYPE_RVS;
               HCNF.num_reg_types++;
             }
+          argv++,argc--;
+          continue;
+        }
+      /* Turn on experimental multihoming for lost packets */
+      if (strcmp(*argv, "-mh") == 0)
+        {
+          OPT.mh = TRUE;
           argv++,argc--;
           continue;
         }
@@ -469,7 +459,8 @@ int main_loop(int argc, char **argv)
     {
 #endif /* HIP_VPLS */
   if ((locate_config_file(HCNF.my_hi_filename,
-                          sizeof(HCNF.my_hi_filename), HIP_MYID_FILENAME) < 0))
+                          sizeof(HCNF.my_hi_filename),
+                          HIP_MYID_FILENAME) < 0))
     {
       log_(ERR, "Unable to locate this machine's %s file.\n",
            HIP_MYID_FILENAME);
@@ -489,7 +480,6 @@ int main_loop(int argc, char **argv)
     }
 #ifdef HIP_VPLS
 }
-
 #endif
 
   /*
@@ -517,8 +507,8 @@ int main_loop(int argc, char **argv)
            HIP_KNOWNID_FILENAME);
       if (!OPT.allow_any)
         {
-          log_(ERR, "Because there are no peer identities, you probab"
-               "ly need to run with the -a\n  (allow any) option.\n");
+          log_(ERR, "Because there are no peer identities, "
+               "the -a\n  (allow any) option likely needed.\n");
         }
     }
 
@@ -599,39 +589,16 @@ int main_loop(int argc, char **argv)
       goto hip_main_error_exit;
     }
 
-  /* PF_KEY socket */
-#ifndef __UMH__
-  s_pfk = socket(PF_KEY, SOCK_RAW, PF_KEY_V2);
-  if (s_pfk < 0)
+  /* socketpair for communicating with the ESP input/output threads */
+#ifdef __MACOSX__
+  if (socketpair(AF_UNIX, SOCK_DGRAM, PF_UNSPEC, espsp))
     {
-      log_(ERR, "PF_KEY socket() failed.\n%s.\n", strerror(errno));
-      goto hip_main_error_exit;
-    }
 #else
-  while (pfkeysp[1] < 0)
+  if (socketpair(AF_UNIX, SOCK_DGRAM, PF_UNIX, espsp))
     {
-      hip_sleep(1);           /* wait for PFKEY thread to become ready */
+#endif /* __MACOSX__ */
+      log_(ERR, "socketpair() for ESP threads failed\n");
     }
-  s_pfk = pfkeysp[1];       /* UMH */
-#endif
-
-  /* register PF_KEY types with kernel */
-  if ((err = sadb_register(SADB_SATYPE_ESP) < 0))
-    {
-      log_(ERR, "Unable to register PFKEY handler w/kernel.\n");
-      goto hip_main_error_exit;
-    }
-  else
-    {
-#ifdef __UMH__
-      log_(NORMT,
-           "Registered PF_KEY handler with usermode thread.\n");
-#else
-      log_(NORMT,
-           "Registered PF_KEY handler with the kernel.\n");
-#endif
-    }
-
 
 #ifndef __WIN32__
 #if !defined(__MACOSX__)
@@ -656,19 +623,12 @@ int main_loop(int argc, char **argv)
       goto hip_main_error_exit;
     }
 
-  highest_descriptor = maxof(5, s_pfk, s_hip, s6_hip, s_net, s_stat);
+  highest_descriptor = maxof(5, espsp[1], s_hip, s6_hip, s_net, s_stat);
 #else /* IPV6_HIP */
-  highest_descriptor = maxof(4, s_pfk, s_hip, s_net, s_stat);
+  highest_descriptor = maxof(4, espsp[1], s_hip, s_net, s_stat);
 #endif /* IPV6_HIP */
 
-  log_(NORMT, "Listening on HIP and PF_KEY sockets...\n");
-
-#ifdef HIP_I3
-  if (OPT.i3)
-    {
-      i3_init((hip_hit *)get_preferred_hi(my_hi_head)->hit);
-    }
-#endif
+  log_(NORMT, "Listening for HIP control packets...\n");
 
 #ifdef HIP_VPLS
   endbox_init();
@@ -694,7 +654,7 @@ int main_loop(int argc, char **argv)
 #ifdef IPV6_HIP
       FD_SET((unsigned)s6_hip, &read_fdset);
 #endif
-      FD_SET((unsigned)s_pfk, &read_fdset);
+      FD_SET((unsigned)espsp[1], &read_fdset);
       FD_SET((unsigned)s_net, &read_fdset);
       FD_SET((unsigned)s_stat, &read_fdset);
       timeout.tv_sec = 1;
@@ -726,19 +686,10 @@ int main_loop(int argc, char **argv)
         }
 #endif
 
-#ifdef HIP_I3
-      select_func = OPT.i3 ? &cl_select : &select;
-      /* wait for I3 socket activity */
-      if ((err = (*select_func)((highest_descriptor + 1), &read_fdset,
-                                NULL, NULL, &timeout)) < 0)
-        {
-#else
-
       /* wait for socket activity */
       if ((err = select((highest_descriptor + 1), &read_fdset,
                         NULL, NULL, &timeout)) < 0)
         {
-#endif
           /* sometimes select receives interrupt in addition
            * to the hip_exit() signal handler */
           if (errno == EINTR)
@@ -753,16 +704,20 @@ int main_loop(int argc, char **argv)
         {
           /* idle cycle - select() timeout */
           /* retransmit any waiting packets */
-          hip_check_pfkey_buffer();
           gettimeofday(&time1, NULL);
           hip_retransmit_waiting_packets(&time1);
           hip_handle_state_timeouts(&time1);
           hip_handle_registrations(&time1);
+          if (OPT.mh)
+            {
+              hip_handle_multihoming_timeouts(&time1);
+            }
 #ifndef __WIN32__       /* cleanup zombie processes from fork() */
           waitpid(0, &err, WNOHANG);
 #endif
           /* by default, every 5 minutes */
-          if ((time1.tv_sec - last_expire) > (int)HCNF.r1_lifetime)
+          if ((time1.tv_sec - last_expire) >
+              (int)HCNF.r1_lifetime)
             {
               last_expire = time1.tv_sec;
               /* expire old DH contexts */
@@ -869,36 +824,42 @@ int main_loop(int argc, char **argv)
           else
             {
 #ifdef __WIN32__
-              hip_handle_packet(buff, length, SA(&addr_from), FALSE);
+              hip_handle_packet(buff, length, SA(
+                                  &addr_from), FALSE);
 #else
               hip_handle_packet(&msg, length, AF_INET6);
 #endif
             }
 #endif /* IPV6_HIP */
         }
-      else if (FD_ISSET(s_pfk, &read_fdset))
+      else if (FD_ISSET(espsp[1], &read_fdset))
         {
-          /* Something on PF_KEY socket */
+          /* Data from the ESP input/output threads */
 #ifdef __WIN32__
-          if ((length = recv(s_pfk, buff, sizeof(buff), 0)) < 0)
+          if ((length =
+                 recv(espsp[1], buff, sizeof(buff),
+                      0)) < 0)
             {
 #else
-          if ((length = read(s_pfk, buff, sizeof(buff))) < 0)
+          if ((length =
+                 read(espsp[1], buff, sizeof(buff))) < 0)
             {
 #endif
-              log_(WARN, "PFKEY read() error - %d %s\n",
+              log_(WARN, "ESP socket read() error - %d %s\n",
                    errno, strerror(errno));
             }
           else
             {
-              hip_handle_pfkey(buff);
+              /* acquire, expire, or control data over UDP */
+              hip_handle_esp(buff, length);
             }
         }
       else if (FD_ISSET(s_net, &read_fdset))
         {
           /* Something on Netlink socket */
 #ifdef __WIN32__
-          if ((length = recv(s_net, buff, sizeof(buff), 0)) < 0)
+          if ((length =
+                 recv(s_net, buff, sizeof(buff), 0)) < 0)
             {
 #else
           if ((length = read(s_net, buff, sizeof(buff))) < 0)
@@ -924,7 +885,8 @@ int main_loop(int argc, char **argv)
           addr_from_len = sizeof(addr_from);
           length = sizeof(buff);
           if ((length = recvfrom(s_stat, buff, length, flags,
-                                 SA(&addr_from), &addr_from_len)) < 0)
+                                 SA(&addr_from),
+                                 &addr_from_len)) < 0)
             {
 #ifdef __WIN32__
               log_(WARN, "Status read() ");
@@ -1004,7 +966,9 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
     {
       /* destination address comes from ancillary data passed
        * with msg due to IPV6_PKTINFO socket option */
-      for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg,cmsg))
+      for (cmsg = CMSG_FIRSTHDR(msg);
+           cmsg;
+           cmsg = CMSG_NXTHDR(msg,cmsg))
         {
           if ((cmsg->cmsg_level == IPPROTO_IPV6) &&
               (cmsg->cmsg_type == IPV6_PKTINFO))
@@ -1045,15 +1009,19 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
               (hip_a->state < E_FAILED))
             {
               log_(WARN, "Header error, sending NOTIFY.\n");
-              if (err == -3)                   /* bad checksum */
+              if (err == -3)                     /* bad checksum */
                 {
                   hip_send_notify(hip_a,
-                                  NOTIFY_CHECKSUM_FAILED, NULL,0);
+                                  NOTIFY_CHECKSUM_FAILED,
+                                  NULL,
+                                  0);
                 }
-              else if (err == -2)                   /* various problems */
+              else if (err == -2)                       /* various problems */
                 {
                   hip_send_notify(hip_a,
-                                  NOTIFY_INVALID_SYNTAX, NULL, 0);
+                                  NOTIFY_INVALID_SYNTAX,
+                                  NULL,
+                                  0);
                 }
             }
         }
@@ -1131,7 +1099,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
       err = hip_handle_BOS((__u8 *)hiph, src);
       break;
     case UPDATE:
-      err = hip_handle_update((__u8 *)hiph, hip_a, src);
+      err = hip_handle_update((__u8 *)hiph, hip_a, src, dst);
       break;
     case NOTIFY:
       err = hip_handle_notify((__u8 *)hiph, hip_a);
@@ -1271,7 +1239,8 @@ hip_retransmit_waiting_packets(struct timeval* time1)
         }
 
       /* See if a RVS is available */
-      if ((hip_a->rexmt_cache.retransmits >= (int)HCNF.max_retries))
+      if ((hip_a->rexmt_cache.retransmits >=
+           (int)HCNF.max_retries))
         {
           hip_check_next_rvs(hip_a);
         }
@@ -1286,8 +1255,10 @@ hip_retransmit_waiting_packets(struct timeval* time1)
               (get_addr_from_list(my_addr_head,
                                   dst->sa_family, src) < 0))
             {
-              log_(WARN, "Cannot determine source address for"
-                   " retransmission to %s.\n", logaddr(dst));
+              log_(WARN,
+                   "Cannot determine source address for"
+                   " retransmission to %s.\n",
+                   logaddr(dst));
             }
           offset = 0;
           if (hip_a->udp)
@@ -1384,6 +1355,13 @@ void hip_handle_state_timeouts(struct timeval *time1)
               log_(NORMT, "HIP association %d moved ", i);
               log_(NORM,  "from R2_SENT=>ESTABLISHED ");
               log_(NORM,  "due to incoming ESP data.\n");
+              if (OPT.mh &&
+                  (hip_send_update_locators(hip_a) < 0))
+                {
+                  log_(WARN,
+                       "Failed to send UPDATE with loca"
+                       "tors following incoming data.\n");
+                }
               /* any packet sent during UAL minutes? */
             }
           else if (check_last_used(hip_a, 0, time1) > 0)
@@ -1394,7 +1372,8 @@ void hip_handle_state_timeouts(struct timeval *time1)
                 {
                   do_close = TRUE;
                 }
-              /* no packet sent or received, check UAL minutes */
+              /* no packet sent or received, check UAL minutes
+              **/
             }
           else if (TDIFF(*time1, hip_a->state_time) >
                    (int)HCNF.ual)
@@ -1410,8 +1389,9 @@ void hip_handle_state_timeouts(struct timeval *time1)
             {
               set_state(hip_a, UNASSOCIATED);
               log_(NORMT, "HIP association %d moved from", i);
-              log_(NORM,  " %s=>UNASSOCIATED\n",
-                   (hip_a->state == CLOSED) ? "CLOSED" : "CLOSING");
+              log_(NORM, " %s=>UNASSOCIATED\n",
+                   (hip_a->state ==
+                    CLOSED) ? "CLOSED" : "CLOSING");
               /* max_hip_assoc may decrease here, but this
                * shouldn't ruin this for loop */
               free_hip_assoc(hip_a);
@@ -1478,7 +1458,8 @@ void hip_handle_state_timeouts(struct timeval *time1)
            * bytes=0 and check_last_used() will return 0, but it
            * is not time to expire yet due to use_time */
           if ((err == 0) &&
-              (TDIFF(*time1,hip_a->state_time) > (int)HCNF.ual))
+              (TDIFF(*time1,
+                     hip_a->state_time) > (int)HCNF.ual))
             {
               /* state time has exceeded UAL */
               if (hip_a->use_time.tv_sec == 0)
@@ -1573,7 +1554,8 @@ void hip_handle_registrations(struct timeval *time1)
               tmp = YLIFE (reg->lifetime);
               tmp = pow (2, tmp);
               tmp = 0.9 * tmp;
-              if (TDIFF(*time1, reg->state_time) > (int)tmp)
+              if (TDIFF(*time1,
+                        reg->state_time) > (int)tmp)
                 {
                   reg->state = REG_OFFERED;
                   do_update = 1;
@@ -1582,7 +1564,7 @@ void hip_handle_registrations(struct timeval *time1)
         }
       if (do_update)
         {
-          hip_send_update(hip_a, NULL, NULL);
+          hip_send_update(hip_a, NULL, NULL, NULL);
         }
     }
 }
@@ -1611,7 +1593,7 @@ void hip_handle_locator_state_timeouts(hip_assoc *hip_a, struct timeval *time1)
     }
   for (l = &hip_a->peer_hi->addrs; l; l = l->next)
     {
-      if (l->lifetime == 0)           /* no locator lifetime set */
+      if (l->lifetime == 0)             /* no locator lifetime set */
         {
           continue;
         }
@@ -1629,9 +1611,9 @@ void hip_handle_locator_state_timeouts(hip_assoc *hip_a, struct timeval *time1)
                " performing address check.\n",
                logaddr(addrcheck), l->lifetime);
         }
-      if (hip_a->rekey)           /* UPDATE already pending for  */
+      if (hip_a->rekey)             /* UPDATE already pending for  */
         {
-          continue;               /* some other reason     */
+          continue;               /* some other reason           */
         }
       /* perform address check */
       hip_a->rekey = malloc(sizeof(struct rekey_info));
@@ -1641,7 +1623,7 @@ void hip_handle_locator_state_timeouts(hip_assoc *hip_a, struct timeval *time1)
       hip_a->rekey->rk_time.tv_sec = time1->tv_sec;
       RAND_bytes((__u8*)&nonce, sizeof(__u32));
       l->nonce = nonce;
-      hip_send_update(hip_a, NULL, addrcheck);
+      hip_send_update(hip_a, NULL, NULL, addrcheck);
     }     /* end for */
 }
 
@@ -1716,7 +1698,7 @@ int hip_trigger(struct sockaddr *dst)
       memset(HIPA_SRC(hip_a), 0, sizeof(struct sockaddr_storage));
       memcpy(HIPA_SRC(hip_a), &a->addr,
              SALEN(&a->addr));
-      if (!a->preferred)           /* break if preferred address */
+      if (!a->preferred)             /* break if preferred address */
         {
           continue;
         }
@@ -1745,15 +1727,10 @@ int hip_trigger(struct sockaddr *dst)
  */
 int hip_trigger_rvs(struct sockaddr *rvs, hip_hit *rsp)
 {
-  struct sockaddr *src;
-  struct sockaddr_storage src_buff;
   hip_assoc* hip_a = NULL;
   hiphdr hiph;
   hi_node *mine = NULL;
   sockaddr_list *a;
-
-  memset(&src_buff, 0, sizeof(struct sockaddr_storage));
-  src = (struct sockaddr*) &src_buff;
 
   log_(NORMT,     "Manually triggering exchange with rvs: %s to "
        "communicate with responder: ", logaddr(rvs));
@@ -1800,7 +1777,7 @@ int hip_trigger_rvs(struct sockaddr *rvs, hip_hit *rsp)
         }
       memset(HIPA_SRC(hip_a), 0, sizeof(struct sockaddr_storage));
       memcpy(HIPA_SRC(hip_a), &a->addr, SALEN(&a->addr));
-      if (!a->preferred)           /* break if preferred address */
+      if (!a->preferred)             /* break if preferred address */
         {
           continue;
         }

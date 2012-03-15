@@ -1,24 +1,34 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-06 the Boeing Company
+ * Copyright (c) 2002-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_util.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- *  hip_util.c
- *
- *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+ *  \authors	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *              Tom Henderson <thomas.r.henderson@boeing.com>
  *
- * Miscellaneous helper functions for accessing HIP data structures,
- * debugging, converting, validation, etc.
+ *  \brief  Miscellaneous helper functions for accessing HIP data structures,
+ *          debugging, converting, validation, etc.
  *
  */
 
@@ -35,14 +45,14 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/wait.h>           /* waitpid()			*/
-#include <arpa/inet.h>          /* inet_addr()      */
+#include <arpa/inet.h>          /* inet_addr()                  */
 #ifdef __MACOSX__
 #include <netinet/in_systm.h>
 #endif
 #include <netinet/in.h>         /* INADDR_NONE                  */
 #include <netinet/ip.h>         /* INADDR_NONE                  */
 #include <netinet/ip6.h>
-#include <netdb.h>              /* gethostbyname    */
+#include <netdb.h>              /* gethostbyname                */
 #include <sys/ioctl.h>          /* get_my_addresses() support	*/
 #include <net/if.h>             /* get_my_addresses() support	*/
 #include <pthread.h>            /* pthreads support		*/
@@ -67,7 +77,7 @@
 #define NS_MAXDNAME DNS_MAX_NAME_LENGTH
 #define NS_PACKETSZ DNS_RFC_MAX_UDP_PACKET_LENGTH
 #else
-#include <arpa/nameser.h>       /* res_search() support   */
+#include <arpa/nameser.h>       /* res_search() support         */
 #include <resolv.h>             /* res_search()			*/
 #endif /* __WIN32__ */
 #include <hip/hip_dns.h>        /* DNS headers			*/
@@ -153,7 +163,7 @@ int add_addresses_from_dns(char *name, hi_node *hi)
         {
           continue;
         }
-      if (IS_LSI(r->ai_addr))           /* skip LSIs */
+      if (IS_LSI(r->ai_addr))             /* skip LSIs */
         {
           continue;
         }
@@ -303,15 +313,15 @@ int add_peer_hit(hip_hit peer_hit, struct sockaddr *peer_addr)
  * function key_data_to_hi()
  *
  * in:		data = data containing key RR (following RDATA header)
- *    alg = public key algorithm
- *    hi_length = public key length
- *    di_type   = domain identifier type
- *    di_length = domain idetnifier length (optional)
- *    **hi_p = pointer to pointer that will store new Host ID
- *    max_length = for length checking
+ *              alg = public key algorithm
+ *              hi_length = public key length
+ *              di_type   = domain identifier type
+ *              di_length = domain idetnifier length (optional)
+ *              **hi_p = pointer to pointer that will store new Host ID
+ *              max_length = for length checking
  *
  * out:		Returns length of bytes used, -1 on error.
- *    hi_p is populated with new Host ID data.
+ *              hi_p is populated with new Host ID data.
  *
  * Parses algorithm-specific key RR data into a hi_node structure.
  */
@@ -364,7 +374,7 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
       break;
     case HI_ALG_RSA:
       e_len = (__u8) data[0];
-      if (e_len == 0)            /* 16-bit value */
+      if (e_len == 0)             /* 16-bit value */
         {
           e_len = (__u16) data[1];
           e_len = ntohs(e_len);
@@ -538,7 +548,7 @@ int get_preferred_lsi(struct sockaddr *lsi)
   hi_node *hi = NULL;
   __u32 lsi32;
 #ifndef __UMH__
-  int g_state = 0;     /* dummy var */
+  int g_state = 0;       /* dummy var */
 #endif
 #ifndef __WIN32__
   struct timeval timeout;
@@ -614,8 +624,8 @@ __u32 get_preferred_addr()
  * function get_addr_from_list()
  *
  * in:	list = sockaddr list to search
- *  family = AF_INET or AF_INET6, or zero if address can be from either
- *     family
+ *      family = AF_INET or AF_INET6, or zero if address can be from either
+ *               family
  * out:	addr = pointer for storing address
  *
  * Finds the preferred address of the specified family from the specified
@@ -653,7 +663,8 @@ int get_addr_from_list(sockaddr_list *list, int family,
         {
           best = l;
           break;
-          /* otherwise, return the first address of the same family */
+          /* otherwise, return the first address of the same
+           *family */
         }
       else if (!best)
         {
@@ -665,6 +676,57 @@ int get_addr_from_list(sockaddr_list *list, int family,
     {
       memcpy(addr, &best->addr, SALEN(&best->addr));
       return(0);
+    }
+  else
+    {
+      return(-1);
+    }
+}
+
+/*
+ * function get_other_addr_from_list()
+ *
+ * in:	list = sockaddr list to search
+ *      exclude = sockaddr in list to exclude from search
+ * out:	addr = pointer for storing address
+ *
+ * Finds an address other than exclude in the given address list.
+ * Returns 0 if found another address and exclude,
+ *         1 if found another address but not exclude, and
+ *         -1 if no other address was found.
+ */
+int get_other_addr_from_list(sockaddr_list *list, struct sockaddr *exclude,
+                             struct sockaddr *addr)
+{
+  int r = 1;
+  sockaddr_list *l, *best = NULL;
+
+  for (l = list; l; l = l->next)
+    {
+      if (exclude->sa_family != l->addr.ss_family)
+        {
+          continue;
+        }
+      if (!memcmp(SA2IP(exclude), SA2IP(&l->addr),
+                  SAIPLEN(&l->addr)))
+        {
+          r = 0;
+          continue;               /* skip exclude addr */
+        }
+      if (l->preferred)
+        {
+          best = l;
+        }
+      else if (!best)
+        {
+          best = l;
+        }
+    }
+
+  if (best)
+    {
+      memcpy(addr, &best->addr, SALEN(&best->addr));
+      return(r);
     }
   else
     {
@@ -702,8 +764,8 @@ hi_node* find_host_identity(hi_node* hi_head, const hip_hit hitr)
  * function init_hip_assoc()
  *
  * in:		my_host_id = pointer to one of my HIs to copy into the assoc.
- *    peer_hit = pointer to peer's HIT, or NULL, for copying any
- *        attributes from peer_hi_head
+ *              peer_hit = pointer to peer's HIT, or NULL, for copying any
+ *                              attributes from peer_hi_head
  * out:		Returns pointer to a new hip_assoc, or NULL if error.
  *
  * Initialize a hip_assoc by copying the given HI (mine) and allocating the
@@ -842,7 +904,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
  *
  * in:		hip_a = the HIP association to delete.
  * out:		Returns the index of the emptied entry in the hip_assoc_table,
- *    or -1 on error.
+ *              or -1 on error.
  *
  * Frees dynamic memory structures contained in a HIP association entry.
  */
@@ -909,6 +971,10 @@ int free_hip_assoc(hip_assoc *hip_a)
         }
       free(hip_a->peer_rekey);
     }
+  if (hip_a->mh)
+    {
+      free(hip_a->mh);
+    }
   unuse_dh_entry(hip_a->dh);
   if (hip_a->peer_dh)
     {
@@ -952,7 +1018,7 @@ void free_hi_node(hi_node *hi)
   if (hi->copies != NULL)
     {
       (*(hi->copies))--;
-      if (*(hi->copies) == 0)            /* Last instance of this node */
+      if (*(hi->copies) == 0)             /* Last instance of this node */
         {
           free(hi->rvs_count);
           free(hi->copies);
@@ -979,7 +1045,7 @@ void free_hi_node(hi_node *hi)
  * function replace_hip_assoc()
  *
  * in:		a_old = the old HIP assocation entry to replace
- *    a_new = the new HIP assocation entry
+ *              a_new = the new HIP assocation entry
  *
  * out:		None.
  *
@@ -1014,6 +1080,7 @@ void replace_hip_assoc(hip_assoc *a_old, hip_assoc *a_new)
   a_old->regs = a_new->regs;
   a_old->rekey = a_new->rekey;
   a_old->peer_rekey = a_new->peer_rekey;
+  a_old->mh = a_new->mh;
   a_old->hip_transform = a_new->hip_transform;
   a_old->esp_transform = a_new->esp_transform;
   a_old->dh_group_id = a_new->dh_group_id;
@@ -1058,7 +1125,7 @@ void clear_retransmissions(hip_assoc *hip_a)
  * function set_state()
  *
  * in:		hip_a = the HIP association to modify
- *    state = the new state
+ *              state = the new state
  * out:		None.
  *
  * Set a new state for a HIP association, recording the current time for
@@ -1098,7 +1165,8 @@ hip_hit *hit_lookup(struct sockaddr *addr)
    * to resolve ambiguity when we have multiple HITs */
   if (HCNF.preferred_hi && strrchr(HCNF.preferred_hi, '-'))
     {
-      sscanf(strrchr(HCNF.preferred_hi, '-') + 1,"%d", &preferred_bits);
+      sscanf(strrchr(HCNF.preferred_hi,
+                     '-') + 1,"%d", &preferred_bits);
     }
   else
     {
@@ -1176,7 +1244,8 @@ hi_node *lsi_lookup(struct sockaddr *lsi)
           continue;
         }
       /* compare LSIs as IP addresses */
-      if (memcmp(SA2IP(&hi->lsi), SA2IP(lsi), SAIPLEN(&hi->lsi)) == 0)
+      if (memcmp(SA2IP(&hi->lsi), SA2IP(lsi),
+                 SAIPLEN(&hi->lsi)) == 0)
         {
           return(hi);
         }
@@ -1309,9 +1378,7 @@ void *background_resolve(void *arg)
 {
   hi_node *hi;
   char    *name;
-  int addr, err;
   struct addrinfo hints, *aux, *res = NULL;
-  struct sockaddr_in *a;
   struct rvs_dns_request *req;
 
   req = (struct rvs_dns_request *) arg;
@@ -1323,7 +1390,7 @@ void *background_resolve(void *arg)
   hints.ai_socktype = SOCK_RAW;
 
   log_(NORM, "*** Trying resolve %s ***\n", name);
-  err = getaddrinfo(name, NULL, &hints, &res);
+  getaddrinfo(name, NULL, &hints, &res);
   log_(NORM, "*** RESOLVE %s FINISHED!! ***\n", name);
 
   /* Start critical section */
@@ -1331,9 +1398,6 @@ void *background_resolve(void *arg)
 
   for (aux = res; aux != NULL; aux = aux->ai_next)
     {
-      a = (struct sockaddr_in *)aux->ai_addr;
-      /* addr = ntohl(a->sin_addr.s_addr); */
-      addr = a->sin_addr.s_addr;
       add_address_to_list(hi->rvs_addrs, aux->ai_addr, 0);
       print_rvs_addr_list(*(hi->rvs_addrs));
     }
@@ -1374,7 +1438,7 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 {
   unsigned char *p, *phit = NULL;
   char name[NS_MAXDNAME], fn[25] = "receive_hip_dns_response";
-  int i, qn_len, name_len = 0;
+  int i, qn_len, hi_len, name_len = 0;
   struct dns_hdr *r;
   struct dns_ans_hdr *dnsans;
   __u8 hit_len, pk_alg;
@@ -1440,7 +1504,8 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
           log_(WARN, "%s: Error with answer section.\n", fn);
           return(0);
         }
-      if (ntohs(dnsans->ans_type) != HIP_RR_TYPE)           /* not HIP record */
+      if (ntohs(dnsans->ans_type) != HIP_RR_TYPE)             /* not HIP record
+                                                               */
         {
           continue;
         }
@@ -1461,8 +1526,12 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
           phit = p;
           p += hit_len;
           log_(NORM, "HIP DNS RR: ");
-          key_data_to_hi(p, pk_alg, pk_len, DIT_NONE, 0,
-                         &hi, len - (p - buff));
+          hi_len = key_data_to_hi(p, pk_alg, pk_len, DIT_NONE, 0,
+                                  &hi, len - (p - buff));
+          if (hi_len < 0)
+            {
+              log_(WARN, "invalid HI in HIP DNS RR\n");
+            }
         }
 
       /* stop after the first valid Host Identity */
@@ -1491,15 +1560,18 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
               /* printf("%s: HIT validated OK.\n", fn); */
             }
 
-          pos = p - ((unsigned char*)&dnsans->ans_len + sizeof(dnsans->ans_len));
+          pos = p -
+                ((unsigned char*)&dnsans->ans_len +
+                 sizeof(dnsans->ans_len));
           remainingBytes = ntohs(dnsans->ans_len) - pos;
           rvsCount = 0;
           while (remainingBytes > 0)
             {
               dnsLen = strnlen((char*) p, remainingBytes) + 1;
-              memcpy(dnsName, p + 1, dnsLen - 1);                 /* First char
-                                                                   *is metadata
-                                                                   **/
+              memcpy(dnsName, p + 1, dnsLen - 1);                   /* First
+                                                                     * char is
+                                                                     * metadata
+                                                                     */
               j = 0;
               for (; j < dnsLen - 2; j++)
                 {
@@ -1509,32 +1581,35 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
                     }
                 }
               fprintf(stderr, "RVS: %s\n", dnsName);
-              add_rvs_hostname_to_node(hi, dnsName);                   /* Add
-                                                                        *hostanmes
-                                                                        *to
-                                                                        *hi_node
-                                                                        *struct
-                                                                        **/
+              /* Add hostanmes to hi_node struct */
+              add_rvs_hostname_to_node(hi, dnsName);
               rvsCount++;
               p += dnsLen;
               remainingBytes -= dnsLen;
             }
 
           /* TODO: handle pthread_t values correctly (IF NEEDED)
-           *   Dynamic thread ID creation would need a non-blocking pthread_join
-           *   to liberate the memory reserved for the IDs...
-           *   Note: pthread_create does not accept NULL as a first argument,
-           *   unlike other implementations found online (QNX)
+           *       Dynamic thread ID creation would need a
+           *       non-blocking pthread_join
+           *       to liberate the memory reserved for the IDs...
+           *       Note: pthread_create does not accept NULL as a
+           *       first argument,
+           *       unlike other implementations found online (QNX)
            */
 
 #ifndef HITGEN
           if (rvsCount > 0)
             {
               *(hi->rvs_count) += rvsCount;
-              for (k = 0; hi->rvs_hostnames[k] != NULL; k++)
+              for (k = 0; hi->rvs_hostnames[k] != NULL;
+                   k++)
                 {
-                  printf("  %d: %s\n", k, hi->rvs_hostnames[k]);
-                  argument = malloc(sizeof(struct rvs_dns_request));
+                  printf("  %d: %s\n",
+                         k,
+                         hi->rvs_hostnames[k]);
+                  argument =
+                    malloc(sizeof(struct
+                                  rvs_dns_request));
                   argument->name = hi->rvs_hostnames[k];
                   argument->node = hi;
 #ifdef WIN32
@@ -1542,7 +1617,8 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
                    * we don't have pthread conditionals */
                   background_resolve((void *)argument);
 #else
-                  /* Created thread will free allocated memory */
+                  /* Created thread will free allocated
+                   *memory */
                   pthread_create(&pt,
                                  NULL,
                                  background_resolve,
@@ -1636,7 +1712,8 @@ int addr_to_str(struct sockaddr *addr, __u8 *data, int len)
   DWORD dw = (DWORD)len;
   return(WSAAddressToString(addr, SALEN(addr), NULL, data, &dw) != 0);
 #else
-  return(inet_ntop(addr->sa_family, SA2IP(addr), (char*)data, len) == NULL);
+  return(inet_ntop(addr->sa_family, SA2IP(addr), (char*)data,
+                   len) == NULL);
 #endif
 }
 
@@ -1656,7 +1733,7 @@ int hit_to_str(char *hit_str, const hip_hit hit)
  *		dst_len = requested number of binary bytes
  *
  * out:		returns bytes converted if successful,
- *    -1 if error
+ *              -1 if error
  *
  */
 int hex_to_bin(char *src, char *dst, int dst_len)
@@ -1745,7 +1822,7 @@ int hex_to_bin(char *src, char *dst, int dst_len)
 /* solve_puzzle()
  *
  * in:		cookie = the cookie to solve (K, lifetime, random I, OPAQUE)
- *    solution = pointer to where to store the solution, if found
+ *              solution = pointer to where to store the solution, if found
  *
  * out:		returns 0 if solved, -ERANGE if exceeds max_tries
  *
@@ -1788,7 +1865,7 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
   /* Solve cookie puzzle */
   while (!done && g_state == 0)
     {
-      if ((++i) % 5000)           /* check progress every so often */
+      if ((++i) % 5000)             /* check progress every so often */
         {
           gettimeofday(&time2, NULL);
           if (TDIFF(time2, time1) > (int)lifetime_sec)
@@ -1806,12 +1883,14 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
       SHA1_Update(&c, ij, 48);
       SHA1_Final(md, &c);
 
-      if (!OPT.daemon && (D_VERBOSE == OPT.debug) && ((i % 10000) == 0))
+      if (!OPT.daemon && (D_VERBOSE == OPT.debug) &&
+          ((i % 10000) == 0))
         {
           printf(".");
           fflush(stdout);
         }
-      if (compare_bits((char*)md, SHA_DIGEST_LENGTH, zero, 8, k) == 0)
+      if (compare_bits((char*)md, SHA_DIGEST_LENGTH, zero, 8,
+                       k) == 0)
         {
           gettimeofday(&time2, NULL);
           log_(NORM, "found match in %d tries (~%d seconds).\n",
@@ -1834,10 +1913,10 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
  * function validate_solution()
  *
  *  in:		cookie_r = the cookie from R1
- *      cookie_i = the cookie from I2
- *      hit_i = Initiator's HIT
- *      hit_r = Responder's HIT
- *      solution = J, the puzzle solution given in I2
+ *              cookie_i = the cookie from I2
+ *              hit_i = Initiator's HIT
+ *              hit_r = Responder's HIT
+ *              solution = J, the puzzle solution given in I2
  *
  *  out:	Returns 0 if cookie is valid, -1 if invalid or error.
  */
@@ -2031,7 +2110,7 @@ int khi_hi_input(hi_node *hi, __u8 *out)
  * function hi_to_hit()
  *
  * in:		hi = the Host Identity from which HIT is computed
- *    hit = ptr to destination HIT
+ *              hit = ptr to destination HIT
  *
  * out:		Returns 0 if successful, -1 on error.
  *
@@ -2120,7 +2199,7 @@ int hi_to_hit(hi_node *hi, hip_hit hit)
  * function validate_hit()
  *
  * in:		hit = Host Identity Tag to validate
- *    hi = the Host Identity to check the HIT against
+ *              hi = the Host Identity to check the HIT against
  *
  * out:		Returns TRUE (1) if HIT is valid, FALSE (0) otherwise
  */
@@ -2159,8 +2238,8 @@ int validate_hit(hip_hit hit, hi_node *hi)
  * compare_bits()
  *
  * in:		s1 = first string
- *    s2 = second string
- *    numbits = number of bits to compare
+ *              s2 = second string
+ *              numbits = number of bits to compare
  *
  * out:		Returns 0 if equal, 1 if not equal, -1 on error.
  *
@@ -2193,7 +2272,7 @@ int compare_bits(const char *s1,
   mask = 0xFFFFFFFFFFFFFFFFll;
 #endif
   mask = mask >> (64 - numbits);
-  memcpy(&a, &s1[s1_len - 8], 8);     /* get the last 8 bytes (64 bits) */
+  memcpy(&a, &s1[s1_len - 8], 8);       /* get the last 8 bytes (64 bits) */
   memcpy(&b, &s2[s2_len - 8], 8);
   a = ntoh64(a) & mask;       /* s1, s2 are coming from network */
   b = ntoh64(b) & mask;
@@ -2225,7 +2304,7 @@ int compare_hits(hip_hit a, hip_hit b)
  * function maxof()
  *
  * in:		num_args = number of items
- *    ... = list of integers
+ *              ... = list of integers
  * out:		Returns the integer with the largest value from the
  *              list provided. Must have three or more values in the list.
  */
@@ -2320,13 +2399,11 @@ void print_usage()
   printf("  -nr\t no retransmit mode (for testing)\n");
   printf("  -t <addr>  manually trigger a HIP exchange with the ");
   printf("given address\n");
-#ifdef HIP_I3
-  printf("  -i3\t enable Hi3: use i3 overlay for control packets\n");
-#endif /* HIP_I3 */
   printf("  -rvs\t rendezvous server mode\n");
 #ifdef MOBILE_ROUTER
   printf("  -mr\t mobile router mode\n");
 #endif /* MOBILE_ROUTER */
+  printf("  -mh\t turn on loss-based multihoming\n");
   printf("With no options, simple output will be displayed.\n\n");
 }
 
@@ -2557,8 +2634,8 @@ __u16 checksum_magic(const hip_hit *i, const hip_hit *r)
       sum = (sum & 0xffff) + (sum >> 16);
     }
 
-  log_(NORM, "hitMagic checksum over %d bytes: 0x%x\n",
-       2 * HIT_SIZE, (__u16)sum);
+  /*log_(NORM, "hitMagic checksum over %d bytes: 0x%x\n",
+   *   2*HIT_SIZE, (__u16)sum);*/
 
   /* don't take the one's complement of the sum */
   return((__u16)sum);
@@ -2722,13 +2799,44 @@ hip_assoc* find_hip_association4(hip_hit hit)
   return(NULL);
 }
 
+/*
+ * Return pointer to hip association for the given SPI (none if not found)
+ * dir =  0 to check both incoming/outgoing SPIs,
+ *        1 for incoming SPI,
+ *        2 for outgoing SPI.
+ */
+hip_assoc* find_hip_association_by_spi(__u32 spi, int dir)
+{
+  int i;
+  hip_assoc* hip_a;
+
+  for (i = 0; i < max_hip_assoc; i++)
+    {
+      hip_a = &(hip_assoc_table[i]);
+      if (hip_a->state == 0)
+        {
+          continue;
+        }
+      if (((dir == 0) || (dir == 1)) && (hip_a->spi_in == spi))
+        {
+          return(hip_a);
+        }
+      else if (((dir == 0) ||
+                (dir == 2)) && (hip_a->spi_out == spi))
+        {
+          return(hip_a);
+        }
+    }
+  return(NULL);
+}
+
 hip_assoc *search_registrations(hip_hit hit, __u8 type)
 {
   hip_assoc *hip_a;
   struct reg_info *reg;
 
   hip_a = find_hip_association4(hit);
-  if (!hip_a)       /* peer HIT not found */
+  if (!hip_a)         /* peer HIT not found */
     {
       return(NULL);
     }
@@ -2765,7 +2873,8 @@ hip_assoc *search_registrations2(__u8 type, int state)
   for (i = 0; i < max_hip_assoc; i++)
     {
       hip_a = &(hip_assoc_table[i]);
-      if ((hip_a->state == 0) || !hip_a->regs || !hip_a->regs->reginfos)
+      if ((hip_a->state == 0) || !hip_a->regs ||
+          !hip_a->regs->reginfos)
         {
           continue;
         }
@@ -2922,12 +3031,12 @@ void fflush_log()
  * log_()
  *
  * in:		level = One of the following levels:
- *      NORM:  normal output (D_VERBOSE) to screen or file
- *      NORMT: timestamp + normal
- *      WARN:  errorstamp + normal
- *      ERR:   output to stderr only, use for fatal errors
- *      QOUT:   output to screen or file, even if D_QUIET, with time
- *    fmt, ... = arguments for printf(...)
+ *                NORM:  normal output (D_VERBOSE) to screen or file
+ *                NORMT: timestamp + normal
+ *                WARN:  errorstamp + normal
+ *                ERR:   output to stderr only, use for fatal errors
+ *                QOUT:   output to screen or file, even if D_QUIET, with time
+ *              fmt, ... = arguments for printf(...)
  *
  * Output to stdout, stderr, file, or nothing.
  */
@@ -3168,11 +3277,12 @@ void print_binary(void* data, int len)
       byte = i / 8;           /* which byte to print (0-len/8)  */
       bit = i % 8;            /* which bit within the byte (0-7) */
 #if 0
-      if (byte && !bit && (byte % 4 == 0))           /*newline every 4th byte */
+      if (byte && !bit && (byte % 4 == 0))             /*newline every 4th byte
+                                                        */
         {
           fprintf(fp, "\n");
         }
-      else if (i && (bit  == 0))           /* space between every byte */
+      else if (i && (bit  == 0))             /* space between every byte */
         {
           fprintf(fp, " ");
         }
@@ -3194,7 +3304,7 @@ void log_hipa_fromto(int level, char *msg, hip_assoc *hip_a, __u8 from, __u8 to)
   memset(logstr, 0, sizeof(logstr));
   /* from HIT/IP to HIT/IP occupies max 46*4 + 10 = 128  bytes */
   strncat(logstr, msg, 1024 - 130);
-  if (from && hip_a->hi)         /* from HIT/src */
+  if (from && hip_a->hi)         /* from HIT/src/LSI */
     {
       strcat(logstr, " from \n\t");
       hit_to_sockaddr(SA(&hit), hip_a->hi->hit);
@@ -3215,8 +3325,18 @@ void log_hipa_fromto(int level, char *msg, hip_assoc *hip_a, __u8 from, __u8 to)
         {
           strcat(logstr, (char *)addrstr);
         }
+      strcat(logstr, " / ");
+      if (addr_to_str(SA(&hip_a->hi->lsi), addrstr,
+                      INET6_ADDRSTRLEN))
+        {
+          strcat(logstr, "(none)");
+        }
+      else
+        {
+          strcat(logstr, (char *)addrstr);
+        }
     }
-  if (to && hip_a->peer_hi)         /* to HIT/dst */
+  if (to && hip_a->peer_hi)         /* to HIT/dst/LSI */
     {
       strcat(logstr, " to \n\t");
       hit_to_sockaddr(SA(&hit), hip_a->peer_hi->hit);
@@ -3230,6 +3350,16 @@ void log_hipa_fromto(int level, char *msg, hip_assoc *hip_a, __u8 from, __u8 to)
         }
       strcat(logstr, " / ");
       if (addr_to_str(HIPA_DST(hip_a), addrstr, INET6_ADDRSTRLEN))
+        {
+          strcat(logstr, "(none)");
+        }
+      else
+        {
+          strcat(logstr, (char *)addrstr);
+        }
+      strcat(logstr, " / ");
+      if (addr_to_str(SA(&hip_a->peer_hi->lsi), addrstr,
+                      INET6_ADDRSTRLEN))
         {
           strcat(logstr, "(none)");
         }
@@ -3393,7 +3523,7 @@ void hip_exit(int signal)
           ((signal == SIGINT) || (signal == SIGTERM)))
         {
           save_identities_file(TRUE);               /* store my HIs with R1
-                                                     *counters */
+                                                     * counters */
         }
       if (HCNF.save_known_identities &&
           ((signal == SIGINT) || (signal == SIGTERM)))

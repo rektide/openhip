@@ -1,32 +1,34 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2004-06 the Boeing Company
+ * Copyright (c) 2004-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_linux_umh.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors  Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  *
- *  hip_linux_umh.c
- *
- *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- *
- * User-mode HIP main program and initialization code.
- * Multiple threads are spawned that perform the actual work.
+ *  \brief  User-mode HIP main program and initialization code.
+ *          Multiple threads are spawned that perform the actual work.
  */
-
-/*
- * Style:  KNF where possible, K&R style braces around control structures
- * Style:  indent using tabs-- multi-line continuation 4 spaces
- * Style:  no tabs in middle of lines
- * Style:  this code authored with tabstop=8
- */
-
 #include <stdio.h>      /* stderr, stdout */
 #include <unistd.h>     /* chdir() */
 #include <pthread.h>    /* pthread_create() */
@@ -144,7 +146,8 @@ void post_init_tap()
   addr.ss_family = AF_INET;
 
   /* this performs the equivalent of:
-   * system("/sbin/ip addr add 1.0.0.1/8 broadcast 1.255.255.255 dev hip0")
+   * system("/sbin/ip addr add 1.0.0.1/8 broadcast 1.255.255.255 dev
+   *        hip0")
    * system("/sbin/ip link set hip0 mtu 1400");
    * system("/sbin/ip link set hip0 up");
    */
@@ -216,7 +219,7 @@ post_init_tap_retry:
 void init_hip(int ac, char **av)
 {
   pthread_t tunreader_thrd, esp_output_thrd, esp_input_thrd;
-  pthread_t pfkey_thrd, hipd_thrd, dns_thrd, status_thrd;
+  pthread_t hipd_thrd, dns_thrd, status_thrd;
 #ifdef MOBILE_ROUTER
   pthread_t mr_thrd;
 #endif /* MOBILE_ROUTER */
@@ -238,7 +241,7 @@ void init_hip(int ac, char **av)
   while (ac > 0)
     {
       /* printf("adding arg: %s\n", *av); */
-      if (i > 0)           /* add a space between parameters */
+      if (i > 0)             /* add a space between parameters */
         {
           hipd_args[i++] = ' ';
         }
@@ -275,11 +278,6 @@ void init_hip(int ac, char **av)
   /*
    * Kernel helpers
    */
-  if (pthread_create(&pfkey_thrd, NULL, hip_pfkey, NULL))
-    {
-      printf("Error creating PFKEY thread.\n");
-      exit(1);
-    }
   if (pthread_create(&status_thrd, NULL, hip_status, NULL))
     {
       printf("Error creating status thread.\n");
@@ -412,7 +410,6 @@ void init_hip(int ac, char **av)
  */
 int main (int argc, char **argv)
 {
-  int rc;
 /*
  *       if (freopen("hip_ipsec_error.log", "a", stderr) == NULL)
  *               return;
@@ -423,8 +420,7 @@ int main (int argc, char **argv)
   argv++, argc--;
   while (argc > 0)
     {
-      rc = 0;
-      if (strstr("-v-q-d-r1-p-nr-o-a-t-u-i3-conf-mn-mr-g", *argv))
+      if (strstr("-v-q-d-r1-p-nr-o-a-t-u-conf-mn-mr-mh-g", *argv))
         {
           argv--, argc++;
           goto start_hip;

@@ -1,19 +1,30 @@
+#
 # Host Identity Protocol
-# Copyright (C) 2002-05 the Boeing Company
+# Copyright (c) 2002-2012 the Boeing Company
 # 
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+#  \file  Makefile.msvc
 #
-#  win32 Makefile for MSVC++
+#  \authors  Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
 #
-#  Author:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+#  \brief  win32 Makefile for MSVC++
 #
 
 CC	  	= cl
@@ -50,11 +61,9 @@ OBJS =	$(SRC)\$(SRCPROTO)\hip_addr.obj \
 	$(SRC)\$(SRCUM)\hip_dns.obj \
 	$(SRC)\$(SRCUM)\hip_esp.obj \
 	$(SRC)\$(SRCUM)\hip_nl.obj \
-	$(SRC)\$(SRCUM)\hip_pfkey.obj \
 	$(SRC)\$(SRCUM)\hip_sadb.obj \
 	$(SRC)\$(SRCUM)\hip_status2.obj \
 	$(SRC)\$(SRCUM)\hip_umh_main.obj \
-	$(SRC)\$(SRCUM)\libipsec_stub.obj \
 	$(SRC)\$(SRCUTIL)\hip_util.obj \
 	$(SRC)\$(SRCUTIL)\hip_xml.obj \
 	$(SRC)\$(SRCW32)\socketpair.obj \
@@ -75,11 +84,9 @@ OBJNAMES=hip_addr.obj \
 	hip_dns.obj \
 	hip_esp.obj \
 	hip_nl.obj \
-	hip_pfkey.obj \
 	hip_sadb.obj \
 	hip_status2.obj \
 	hip_umh_main.obj \
-	libipsec_stub.obj \
 	hip_util.obj \
 	hip_xml.obj \
 	socketpair.obj \

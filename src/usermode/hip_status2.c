@@ -1,22 +1,32 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2005-06 the Boeing Company
+ * Copyright (c) 2005-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_status.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  *
- *  hip_status.c
- *
- *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- *
- * Status thread
+ *  \brief  Status thread
  *
  */
 
@@ -35,7 +45,6 @@
 #include <hip/hip_sadb.h>               /* access to SADB */
 #include <hip/hip_status.h>
 #include <hip/hip_funcs.h>      /* pthread_mutex_lock() */
-#include <win32/rtnetlink.h>            /* from <linux/rtnetlink.h> */
 
 #ifdef HIP_VPLS
 #include <utime.h>
@@ -127,7 +136,9 @@ void *hip_status(void *arg)
         }
 #endif
 
-      if ((err = select(s + 1, &read_fdset, NULL,NULL, &timeout) < 0))
+      if ((err =
+             select(s + 1, &read_fdset, NULL,NULL,
+                    &timeout) < 0))
         {
           if (errno == EINTR)
             {
@@ -272,7 +283,6 @@ void dump_sadb(char *buff, int *tlv_len, __u32 spi)
           ADD_ITEM(p, entry->hit_magic, len);
           ADD_ITEM(p, entry->mode, len);
           ADD_ITEM(p, entry->lsi, len);
-          ADD_ITEM(p, entry->lsi6, len);
           ADD_ITEM(p, entry->a_type, len);
           ADD_ITEM(p, entry->e_type, len);
           ADD_ITEM(p, entry->a_keylen, len);

@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# Test for prerequisites aclocal, automake, autoconf
+command -v aclocal >/dev/null 2>&1 || { echo >&2 "Command 'aclocal' not found, aborting."; exit 1;}
+command -v automake >/dev/null 2>&1 || { echo >&2 "Command 'automake' not found, aborting."; exit 1;}
+command -v autoconf >/dev/null 2>&1 || { echo >&2 "Command 'autoconf' not found, aborting."; exit 1;}
+
 # libtool is only used to build the configuration libraries associated
 #  with the --enable-vpls configure option
 if [ "$1a" = "--enable-vplsa" ]; then

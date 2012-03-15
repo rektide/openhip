@@ -139,10 +139,6 @@ SOURCE=..\src\hip_output.c
 # End Source File
 # Begin Source File
 
-SOURCE=.\hip_pfkey.c
-# End Source File
-# Begin Source File
-
 SOURCE=.\hip_sadb.c
 # End Source File
 # Begin Source File
@@ -204,10 +200,6 @@ SOURCE=.\netlink.h
 # Begin Source File
 
 SOURCE=".\openvpn-common.h"
-# End Source File
-# Begin Source File
-
-SOURCE=.\pfkeyv2.h
 # End Source File
 # Begin Source File
 

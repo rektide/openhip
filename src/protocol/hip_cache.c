@@ -1,25 +1,35 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-06 the Boeing Company
+ * Copyright (c) 2002-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_cache.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- *  hip_cache.c
- *
- *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+ *  \authors	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *              Tom Henderson <thomas.r.henderson@boeing.com>
  *
- * R1 Management Cache
- * Stores precomputed R1s and their cookie solutions.
- * Also stores DH contexts.
+ *  \brief  R1 Management Cache
+ *          Stores precomputed R1s and their cookie solutions.
+ *          Also stores DH contexts.
  *
  */
 #include <stdio.h>
@@ -206,16 +216,20 @@ void replace_next_R1()
       entry->packet = (__u8 *) malloc(calculate_r1_length(h));
       if (entry->packet == NULL)
         {
-          log_(NORMT, "Malloc error! Trying to create R1 packet.\n");
+          log_(NORMT,
+               "Malloc error! Trying to create R1 packet.\n");
         }
-      entry->len = hip_generate_R1(entry->packet, h, entry->current_puzzle,
+      entry->len = hip_generate_R1(entry->packet,
+                                   h,
+                                   entry->current_puzzle,
                                    entry->dh_entry);
       gettimeofday(&entry->creation_time, NULL);
 
       /* index is about to roll over, so all R1s have been replaced
        * at this point, we can increase the R1 generation count
        */
-      if ((current_index + 1 >= R1_CACHE_SIZE) && (h->r1_gen_count > 0))
+      if ((current_index + 1 >= R1_CACHE_SIZE) &&
+          (h->r1_gen_count > 0))
         {
           h->r1_gen_count++;
         }
@@ -233,9 +247,9 @@ void replace_next_R1()
  * compute_cookie_index()
  *
  * in:		src = source address of I1 or I2 packet
- *    hiti = initiator's HIT
- *    current = TRUE means use current random number, FALSE means
- *              use the previous random number
+ *              hiti = initiator's HIT
+ *              current = TRUE means use current random number, FALSE means
+ *                        use the previous random number
  *
  * Hash function to return an index to an R1 entry given src, HIT.
  * This mapping function must be considerably cheaper than computing SHA-1
@@ -287,7 +301,8 @@ int calculate_r1_length(hi_node *hi)
 
   hi_len = build_tlv_hostid_len(hi, HCNF.send_hi_name);
 
-  len =   sizeof(hiphdr) + sizeof(tlv_esp_info) + 2 * sizeof(tlv_locator) +
+  len =   sizeof(hiphdr) + sizeof(tlv_esp_info) + 2 *
+        sizeof(tlv_locator) +
         sizeof(tlv_r1_counter) + sizeof(tlv_puzzle) +
         sizeof(tlv_diffie_hellman) + dhprime_len[HCNF.dh_group] +
         eight_byte_align(sizeof(tlv_hip_transform) - 2 +
@@ -378,8 +393,8 @@ dh_cache_entry *new_dh_cache_entry(__u8 group_id)
  * get_dh_entry()
  *
  * in:		group_id = the DH group desired
- *    new = TRUE if a new entry is needed (i.e. rekeying),
- *          FALSE if a cached entry is OK.
+ *              new = TRUE if a new entry is needed (i.e. rekeying),
+ *                    FALSE if a cached entry is OK.
  *
  * out:		returns an existing, non-stale entry, or creates a new one
  *
@@ -465,7 +480,8 @@ void expire_old_dh_entries()
               if (old->group_id == HCNF.dh_group)
                 {
                   entry =
-                    new_dh_cache_entry(old->group_id);
+                    new_dh_cache_entry(
+                      old->group_id);
                   entry->next = next;
                   if (last)
                     {

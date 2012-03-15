@@ -1,6 +1,6 @@
 %define version @PACKAGE_VERSION@
 Name: 		openhip
-License:	GPLv2
+License:	MIT
 Group: 		System Environment/Daemons
 Summary: 	OpenHIP Host Identity Protocol usermode for Linux
 Prefix: 	/usr/local

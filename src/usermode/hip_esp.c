@@ -1,24 +1,33 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2004-06 the Boeing Company
+ * Copyright (c) 2004-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_esp.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors  Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  *
- *  hip_esp.c
+ *  \brief  User-mode HIP ESP implementation.
  *
- *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- *
- * User-mode HIP ESP implementation.
- *
- * tunreader portions Copyright (C) 2004 UC Berkeley
  */
 #include <stdio.h>              /* printf() */
 #ifdef __WIN32__
@@ -43,7 +52,7 @@
 #include <netinet/udp.h>        /* struct udphdr */
 #include <arpa/inet.h>
 #ifndef __MACOSX__
-#include <linux/types.h>        /* for pfkeyv2.h types */
+#include <linux/types.h>
 #endif /* __MACOSX__ */
 #endif /* __WIN32__ */
 #include <string.h>             /* memset, etc */
@@ -51,18 +60,12 @@
 #include <openssl/sha.h>        /* SHA1 algorithms */
 #include <openssl/des.h>        /* 3DES algorithms */
 #include <openssl/rand.h>       /* RAND_bytes() */
-#include <win32/pfkeyv2.h>
 #include <hip/hip_types.h>
 #include <hip/hip_funcs.h>
 #include <hip/hip_usermode.h>
 #include <hip/hip_sadb.h>
 #include <hip/hip_globals.h>
-
-#if defined(__BIG_ENDIAN__) || defined(__MACOSX__)
-#include <mac/checksum_mac.h>
-#else
 #include <win32/checksum.h>
-#endif
 
 #ifdef HIP_VPLS
 #include <utime.h>
@@ -97,6 +100,9 @@ long g_read_usec;
 
 #define BUFF_LEN 2000
 #define HMAC_SHA_96_BITS 96 /* 12 bytes */
+#define REPLAY_WIN_SIZE 64 /* 64 packets */
+
+#define MULTIHOMING_LOSS_THRESHOLD 5
 
 /* array of Ethernet addresses used by get_eth_addr() */
 #define MAX_ETH_ADDRS 255
@@ -141,6 +147,16 @@ void add_ipv6_header(__u8 *data,
 __u16 in_cksum(struct ip *iph);
 __u64 get_eth_addr(int family, __u8 *addr);
 
+void esp_start_base_exchange(struct sockaddr *lsi);
+void esp_start_expire(__u32 spi);
+void esp_receive_udp_hip_packet(char *buff, int len);
+void esp_signal_loss(__u32 spi, __u32 loss, struct sockaddr *dst);
+__u32 get_next_seqno(hip_sadb_entry *entry);
+int esp_anti_replay_check_initial(hip_sadb_entry *entry, __u32 seqno,
+                                  __u32 *sequence_hi);
+__u64 esp_update_anti_replay(hip_sadb_entry *entry, __u32 seqno, __u32 seqno_hi);
+
+/* externals */
 extern __u32 get_preferred_lsi(struct sockaddr *lsi);
 extern int do_bcast();
 extern int maxof(int num_args, ...);
@@ -197,6 +213,7 @@ void *hip_esp_output(void *arg)
   static hip_sadb_entry *entry;
   struct sockaddr_storage ss_lsi;
   struct sockaddr *lsi = (struct sockaddr*)&ss_lsi;
+  sockaddr_list *l;
 #ifndef HIP_VPLS
   __u32 lsi_ip;
 #else
@@ -254,7 +271,9 @@ void *hip_esp_output(void *arg)
       endbox_check_hello_time(&now_time);
 #endif
 
-      if ((err = select(readsp[1] + 1, &fd, NULL, NULL, &timeout)) < 0)
+      if ((err =
+             select(readsp[1] + 1, &fd, NULL, NULL,
+                    &timeout)) < 0)
         {
           if (IS_EINTR_ERROR())
             {
@@ -274,7 +293,9 @@ void *hip_esp_output(void *arg)
       memset(lsi, 0, sizeof(struct sockaddr_storage));
 
 #ifdef __WIN32__
-      if ((len = recv(readsp[1], raw_buff, BUFF_LEN, 0)) == SOCKET_ERROR)
+      if ((len =
+             recv(readsp[1], raw_buff, BUFF_LEN,
+                  0)) == SOCKET_ERROR)
         {
 #else
       if ((len = read(readsp[1], raw_buff, BUFF_LEN)) < 0)
@@ -296,7 +317,8 @@ void *hip_esp_output(void *arg)
           iph = (struct ip*) &raw_buff[14];
           /* accept IPv4 traffic to 1.x.x.x here */
 #ifdef HIP_VPLS
-          if (endbox_ipv4_packet_check(iph, lsi, &packet_count) < 0)
+          if (endbox_ipv4_packet_check(iph, lsi,
+                                       &packet_count) < 0)
             {
               continue;
             }
@@ -311,12 +333,14 @@ void *hip_esp_output(void *arg)
 
 #else /* HIP_VPLS */
 
-          if (((iph->ip_v) == IPVERSION) &&
 #if defined(__BIG_ENDIAN__) || defined(__arm__)
-              (iph->ip_dst.s_addr >> 24 & 0xFF) != 0x01)
+          if (((iph->ip_v) == IPVERSION) &&
+              ((iph->ip_dst.s_addr >> 24 & 0xFF) != 0x01))
 #else /* BIG_ENDIAN */
-              (iph->ip_dst.s_addr & 0xFF) != 0x01)
-#endif /* BIG_ENDIAN */ {
+          if (((iph->ip_v) == IPVERSION) &&
+              ((iph->ip_dst.s_addr & 0xFF) != 0x01))
+#endif /* BIG_ENDIAN */
+            {
               continue;
             }
           lsi_ip = ntohl(iph->ip_dst.s_addr);
@@ -346,9 +370,10 @@ void *hip_esp_output(void *arg)
 #endif
               /* No SADB entry. Send ACQUIRE if we haven't
                * already, i.e. a new lsi_entry was created */
-              if (buffer_packet(lsi, raw_buff, len) == TRUE)
+              if (buffer_packet(lsi, raw_buff,
+                                len) == TRUE)
                 {
-                  pfkey_send_acquire(lsi);
+                  esp_start_base_exchange(lsi);
                 }
               continue;
             }
@@ -361,8 +386,20 @@ void *hip_esp_output(void *arg)
 #else
               offset = 0;
 #endif
-              err = hip_esp_encrypt(raw_buff, raw_len,
-                                    &data[offset], &len, entry, &now);
+              if (check_esp_seqno_overflow(entry))
+                {
+                  esp_start_expire(entry->spi);
+                }
+              err = hip_esp_encrypt(raw_buff,
+                                    raw_len,
+                                    &data[offset],
+                                    &len,
+                                    entry,
+                                    &now);
+              if (err < 0)
+                {
+                  entry->dropped++;
+                }
               pthread_mutex_unlock(&entry->rw_lock);
               if (err)
                 {
@@ -380,10 +417,15 @@ void *hip_esp_output(void *arg)
                * selection problems.
                */
               add_ipv4_header(data,
-                              ntohl(LSI4(&entry->src_addrs->addr)),
-                              ntohl(LSI4(&entry->dst_addrs->addr)),
+                              ntohl(LSI4(&entry->src_addrs->
+                                         addr)),
+                              ntohl(LSI4(
+                                      &entry->dst_addrs
+                                      ->
+                                      addr)),
                               (struct ip*)
-                              &raw_buff[sizeof(struct eth_hdr)],
+                              &raw_buff[sizeof(struct eth_hdr)
+                              ],
                               sizeof(struct ip) + len,
                               IPPROTO_ESP);
               err = sendto(s_raw, data,
@@ -393,12 +435,17 @@ void *hip_esp_output(void *arg)
 #else
 #ifdef __MACOSX__
 /*I need to build an IP header and write it to a different address!*/
-              /* TODO: use offset above, and LSI4 macro instead
+              /* TODO: use offset above, and LSI4 macro
+               * instead
                *       of calls to inet_addr()
                */
               memmove(&data[20],&data,len);
-              saddr = inet_addr(logaddr(SA(&entry->src_addrs->addr)));
-              daddr = inet_addr(logaddr(SA(&entry->dst_addrs->addr)));
+              saddr =
+                inet_addr(logaddr(SA(&entry->src_addrs
+                                     ->addr)));
+              daddr =
+                inet_addr(logaddr(SA(&entry->dst_addrs
+                                     ->addr)));
 
               add_outgoing_esp_header(data, saddr,daddr,len);
 
@@ -434,11 +481,28 @@ void *hip_esp_output(void *arg)
                 }
               else
                 {
-                  pthread_mutex_lock(&entry->rw_lock);
-                  entry->bytes += sizeof(struct ip) + err;
-                  entry->usetime.tv_sec = now.tv_sec;
-                  entry->usetime.tv_usec = now.tv_usec;
-                  pthread_mutex_unlock(&entry->rw_lock);
+                  hip_sadb_inc_bytes(
+                    entry,
+                    sizeof(struct ip) +
+                    err,
+                    &now,
+                    1);
+                }
+              /* multihoming: duplicate packets to multiple
+               * destination addresses */
+              for (l = entry->dst_addrs->next; l;
+                   l = l->next)
+                {
+                  err = sendto(s, data, len, flags,
+                               SA(&l->addr),
+                               SALEN(&l->addr));
+                  if (err < 0)
+                    {
+                      printf(
+                        "hip_esp_output(): sendto() "
+                        "failed: %s\n",
+                        strerror(errno));
+                    }
                 }
               /* broadcasts are unicast to each association */
               if (!is_broadcast)
@@ -447,9 +511,9 @@ void *hip_esp_output(void *arg)
                 }
               entry = hip_sadb_get_next(entry);
             }             /* end while */
-          /*
-           * IPv6
-           */
+                          /*
+                           * IPv6
+                           */
         }
       else if ((raw_buff[12] == 0x86) && (raw_buff[13] == 0xdd))
         {
@@ -493,23 +557,37 @@ void *hip_esp_output(void *arg)
           memcpy(SA2IP(lsi), &ip6h->ip6_dst, SAIPLEN(lsi));
           if (!(entry = hip_sadb_lookup_addr(lsi)))
             {
-              if (buffer_packet(lsi, raw_buff, len) == TRUE)
+              if (buffer_packet(lsi, raw_buff,
+                                len) == TRUE)
                 {
-                  pfkey_send_acquire(lsi);
+                  esp_start_base_exchange(lsi);
                 }
               continue;
             }
           raw_len = len;
           pthread_mutex_lock(&entry->rw_lock);
+          if (check_esp_seqno_overflow(entry))
+            {
+              esp_start_expire(entry->spi);
+            }
           err = hip_esp_encrypt(raw_buff, raw_len,
                                 data, &len, entry, &now);
+          if (err < 0)
+            {
+              entry->dropped++;
+            }
           pthread_mutex_unlock(&entry->rw_lock);
+          if (err)
+            {
+              continue;
+            }
           flags = 0;
           if (entry->mode == 3)
             {
               s = s_esp_udp;
             }
-          else if (entry->dst_addrs->addr.ss_family == AF_INET)
+          else if (entry->dst_addrs->addr.ss_family ==
+                   AF_INET)
             {
               s = s_esp;
             }
@@ -527,11 +605,9 @@ void *hip_esp_output(void *arg)
             }
           else
             {
-              pthread_mutex_lock(&entry->rw_lock);
-              entry->bytes += sizeof(struct ip6_hdr) + err;
-              entry->usetime.tv_sec = now.tv_sec;
-              entry->usetime.tv_usec = now.tv_usec;
-              pthread_mutex_unlock(&entry->rw_lock);
+              hip_sadb_inc_bytes(entry,
+                                 sizeof(struct ip6_hdr) + err,
+                                 &now, 1);
             }
           /*
            * ARP
@@ -543,7 +619,8 @@ void *hip_esp_output(void *arg)
           /*
            *  printf("Raw buffer before handle_arp:\n");
            *  hex_print("\n\t", raw_buff, 60, 0);
-           *  log_(NORM, "LSI into handle_arp: %0X\n", lsi->sa_data);
+           *  log_(NORM, "LSI into handle_arp: %0X\n",
+           * lsi->sa_data);
            */
           err = handle_arp(raw_buff, len, data, &len, lsi);
           if (err)
@@ -551,7 +628,8 @@ void *hip_esp_output(void *arg)
               continue;
             }
 #ifdef __WIN32__
-          if (!WriteFile(tapfd, data, len, &lenin, &overlapped))
+          if (!WriteFile(tapfd, data, len, &lenin,
+                         &overlapped))
             {
               printf("hip_esp_output WriteFile() failed.\n");
             }
@@ -560,11 +638,12 @@ void *hip_esp_output(void *arg)
             {
               printf("hip_esp_output write() failed.\n");
             }
-#endif
-#else
+#endif /* __WIN32__ */
+#else /* HIP_VPLS */
           /* Is the ARP for one of our legacy nodes? */
           arph = (struct arp_hdr*) &raw_buff[14];
-          if (endbox_arp_packet_check(arph, lsi, &packet_count) < 0)
+          if (endbox_arp_packet_check(arph, lsi,
+                                      &packet_count) < 0)
             {
               continue;
             }
@@ -576,9 +655,10 @@ void *hip_esp_output(void *arg)
                 {
                   continue;
                 }
-              if (buffer_packet(lsi, raw_buff, len) == TRUE)
+              if (buffer_packet(lsi, raw_buff,
+                                len) == TRUE)
                 {
-                  pfkey_send_acquire(lsi);
+                  esp_start_base_exchange(lsi);
                 }
             }
           else                   /* Need to send packet */
@@ -590,8 +670,12 @@ void *hip_esp_output(void *arg)
 #else
               offset = 0;
 #endif
-              err = hip_esp_encrypt(raw_buff, raw_len,
-                                    &data[offset], &len, entry, &now);
+              err = hip_esp_encrypt(raw_buff,
+                                    raw_len,
+                                    &data[offset],
+                                    &len,
+                                    entry,
+                                    &now);
               pthread_mutex_unlock(&entry->rw_lock);
               if (err)
                 {
@@ -604,10 +688,15 @@ void *hip_esp_output(void *arg)
                * selection problems.
                */
               add_ipv4_header(data,
-                              ntohl(LSI4(&entry->src_addrs->addr)),
-                              ntohl(LSI4(&entry->dst_addrs->addr)),
+                              ntohl(LSI4(&entry->src_addrs->
+                                         addr)),
+                              ntohl(LSI4(
+                                      &entry->dst_addrs
+                                      ->
+                                      addr)),
                               (struct ip*)
-                              &raw_buff[sizeof(struct eth_hdr)],
+                              &raw_buff[sizeof(struct eth_hdr)
+                              ],
                               sizeof(struct ip) + len,
                               IPPROTO_ESP);
               err = sendto(s_raw, data,
@@ -617,12 +706,17 @@ void *hip_esp_output(void *arg)
 #else
 #ifdef __MACOSX__
 /*I need to build an IP header and write it to a different address!*/
-              /* TODO: use offset above, and LSI4 macro instead
+              /* TODO: use offset above, and LSI4 macro
+               * instead
                *       of calls to inet_addr()
                */
               memmove(&data[20],&data,len);
-              saddr = inet_addr(logaddr(SA(&entry->src_addrs->addr)));
-              daddr = inet_addr(logaddr(SA(&entry->dst_addrs->addr)));
+              saddr =
+                inet_addr(logaddr(SA(&entry->src_addrs
+                                     ->addr)));
+              daddr =
+                inet_addr(logaddr(SA(&entry->dst_addrs
+                                     ->addr)));
 
               add_outgoing_esp_header(data, saddr,daddr,len);
 
@@ -737,7 +831,7 @@ void *hip_esp_input(void *arg)
   struct ip_esp_hdr *esph;
   udphdr *udph;
 
-  __u32 spi, seq_no;
+  __u32 spi;
   hip_sadb_entry *entry;
 #ifdef __WIN32__
   DWORD lenin;
@@ -797,7 +891,9 @@ void *hip_esp_input(void *arg)
       hip_remove_expired_sel_entries(&now);           /* this is rate-limited */
       hip_sadb_expire(&now);
 
-      if ((err = select(max_fd + 1, &fd, NULL, NULL, &timeout)) < 0)
+      if ((err =
+             select(max_fd + 1, &fd, NULL, NULL,
+                    &timeout)) < 0)
         {
           if (IS_EINTR_ERROR())
             {
@@ -816,7 +912,6 @@ void *hip_esp_input(void *arg)
           iph = (struct ip *) &buff[0];
           esph = (struct ip_esp_hdr *) &buff[sizeof(struct ip)];
           spi     = ntohl(esph->spi);
-          seq_no  = ntohl(esph->seq_no);
           if (!(entry = hip_sadb_lookup_spi(spi)))
             {
               /*printf("Warning: SA not found for SPI 0x%x\n",
@@ -827,6 +922,10 @@ void *hip_esp_input(void *arg)
           pthread_mutex_lock(&entry->rw_lock);
           err = hip_esp_decrypt(buff, len, data, &offset, &len,
                                 entry, iph, &now);
+          if (err < 0)
+            {
+              entry->dropped++;
+            }
           pthread_mutex_unlock(&entry->rw_lock);
           if (err)
             {
@@ -842,7 +941,9 @@ void *hip_esp_input(void *arg)
 #else /* __WIN32__ */
 #ifdef HIP_VPLS
           packet_count++;
-          iph = (struct ip*) &data[offset + sizeof(struct eth_hdr)];
+          iph =
+            (struct ip*) &data[offset +
+                               sizeof(struct eth_hdr)];
           endbox_ipv4_multicast_write(data, offset, len);
 #else /* HIP_VPLS */
           if (write(tapfd, &data[offset], len) < 0)
@@ -869,41 +970,41 @@ void *hip_esp_input(void *arg)
           esph = (struct ip_esp_hdr *) \
                  &buff[sizeof(struct ip) + sizeof(udphdr)];
           spi     = ntohl(esph->spi);
-          seq_no  = ntohl(esph->seq_no);
+          /*seq_no = ntohl(esph->seq_no);*/
 
           /* SOCK_RAW receives all UDP traffic, not just
            * HIP_UDP_PORT, even though we used bind(). */
           if (HIP_UDP_PORT != ntohs(udph->dst_port))
             {
-              /*	printf("ignoring %d bytes from UDP port %d\n",
+              /*	printf("ignoring %d bytes from UDP port
+               * %d\n",
                *               len, ntohs(udph->dst_port)); */
               continue;
             }
 
           /* UDP packet with SPI of zero is a HIP control packet,
-           * send it to the hipd protocol thread via PFKEY.
+           * send it to the hipd thread via ESP socketpair.
            */
           if (0x0 == spi)
             {
-              if (pfkey_send_hip_packet((char *)buff, len) < 0)
-                {
-                  printf("Failed to process UDP-encapsu"
-                         "lated HIP packet of %d bytes.\n",
-                         len);
-                }
+              esp_receive_udp_hip_packet((char *)buff, len);
               continue;
             }
 
           if (!(entry = hip_sadb_lookup_spi(spi)))
             {
-              /*printf("Warning: SA not found for SPI 0x%x\n",
-               *       spi);*/
+              printf("Warning: SA not found for SPI 0x%x\n",
+                     spi);
               continue;
             }
 
           pthread_mutex_lock(&entry->rw_lock);
           err = hip_esp_decrypt(buff, len, data, &offset, &len,
                                 entry, iph, &now);
+          if (err < 0)
+            {
+              entry->dropped++;
+            }
           pthread_mutex_unlock(&entry->rw_lock);
           /* these two locks acquired by hip_sadb_lookup_addr */
           if (err)
@@ -942,7 +1043,7 @@ void *hip_esp_input(void *arg)
           /* there is no IPv6 header supplied */
           esph = (struct ip_esp_hdr *) &buff[0];
           spi     = ntohl(esph->spi);
-          seq_no  = ntohl(esph->seq_no);
+          /* seq_no = ntohl(esph->seq_no);*/
           if (!(entry = hip_sadb_lookup_spi(spi)))
             {
               printf("Warning: SA not found for SPI 0x%x\n",
@@ -952,6 +1053,10 @@ void *hip_esp_input(void *arg)
           pthread_mutex_lock(&entry->rw_lock);
           err = hip_esp_decrypt(buff, len, data, &offset, &len,
                                 entry, NULL, &now);
+          if (err < 0)
+            {
+              entry->dropped++;
+            }
           pthread_mutex_unlock(&entry->rw_lock);
           if (err)
             {
@@ -1004,7 +1109,8 @@ void tunreader(void *arg)
         {
           if (GetLastError() == ERROR_IO_PENDING)
             {
-              /* WaitForSingleObject(overlapped.hEvent,2000); */
+              /* WaitForSingleObject(overlapped.hEvent,2000);
+               */
               WaitForSingleObject(overlapped.hEvent,INFINITE);
               if (!GetOverlappedResult(tapfd, &overlapped,
                                        &len, FALSE))
@@ -1172,14 +1278,15 @@ int handle_nsol(__u8 *in, int len, __u8 *out, int *outlen,struct sockaddr *addr)
       return(1);
     }
   target = (struct in6_addr*) (nsol + 1);
-  if (!IS_HIT(target))       /* target must be HIT */
+  if (!IS_HIT(target))         /* target must be HIT */
     {
       return(1);
     }
   /* don't answer requests for self */
   src->sa_family = AF_INET6;
   get_preferred_lsi(src);
-  if (IN6_ARE_ADDR_EQUAL(target, &((struct sockaddr_in6*)src)->sin6_addr))
+  if (IN6_ARE_ADDR_EQUAL(target,
+                         &((struct sockaddr_in6*)src)->sin6_addr))
     {
       return(1);
     }
@@ -1248,7 +1355,7 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
   struct arp_hdr *arp_req_hdr, *arp_reply_hdr;
   struct arp_req_data *arp_req, *arp_rply;
   __u64 src = 0, dst = 0;
-  __u32 ip_dst, ip_sender;
+  __u32 ip_dst;
 
   /* only handle ARP requests (opcode 1) here */
   arp_req_hdr = (struct arp_hdr*) &in[14];
@@ -1266,7 +1373,6 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
     {
       /* skip sender MAC, sender IP, target MAC */
       arp_req = (struct arp_req_data*)(arp_req_hdr + 1);
-      ip_sender = arp_req->src_ip;
       ip_dst = arp_req->dst_ip;
     }
   else
@@ -1274,7 +1380,7 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
       return(-1);
     }
 
-  if (ip_dst == g_tap_lsi)       /* don't answer requests for self */
+  if (ip_dst == g_tap_lsi)         /* don't answer requests for self */
     {
       return(1);
     }
@@ -1319,13 +1425,13 @@ int handle_arp(__u8 *in, int len, __u8 *out, int *outlen, struct sockaddr *addr)
  * hip_esp_encrypt()
  *
  * in:		in	pointer of data to encrypt
- *    len	length of data
- *    out	pointer of where to store encrypted data
- *    outlen	returned length of encrypted data
- *    entry   the SADB entry
+ *              len	length of data
+ *              out	pointer of where to store encrypted data
+ *              outlen	returned length of encrypted data
+ *              entry   the SADB entry
  *
  * out:		Encrypted data in out, outlen. entry statistics are modified.
- *    Returns 0 on success, -1 otherwise.
+ *              Returns 0 on success, -1 otherwise.
  *
  * Perform actual ESP encryption and authentication of packets.
  */
@@ -1343,7 +1449,9 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
   struct ip_esp_padinfo *padinfo = 0;
   __u8 cbc_iv[16];
   __u8 hmac_md[EVP_MAX_MD_SIZE];
+#ifndef HIP_VPLS
   __u16 checksum_fix = 0;
+#endif
   int family, use_udp = FALSE;
 
 
@@ -1368,7 +1476,10 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
        * not included. */
       hdr_len = sizeof(struct eth_hdr) + sizeof(struct ip);
       /* rewrite upper-layer checksum, so it is based on HITs */
-      checksum_fix = rewrite_checksum((__u8*)iph, entry->hit_magic);
+#ifndef HIP_VPLS
+      checksum_fix =
+#endif
+      rewrite_checksum((__u8*)iph, entry->hit_magic);
       break;
     case AF_INET6:
       ip6h = (struct ip6_hdr*) &in[sizeof(struct eth_hdr)];
@@ -1400,11 +1511,11 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
       esp = (struct ip_esp_hdr*) out;
     }
   esp->spi = htonl(entry->spi);
-  esp->seq_no = htonl(entry->sequence++);
+  esp->seq_no = htonl(get_next_seqno(entry));
   padlen = 0;
   *outlen = sizeof(struct ip_esp_hdr);
 
-  if (use_udp)       /* (HIP_ESP_OVER_UDP) */
+  if (use_udp)         /* (HIP_ESP_OVER_UDP) */
     {
       *outlen += sizeof(udphdr);
     }
@@ -1440,7 +1551,8 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
       if (!entry->aes_key && entry->e_key)
         {
           entry->aes_key = malloc(sizeof(AES_KEY));
-          if (AES_set_encrypt_key(entry->e_key, 8 * entry->e_keylen,
+          if (AES_set_encrypt_key(entry->e_key, 8 *
+                                  entry->e_keylen,
                                   entry->aes_key))
             {
               printf("hip_esp_encrypt: AES key problem!\n");
@@ -1452,11 +1564,6 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
           return(-1);
         }
       break;
-    case SADB_EALG_NONE:
-    case SADB_EALG_DESCBC:
-    case SADB_X_EALG_CASTCBC:
-    case SADB_X_EALG_SERPENTCBC:
-    case SADB_X_EALG_TWOFISHCBC:
     default:
       printf("Unsupported encryption transform (%d).\n",
              entry->e_type);
@@ -1531,8 +1638,6 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
    */
   switch (entry->a_type)
     {
-    case SADB_AALG_NONE:
-      break;
     case SADB_AALG_MD5HMAC:
       alen = HMAC_SHA_96_BITS / 8;           /* 12 bytes */
       if (!entry->a_key || (entry->a_keylen == 0))
@@ -1560,12 +1665,6 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
       memcpy(&out[elen + (use_udp ? sizeof(udphdr) : 0)],
              hmac_md, alen);
       *outlen += alen;
-      break;
-    case SADB_X_AALG_SHA2_256HMAC:
-    case SADB_X_AALG_SHA2_384HMAC:
-    case SADB_X_AALG_SHA2_512HMAC:
-    case SADB_X_AALG_RIPEMD160HMAC:
-    case SADB_X_AALG_NULL:
       break;
     default:
       break;
@@ -1645,16 +1744,17 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
       udph->len = htons((__u16) * outlen);
       /* TODO: support IPv6 ESP over UDP here */
       udph->checksum = checksum_udp_packet (out,
-                                            SA(&entry->src_addrs->addr),
-                                            SA(&entry->dst_addrs->addr));
+                                            SA(&entry->src_addrs->
+                                               addr),
+                                            SA(&entry->dst_addrs->
+                                               addr));
     }
 
   if (entry->spinat)
     {
 #ifdef VERBOSE_MR_DEBUG
-      printf("Entry has spinat of 0x%x\n", entry->spinat);
-      printf("Changing 0x%x to 0x%x\n", ntohl(esp->spi),
-             entry->spinat);
+      printf("Rewriting outgoing ESP SPI from 0x%x to 0x%x.\n",
+             ntohl(esp->spi), entry->spinat);
 #endif /* VERBOSE_MR_DEBUG */
       esp->spi = htonl(entry->spinat);
     }
@@ -1665,16 +1765,16 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
  * hip_esp_decrypt()
  *
  * in:		in	pointer to IP header of ESP packet to decrypt
- *    len	packet length
- *    out	pointer of where to build decrypted packet
- *    offset	offset where decrypted packet is stored: &out[offset]
- *    outlen	length of new packet
- *    entry	the SADB entry
- *    iph     IPv4 header or NULL for IPv6
- *    now	pointer to current time (avoid extra gettimeofday call)
+ *              len	packet length
+ *              out	pointer of where to build decrypted packet
+ *              offset	offset where decrypted packet is stored: &out[offset]
+ *              outlen	length of new packet
+ *              entry	the SADB entry
+ *              iph     IPv4 header or NULL for IPv6
+ *              now	pointer to current time (avoid extra gettimeofday call)
  *
  * out:		New packet is built in out, outlen.
- *    Returns 0 on success, -1 otherwise.
+ *              Returns 0 on success, -1 otherwise.
  *
  * Perform authentication and decryption of ESP packets.
  */
@@ -1684,7 +1784,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
   int alen = 0, elen = 0, iv_len = 0;
   unsigned int hmac_md_len;
   struct ip_esp_hdr *esp;
-  udphdr *udph;
+  /*udphdr *udph;*/
 
   struct ip_esp_padinfo *padinfo = 0;
   __u8 cbc_iv[16];
@@ -1693,11 +1793,13 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
   __u64 dst_mac;
   __u16 sum;
   int family_out;
-  struct sockaddr_storage taplsi6;
   struct tcphdr *tcp = NULL;
   struct udphdr *udp = NULL;
 #endif /* HIP_VPLS */
   int use_udp = FALSE;
+  __u32 new_seqno_hi = 0, loss;
+  __u64 shift;
+  struct sockaddr_storage dst;
 
   if (!in || !out || !entry)
     {
@@ -1708,8 +1810,9 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
   if (entry->mode == 3)         /*(HIP_ESP_OVER_UDP) */
     {
       use_udp = TRUE;
-      udph = (udphdr*) &in[sizeof(struct ip)];
-      esp = (struct ip_esp_hdr*)&in[sizeof(struct ip) + sizeof(udphdr)];
+      /*udph = (udphdr*) &in[sizeof(struct ip)];*/
+      esp = (struct ip_esp_hdr*)&in[sizeof(struct ip) +
+                                    sizeof(udphdr)];
       /* TODO: IPv6 UDP here */
     }
   else                          /* not UDP-encapsulated */
@@ -1735,12 +1838,21 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 #endif
 
   /*
+   *  Preliminary anti-replay check.
+   */
+  if (esp_anti_replay_check_initial(entry, ntohl(esp->seq_no),
+                                    &new_seqno_hi))
+    {
+      printf("duplicate sequence number detected: %x\n",
+             ntohl(esp->seq_no));
+      return(-1);
+    }
+
+  /*
    *   Authentication
    */
   switch (entry->a_type)
     {
-    case SADB_AALG_NONE:
-      break;
     case SADB_AALG_MD5HMAC:
       alen = HMAC_SHA_96_BITS / 8;           /* 12 bytes */
       elen = len - sizeof(struct ip_esp_hdr) - alen;
@@ -1748,7 +1860,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
         {
           elen -= sizeof(struct ip);
         }
-      if (use_udp)           /* HIP_ESP_OVER_UDP */
+      if (use_udp)             /* HIP_ESP_OVER_UDP */
         {
           elen -= sizeof(udphdr);
         }
@@ -1773,7 +1885,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
         {
           elen -= sizeof(struct ip);
         }
-      if (use_udp)           /* HIP_ESP_OVER_UDP */
+      if (use_udp)             /* HIP_ESP_OVER_UDP */
         {
           elen -= sizeof(udphdr);
         }
@@ -1792,14 +1904,40 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
           return(-1);
         }
       break;
-    case SADB_X_AALG_SHA2_256HMAC:
-    case SADB_X_AALG_SHA2_384HMAC:
-    case SADB_X_AALG_SHA2_512HMAC:
-    case SADB_X_AALG_RIPEMD160HMAC:
-    case SADB_X_AALG_NULL:
-      break;
     default:
       break;
+    }
+
+  /* update anti-replay window now that integrity has been verified */
+  shift = esp_update_anti_replay(entry, ntohl(esp->seq_no), new_seqno_hi);
+  if (shift == 1)
+    {
+      /* normal case - in-order packet has next sequence number */
+    }
+  else if (shift == 0)
+    {
+      if (entry->lost > 0)             /* seqno within window, discount loss */
+        {
+          entry->lost--;
+        }
+    }
+  else
+    {
+      /* window has shifted by loss number of packets */
+      loss = (__u32)shift - 1;
+      entry->lost += loss;
+      /* track loss based on IPv4 destination locator */
+      if (iph)
+        {
+          dst.ss_family = AF_INET;
+          memcpy(SA2IP(&dst), &iph->ip_dst, SAIPLEN(&dst));
+          loss = hip_sadb_inc_loss(entry, loss, SA(&dst));
+          if (loss > MULTIHOMING_LOSS_THRESHOLD)
+            {
+              esp_signal_loss(entry->spi, loss, SA(&dst));
+              hip_sadb_reset_loss(entry, SA(&dst));
+            }
+        }
     }
 
   /*
@@ -1831,7 +1969,8 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
       if (!entry->aes_key && entry->e_key)
         {
           entry->aes_key = malloc(sizeof(AES_KEY));
-          if (AES_set_decrypt_key(entry->e_key, 8 * entry->e_keylen,
+          if (AES_set_decrypt_key(entry->e_key, 8 *
+                                  entry->e_keylen,
                                   entry->aes_key))
             {
               printf("hip_esp_decrypt: AES key problem!\n");
@@ -1843,11 +1982,6 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
           return(-1);
         }
       break;
-    case SADB_EALG_NONE:
-    case SADB_EALG_DESCBC:
-    case SADB_X_EALG_CASTCBC:
-    case SADB_X_EALG_SERPENTCBC:
-    case SADB_X_EALG_TWOFISHCBC:
     default:
       printf("Unsupported decryption algorithm (%d)\n",
              entry->e_type);
@@ -1887,8 +2021,10 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
   /* determine address family for new packet based on
    * decrypted upper layer protocol header
    */
-  family_out = hip_select_family_by_proto(LSI4(&entry->lsi),
-                                          padinfo->next_hdr, &out[*offset], now);
+  family_out = hip_select_family_by_proto(LSI4(
+                                            &entry->lsi),
+                                          padinfo->next_hdr,
+                                          &out[*offset], now);
 
   /* rewrite upper-layer checksum
    * checksum based on HITs --> based on LSIs */
@@ -1900,30 +2036,38 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
         case IPPROTO_TCP:
           tcp = (struct tcphdr*)&out[*offset];
           sum = htons(tcp->th_sum);
-          sum = csum_hip_revert(  LSI4(&entry->lsi), htonl(g_tap_lsi),
-                                  sum, htons(entry->hit_magic));
+          sum =
+            csum_hip_revert(  LSI4(&entry->lsi),
+                              htonl(g_tap_lsi),
+                              sum, htons(entry->hit_magic));
           tcp->th_sum = htons(sum);
           break;
         case IPPROTO_UDP:
           udp = (struct udphdr*)&out[*offset];
           sum = htons(udp->uh_sum);
-          sum = csum_hip_revert(  LSI4(&entry->lsi), htonl(g_tap_lsi),
-                                  sum, htons(entry->hit_magic));
+          sum =
+            csum_hip_revert(  LSI4(&entry->lsi),
+                              htonl(g_tap_lsi),
+                              sum, htons(entry->hit_magic));
           udp->uh_sum = htons(sum);
           break;
 #else /* __MACOSX__ */
         case IPPROTO_TCP:
           tcp = (struct tcphdr*)&out[*offset];
           sum = htons(tcp->check);
-          sum = csum_hip_revert(  LSI4(&entry->lsi), htonl(g_tap_lsi),
-                                  sum, htons(entry->hit_magic));
+          sum =
+            csum_hip_revert(  LSI4(&entry->lsi),
+                              htonl(g_tap_lsi),
+                              sum, htons(entry->hit_magic));
           tcp->check = htons(sum);
           break;
         case IPPROTO_UDP:
           udp = (struct udphdr*)&out[*offset];
           sum = htons(udp->check);
-          sum = csum_hip_revert(  LSI4(&entry->lsi), htonl(g_tap_lsi),
-                                  sum, htons(entry->hit_magic));
+          sum =
+            csum_hip_revert(  LSI4(&entry->lsi),
+                              htonl(g_tap_lsi),
+                              sum, htons(entry->hit_magic));
           udp->check = htons(sum);
 #endif /* __MACOSX__ */
         default:
@@ -1932,11 +2076,11 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
     }
 
   /* set offset to index the beginning of the packet */
-  if (family_out == AF_INET)       /* offset = 20 */
+  if (family_out == AF_INET)         /* offset = 20 */
     {
       *offset -= (sizeof(struct eth_hdr) + sizeof(struct ip));
     }
-  else          /* offset = 0 */
+  else            /* offset = 0 */
     {
       *offset -= (sizeof(struct eth_hdr) + sizeof(struct ip6_hdr));
     }
@@ -1944,7 +2088,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
   /* Ethernet header */
   dst_mac = get_eth_addr(family_out,
                          (family_out == AF_INET) ? SA2IP(&entry->lsi) :
-                         SA2IP(&entry->lsi6));
+                         SA2IP(&entry->dst_hit));
   add_eth_header(&out[*offset], dst_mac, g_tap_mac,
                  (family_out == AF_INET) ? 0x0800 : 0x86dd);
 
@@ -1959,12 +2103,11 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
     }
   else
     {
-      taplsi6.ss_family = AF_INET6;
-      get_preferred_lsi(SA(&taplsi6));
       add_ipv6_header(&out[*offset + sizeof(struct eth_hdr)],
-                      SA(&entry->lsi6), SA(&taplsi6),
+                      SA(&entry->src_hit), SA(&entry->dst_hit),
                       NULL, iph, (__u16)elen, padinfo->next_hdr);
-      *outlen = sizeof(struct eth_hdr) + sizeof(struct ip6_hdr) + elen;
+      *outlen = sizeof(struct eth_hdr) + sizeof(struct ip6_hdr) +
+                elen;
     }
 #else /* HIP_VPLS */
   *outlen = sizeof(struct eth_hdr) + elen;
@@ -1972,10 +2115,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
 
   /* previously, this happened after write(), but there
    * is some problem with using the entry ptr then */
-  entry->bytes += *outlen - sizeof(struct eth_hdr);
-  entry->usetime.tv_sec = now->tv_sec;
-  entry->usetime.tv_usec = now->tv_usec;
-
+  hip_sadb_inc_bytes(entry, *outlen - sizeof(struct eth_hdr), now, 0);
   return(0);
 }
 
@@ -2199,5 +2339,224 @@ __u64 get_eth_addr(int family, __u8 *addr)
   ((char *)&r)[0] &= 0xFE;       /* clear the multicast bit */
 
   return(r);
+}
+
+/* helper for sending ESP message to hipd over the espsp socketpair */
+void esp_send_to_hipd(char *data, int len, char *errmsg)
+{
+  /* int i;
+   *  printf("sending this to hipd:\n");
+   *  for (i = 0; i < len; i ++) {
+   *   printf("%02x ", data[i] & 0xFF);
+   *  } */
+#ifdef __WIN32__
+  if (send(espsp[0], data, len, 0) < 0)
+    {
+#else
+  if (write(espsp[0], data, len) != len)
+    {
+#endif /* __WIN32__ */
+      printf("%s write error: %s\n", errmsg, strerror(errno));
+    }
+}
+
+/* send an ESP_ACQUIRE_LSI message, which results in a
+ * call to start_base_exchange() in hipd */
+void esp_start_base_exchange(struct sockaddr *lsi)
+{
+  struct sockaddr_storage dst;
+  const int len = sizeof(espmsg) + sizeof(struct sockaddr_storage);
+  char msgbuff[sizeof(espmsg) + sizeof(struct sockaddr_storage)];
+  espmsg *msg = (espmsg*) &msgbuff[0];
+
+  /* lsi is in host byte order, convert to network for ACQUIRE message */
+  memcpy(&dst, lsi, sizeof(struct sockaddr_storage));
+  if (dst.ss_family == AF_INET)
+    {
+      LSI4(&dst) = htonl(LSI4(lsi));
+    }
+  msg->message_type = ESP_ACQUIRE_LSI;
+  msg->message_data = htonl(sizeof(struct sockaddr_storage));
+  memcpy(&msgbuff[sizeof(espmsg)], &dst, sizeof(struct sockaddr_storage));
+  esp_send_to_hipd((char*) msg, len, "esp_start_base_exchange()");
+}
+
+/* send an ESP_EXPIRE_SPI message, which results in a
+ * call to start_expire() in hipd */
+void esp_start_expire(__u32 spi)
+{
+  espmsg msg;
+  msg.message_type = ESP_EXPIRE_SPI;
+  msg.message_data = htonl(spi);
+  esp_send_to_hipd((char*) &msg, sizeof(msg), "esp_start_expire()");
+}
+
+/* send an ESP_UDP_CTL message, which results in a
+ * call to receive_udp_hip_packet() in hipd */
+void esp_receive_udp_hip_packet(char *buff, int len)
+{
+  char msgbuff[sizeof(espmsg) + BUFF_LEN];
+  espmsg *msg = (espmsg*) &msgbuff[0];
+  msg->message_type = ESP_UDP_CTL;
+  msg->message_data = htonl((__u32)len);
+  memcpy(&msgbuff[sizeof(espmsg)], buff, len);
+  esp_send_to_hipd( msgbuff, len + sizeof(espmsg),
+                    "esp_receive_udp_hip_packet()");
+}
+
+/* send an ESP_ADDR_LOSS message to signal that lost ESP packets were detected
+ */
+void esp_signal_loss(__u32 spi, __u32 loss, struct sockaddr *dst)
+{
+  const int len = sizeof(espmsg) + 2 * sizeof(__u32) + \
+                  sizeof(struct sockaddr_storage);
+  char msgbuff[sizeof(espmsg) + 2 * sizeof(__u32) + \
+               sizeof(struct sockaddr_storage)];
+  struct _loss_data {
+    __u32 spi;
+    __u32 loss;
+    struct sockaddr_storage dst;
+  } *ld;
+  espmsg *msg = (espmsg*) &msgbuff[0];
+
+  memset(msgbuff, 0, len);
+  msg->message_type = ESP_ADDR_LOSS;
+  msg->message_data = htonl(len - sizeof(espmsg));
+
+  ld = (struct _loss_data *) &msgbuff[sizeof(espmsg)];
+  ld->spi = htonl(spi);
+  ld->loss = htonl(loss);
+  ld->dst.ss_family = dst->sa_family;
+  memcpy(SA2IP(&ld->dst), SA2IP(dst), SAIPLEN(dst));
+  /* printf("%s spi=0x%x loss=%u\n", __FUNCTION__, spi, loss); */
+  esp_send_to_hipd((char*) msg, len, "esp_signal_loss()");
+}
+
+/*
+ * update the sequence number counters in the sadb entry and return the next
+ * sequence number
+ */
+__u32 get_next_seqno(hip_sadb_entry *entry)
+{
+  __u32 r = ++entry->sequence;
+  /* overflow of lower 32 bits */
+  if (r == 0)
+    {
+      r = ++entry->sequence;           /* don't use zero */
+      entry->sequence_hi++;
+    }
+  return(r);
+}
+
+/*
+ * Perform preliminary anti-replay verification on an ESP packet's sequence
+ * number against the receive window of the SA; sadb entry is not modified.
+ * Determine the high-order bits of a 64-bit ESN based on anti-replay packet
+ * window and received lower bits.
+ *
+ * Returns 0 if the check passes, 1 if the check fails.
+ * Returns value high-order ESN bits in  sequqnce_hi.
+ */
+int esp_anti_replay_check_initial(hip_sadb_entry *entry, __u32 seqno,
+                                  __u32 *sequence_hi)
+{
+  /* T: top of window */
+  __u32 replay_win_maxl = (__u32)(entry->replay_win_max & 0xFFFFFFFF);
+  /* B: botttom of window */
+  __u64 replay_win_min = entry->replay_win_max - REPLAY_WIN_SIZE + 1;
+  __u32 replay_win_minl = (__u32)(replay_win_min & 0xFFFFFFFF);
+  __u64 shift, esn;
+  int do_replay_check;
+
+  *sequence_hi = entry->sequence_hi;
+
+  /* RFC 4303 Appendix A Case A: window within one subspace */
+  if (replay_win_maxl >= REPLAY_WIN_SIZE - 1)
+    {
+      do_replay_check = 1;
+      if (seqno >= replay_win_minl)
+        {
+          if (seqno > replay_win_maxl)
+            {
+              /* seq number to the right of the window */
+              do_replay_check = 0;
+            }
+        }
+      else
+        {
+          /* assume seq number wrap around to next subspace */
+          (*sequence_hi)++;
+          do_replay_check = 0;               /* new subspace */
+        }
+      /* RFC 4303 Appendix A Case B: window spans two seq no subspaces
+       */
+    }
+  else
+    {
+      do_replay_check = 0;
+      if (seqno >= replay_win_minl)
+        {
+          /* seq number from previous subspace;
+           * don't wrap 64-bit ESN space */
+          if (*sequence_hi > 0)
+            {
+              (*sequence_hi)--;
+              do_replay_check = 1;
+            }
+        }
+      else
+        {
+          /* seq number in current sequence_hi subspace */
+          if (seqno <= replay_win_maxl)
+            {
+              do_replay_check = 1;
+            }
+          /* else seq number to the right of the window */
+        }
+    }
+
+  /* check if this sequence number has already been seen in the
+   * receive window bitmap
+   */
+  if (do_replay_check)
+    {
+      esn = ((__u64)(*sequence_hi) << 32) | seqno;
+      shift = entry->replay_win_max - esn;
+      if ((entry->replay_win_map >> (__u32)shift) & 0x1)
+        {
+          return(1);               /* drop packet - duplicate detected */
+        }
+    }
+  return(0);       /* pass packet */
+}
+
+/*
+ * Update the ESP anti-replay window using sequence number derived from
+ * initial checks. Under normal conditions, returns 1 as the next received
+ * packet is the next sequence number; return value > 1 indicates window
+ * shifting, and 0 indicates received packet within window.
+ */
+__u64 esp_update_anti_replay(hip_sadb_entry *entry, __u32 seqno,
+                             __u32 seqno_hi)
+{
+  __u64 esn = ((__u64)seqno_hi << 32) | seqno;
+  __u64 shift;
+  if (esn > entry->replay_win_max)
+    {
+      /* shift window to the left, new max seq no received */
+      shift = esn - entry->replay_win_max;
+      entry->replay_win_map = entry->replay_win_map << shift;
+      entry->replay_win_max = esn;
+      entry->replay_win_map |= 0x1;
+      entry->sequence_hi = seqno_hi;
+    }
+  else
+    {
+      /* update bit corresponding to esn in window */
+      shift = entry->replay_win_max - esn;
+      entry->replay_win_map |= 0x1 << shift;
+      return(0);
+    }
+  return(shift);
 }
 

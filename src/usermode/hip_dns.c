@@ -1,22 +1,32 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2005-06 the Boeing Company
+ * Copyright (c) 2005-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_dns.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  *
- *  hip_dns.c
- *
- *  Author: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- *
- * DNS answering thread for user-mode HIP
+ *  \brief  DNS proxy thread for user-mode HIP.
  *
  */
 
@@ -191,7 +201,8 @@ void *hip_dns(void *arg)
   dw_size = sizeof(dns_domain) - (sizeof(HIP_DNS_SUFFIX) + 1);
   sprintf(dns_domain, "%s.", HIP_DNS_SUFFIX);
   if (!GetComputerNameEx(2,
-                         &dns_domain[sizeof(HIP_DNS_SUFFIX) + 1], &dw_size))
+                         &dns_domain[sizeof(HIP_DNS_SUFFIX) + 1],
+                         &dw_size))
     {
       printf("Warning: couldn't get this host's DNS domain name.\n");
       memset(dns_domain, 0, sizeof(dns_domain));
@@ -271,7 +282,7 @@ retry_dns_bind:
   memset(&saddr, 0, sizeof(struct sockaddr_in));
   saddr.sin_family = AF_INET;
   saddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  if (retry_count)       /* upon retry, bind specifically to the LSI */
+  if (retry_count)         /* upon retry, bind specifically to the LSI */
     {
       get_preferred_lsi(SA(&saddr));
     }
@@ -312,8 +323,8 @@ retry_dns_bind:
  * handle_dns_request()
  *
  * in:		buff - buffer containing the raw DNS request
- *    len  - length of the buffer data
- *    from - address of the requester
+ *              len  - length of the buffer data
+ *              from - address of the requester
  * out:		none
  *
  * Parse the DNS request and answer those ending with .hip suffix.
@@ -362,7 +373,8 @@ void handle_dns_request(char *buff, int len, struct sockaddr *from)
       if (get_request_info(dnsh->transaction_id, 0, from) < 0)
         {
           /* check for HIP answer */
-          if (get_request_info(dnsh->transaction_id, 1, from) < 0)
+          if (get_request_info(dnsh->transaction_id, 1,
+                               from) < 0)
             {
               return;                   /* transaction not found */
             }
@@ -372,7 +384,8 @@ void handle_dns_request(char *buff, int len, struct sockaddr *from)
               return;                   /* empty buffer */
             }
           /* parse Host Identity from response and get LSI */
-          lsi = receive_hip_dns_response((unsigned char *)buff, len);
+          lsi = receive_hip_dns_response((unsigned char *)buff,
+                                         len);
           namelen = sizeof(namebuff);               /* read namelen, type */
           parse_dns_name(*old_buff + sizeof(struct dns_hdr),
                          namebuff, &namelen, &type);
@@ -406,7 +419,10 @@ void handle_dns_request(char *buff, int len, struct sockaddr *from)
        * Does name end with .hip suffix?
        */
       namelen = sizeof(namebuff);
-      ret = parse_dns_name((char*)(dnsh + 1), namebuff, &namelen,&type);
+      ret = parse_dns_name((char*)(dnsh + 1),
+                           namebuff,
+                           &namelen,
+                           &type);
       if (ret == 1)
         {
           /* Lookup DNS name in local peer list */
@@ -417,7 +433,8 @@ void handle_dns_request(char *buff, int len, struct sockaddr *from)
                * respond with LSI. */
               send_dns_response(buff, namelen, from, type,
                                 (char*)&lsi);
-              /* Name not found locally, look for HIP record in DNS.*/
+              /* Name not found locally, look for HIP record
+               *in DNS.*/
             }
           else
             {
@@ -425,7 +442,8 @@ void handle_dns_request(char *buff, int len, struct sockaddr *from)
                * HIP request will end up back here in the DNS
                * thread causing unnecessary delay.
                */
-              txid = send_hip_dns_lookup(namebuff, namelen - 4);
+              txid = send_hip_dns_lookup(namebuff,
+                                         namelen - 4);
               if (txid == 0)
                 {
                   return;
@@ -488,12 +506,12 @@ void handle_dns_request(char *buff, int len, struct sockaddr *from)
  * parse_dns_name()
  *
  * in:		name - pointer to name from question section of DNS request
- *    dst - pointer to string for storing parsed name
- *    dst_len - length of dst buffer
+ *              dst - pointer to string for storing parsed name
+ *              dst_len - length of dst buffer
  *
  * out:		dst_len - number of bytes found in string
- *    Returns 2 if name ends with HIP_DNS_SUFFIX + dns_domain
- *    Returns 1 if name ends with HIP_DNS_SUFFIX
+ *              Returns 2 if name ends with HIP_DNS_SUFFIX + dns_domain
+ *              Returns 1 if name ends with HIP_DNS_SUFFIX
  *
  * Read in a name from the DNS question section, storing it in the provided
  * string and placing '.' between each section. Returns 1 if the name ends
@@ -549,14 +567,16 @@ int parse_dns_name(char *name, char *dst, int *dst_len, int *type)
    * (i.e. host.hip.mydomain.com) - causes large speed-up for Windows
    */
   len = strlen(dns_domain);
-  if ((first_section) && (strncmp(first_section, dns_domain, len) == 0))
+  if ((first_section) &&
+      (strncmp(first_section, dns_domain, len) == 0))
     {
       return(2);
     }
 #endif /* __WIN32__ */
        /* check for HIP suffix */
   len = sizeof(HIP_DNS_SUFFIX);
-  if ((suffix_start) && (strncmp(suffix_start, HIP_DNS_SUFFIX, len) == 0))
+  if ((suffix_start) &&
+      (strncmp(suffix_start, HIP_DNS_SUFFIX, len) == 0))
     {
       return(1);
     }
@@ -568,8 +588,8 @@ int parse_dns_name(char *name, char *dst, int *dst_len, int *type)
  * build_dns_name()
  *
  * in:		name - pointer to string containing name
- *    name_len - length of name
- *    dst - pointer for storing name in DNS format
+ *              name_len - length of name
+ *              dst - pointer for storing name in DNS format
  *
  * out:		Returns number of bytes occupied by DNS name.
  *
@@ -616,10 +636,10 @@ int build_dns_name(char *name, int name_len, char *dst)
  * send_dns_response()
  *
  * in:		buff = pointer to original request buffer
- *    namelen = length of domain name in question
- *    to = where to send the DNS reply
- *    anstype = type A or PTR answer?
- *    ans = name to answer for reverse lookups
+ *              namelen = length of domain name in question
+ *              to = where to send the DNS reply
+ *              anstype = type A or PTR answer?
+ *              ans = name to answer for reverse lookups
  *
  * Use the dns request to generate an answer.
  */
@@ -746,7 +766,8 @@ __u32 get_current_dns_server()
       GetPerAdapterInfo(pai->Index, pPerAdapterInfo, &len2);
       if (pPerAdapterInfo->DnsServerList.IpAddress.String[0])
         {
-          /* XXX TODO: verify that addr is in network byte order */
+          /* XXX TODO: verify that addr is in network byte order
+           */
           addr = inet_addr(
             pPerAdapterInfo->DnsServerList.IpAddress.String);
         }
@@ -860,7 +881,7 @@ __u16 send_hip_dns_lookup(char *name, int name_len)
 #else
   u16 = htons(ns_c_in);
 #endif
-  memcpy(&buff[len + 2], &u16, 2);                              /* QCLASS */
+  memcpy(&buff[len + 2], &u16, 2);                                /* QCLASS */
   len += 4;
 
   /* send HIP DNS request to a real name server */
@@ -984,7 +1005,8 @@ void add_local_hip_nameserver(__u32 ip)
       return;
     }
   rewind(f);
-  if (fwrite(tapstr, sizeof(char), strlen(tapstr), f) != strlen(tapstr))
+  if (fwrite(tapstr, sizeof(char), strlen(tapstr),
+             f) != strlen(tapstr))
     {
       printf("Warning: unable to write HIP DNS entry to "
              "/etc/resolv.conf\n");
@@ -1024,7 +1046,8 @@ void delete_local_hip_nameserver(__u32 ip)
     {
       f = fopen("/etc/resolv.conf", "w");
       len -= strlen(tapstr);
-      if (fwrite(&buff[strlen(tapstr)], sizeof(char), len, f) != len)
+      if (fwrite(&buff[strlen(tapstr)], sizeof(char), len,
+                 f) != len)
         {
           printf("Warning: unable to remove HIP DNS entry from "
                  "/etc/resolv.conf\n");

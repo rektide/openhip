@@ -1,33 +1,34 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2004 the Boeing Company
+ * Copyright (c) 2004-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_service.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  *
- *  hip_service.c
- *
- *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- *
- * Portions Copyright (C) 2003 UC Berkeley
- *
- * This contains the main program for the HIP Windows service,
- * and its initialization code. Multiple threads are spawned that
- * perform the actual work.
- */
-
-/*
- * Style:  KNF where possible, K&R style braces around control structures
- * Style:  indent using tabs-- multi-line continuation 4 spaces
- * Style:  no tabs in middle of lines
- * Style:  this code authored with tabstop=8
+ *  \brief  This contains the main program for the HIP Windows service,
+ *          and its initialization code. Multiple threads are spawned that
+ *          perform the actual work.
  */
 
 #include <windows.h>
@@ -78,13 +79,21 @@ SERVICE_STATUS_HANDLE g_srv_status_handle;
 char SERVICE_NAME[255] = "HIP";
 char DISPLAY_NAME[255] = "HIP";
 
-/*
- * macros come from OpenVPN 2.0_beta11 file tap-win32/common.h
- * not compatible with OpenVPN 1.60
- */
-#include <win32/openvpn-common.h>
+#define ADAPTER_KEY \
+  "SYSTEM\\CurrentControlSet\\Control\\Class\\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+
+#define NETWORK_CONNECTIONS_KEY \
+  "SYSTEM\\CurrentControlSet\\Control\\Network\\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+
 #define REG_INTERFACES_KEY \
   "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces"
+
+#define TAP_IOCTL_SET_MEDIA_STATUS CTL_CODE (FILE_DEVICE_UNKNOWN, \
+                                             6, \
+                                             METHOD_BUFFERED, \
+                                             FILE_ANY_ACCESS)
+
+#define TAP_COMPONENT_ID "tap0801"
 
 /*
  * Local function declarations
@@ -277,7 +286,9 @@ DWORD hip_install_service()
     {
       /* Add a description to the service */
       SERVICE_DESCRIPTION descr =
-      { "Host Identity Protocol manages identity-based security associations." };
+      {
+        "Host Identity Protocol manages identity-based security associations."
+      };
       ChangeServiceConfig2(srv, SERVICE_CONFIG_DESCRIPTION, &descr);
       CloseServiceHandle(srv);
     }
@@ -522,7 +533,7 @@ HANDLE init_tap()
       return(NULL);
     }
 
-  /* find the adapter with TAPSUFFIX */
+  /* find the adapter with .tap suffix */
   for (enum_index = 0;; enum_index++)
     {
       len = sizeof(devid);
@@ -537,9 +548,14 @@ HANDLE init_tap()
 
       retry_attempts = 0;
 init_tap_create_file_retry:
-      sprintf(devname, USERMODEDEVICEDIR "%s" TAPSUFFIX, devid);
-      hTAP32 = CreateFile(devname, GENERIC_WRITE | GENERIC_READ,
-                          0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_SYSTEM, 0);
+      sprintf(devname, "\\\\.\\Global\\%s.tap", devid);
+      hTAP32 = CreateFile(devname,
+                          GENERIC_WRITE | GENERIC_READ,
+                          0,
+                          0,
+                          OPEN_EXISTING,
+                          FILE_ATTRIBUTE_SYSTEM,
+                          0);
 
       dw = GetLastError();
       /* This is the most common error. We are trying to open
@@ -656,7 +672,7 @@ init_tap_create_file_retry:
   /* TODO */
   /* IPv6 may not be installed */
   /* equivalent of netsh interface ipv6 add address 2001:007x:xxxx ... */
-  /*  */
+  /* */
 
   return(hTAP32);
 }
@@ -774,7 +790,8 @@ int check_and_set_tun_address(char *devid, int do_msgbox)
       return(-1);
     }
   if (RegSetValueEx(interface_key, "SubnetMask", 0, REG_MULTI_SZ,
-                    "255.0.0.0\0\0", strlen("255.0.0.0") + 2) != ERROR_SUCCESS)
+                    "255.0.0.0\0\0",
+                    strlen("255.0.0.0") + 2) != ERROR_SUCCESS)
     {
       printf("Changing TAP-Win32 adapter's IP mask failed\n");
       return(-1);
@@ -815,7 +832,8 @@ int check_and_set_tun_address(char *devid, int do_msgbox)
         }
       dwBufLen = sizeof(value);
       if (RegQueryValueEx(interface_key, "ComponentId", NULL,
-                          &dwKeyType, value, &dwBufLen) != ERROR_SUCCESS)
+                          &dwKeyType, value,
+                          &dwBufLen) != ERROR_SUCCESS)
         {
           RegCloseKey(interface_key);
           continue;
@@ -867,7 +885,7 @@ int setup_tap()
       return(-1);
     }
 
-  /* find the adapter with TAPSUFFIX */
+  /* find the adapter with .tap suffix */
   for (enum_index = 0;; enum_index++)
     {
       len = sizeof(devid);
@@ -879,7 +897,8 @@ int setup_tap()
           dw = GetLastError();
 
           RegCloseKey(key);
-          printf("setup_tap(): Couldn't find TAP-Win32 adapter.\n");
+          printf(
+            "setup_tap(): Couldn't find TAP-Win32 adapter.\n");
 
           FormatMessage( FORMAT_MESSAGE_ALLOCATE_BUFFER |
                          FORMAT_MESSAGE_FROM_SYSTEM, NULL, dw,
@@ -891,9 +910,14 @@ int setup_tap()
           return(-1);
         }
 
-      sprintf(devname, USERMODEDEVICEDIR "%s" TAPSUFFIX, devid);
-      hTAP32 = CreateFile(devname, GENERIC_WRITE | GENERIC_READ,
-                          0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_SYSTEM, 0);
+      sprintf(devname, "\\\\.\\Global\\%s.tap", devid);
+      hTAP32 = CreateFile(devname,
+                          GENERIC_WRITE | GENERIC_READ,
+                          0,
+                          0,
+                          OPEN_EXISTING,
+                          FILE_ATTRIBUTE_SYSTEM,
+                          0);
 
       if (hTAP32 != INVALID_HANDLE_VALUE)
         {
@@ -919,7 +943,7 @@ void init_hip(DWORD ac, char **av)
   WORD wVer;
   WSADATA wsaData;
   __u32 tunreader_thrd, esp_output_thrd, esp_input_thrd;
-  __u32 pfkey_thrd, hipd_thrd, netlink_thrd, dns_thrd, status_thrd;
+  __u32 hipd_thrd, netlink_thrd, dns_thrd, status_thrd;
   int err;
   char hipd_args[255];
   int i;
@@ -935,7 +959,7 @@ void init_hip(DWORD ac, char **av)
   i = 0;
   while (ac > 0)
     {
-      if (i > 0)           /* add a space between parameters */
+      if (i > 0)             /* add a space between parameters */
         {
           hipd_args[i++] = ' ';
         }
@@ -960,11 +984,6 @@ void init_hip(DWORD ac, char **av)
   /*
    * Kernel helpers
    */
-  if (!(pfkey_thrd = _beginthread(&hip_pfkey, 0, NULL)))
-    {
-      printf("Error creating PFKEY thread.\n");
-      exit(-1);
-    }
   if (!(netlink_thrd = _beginthread(hip_netlink, 0, NULL)))
     {
       printf("Error creating netlink thread.\n");

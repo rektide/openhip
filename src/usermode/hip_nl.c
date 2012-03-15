@@ -1,25 +1,34 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2005-06 the Boeing Company
+ * Copyright (c) 2005-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_nl.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors  Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  *
- *  hip_nl.c
- *
- *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- *
- * User-mode minimal Netlink sockets layer
+ *  \brief  User-mode minimal Netlink sockets layer
  *
  */
-
 #ifdef __WIN32__
 #include <win32/types.h>
 #include <winsock2.h>
@@ -37,7 +46,7 @@
 #include <hip/hip_service.h>
 #include <hip/hip_types.h>
 #include <hip/hip_sadb.h>               /* access to SADB */
-#include <win32/rtnetlink.h>            /* from <linux/rtnetlink.h> */
+#include <win32/netlink.h>
 
 /*
  * Globals
@@ -133,7 +142,9 @@ void *hip_netlink(void *arg)
       else if (FD_ISSET(netlsp[0], &read_fdset))
         {
 #ifdef __WIN32__
-          if ((err = recv(netlsp[0], buff, sizeof(buff), 0)) < 0)
+          if ((err =
+                 recv(netlsp[0], buff, sizeof(buff),
+                      0)) < 0)
             {
 #else
           if ((err = read(netlsp[0], buff, sizeof(buff))) < 0)
@@ -147,7 +158,8 @@ void *hip_netlink(void *arg)
                      strerror(errno));
               continue;
             }
-          if (((struct nlmsghdr*)buff)->nlmsg_type == RTM_GETADDR)
+          if (((struct nlmsghdr*)buff)->nlmsg_type ==
+              RTM_GETADDR)
             {
               /* send dump of IP address table */
               sendIpAddrTable(pTableOld);
@@ -197,7 +209,7 @@ void readIpAddrTable(PMIB_IPADDRTABLE *pTable)
 /*    *PMIB_IPADDRTABLE; */
 /* typedef struct _MIB_IPADDRROW { */
 /*  DWORD dwAddr;		// IP Address */
-/*  DWORDIF_INDEX dwIndex;  // Interface index */
+/*  DWORDIF_INDEX dwIndex;      // Interface index */
 /*  DWORD dwMask; */
 /*  DWORD dwBCastAddr; */
 /*  DWORD dwReasmSize; */
@@ -205,7 +217,7 @@ void readIpAddrTable(PMIB_IPADDRTABLE *pTable)
 /*  unsigned short wType;	// IP address type/state */
 /* } MIB_IPADDRROW, */
 /* *PMIB_IPADDRROW; */
-/*  */
+/* */
 #define MIB_IPADDR_PRIMARY 0x0001       /* Primary IP address */
 #define MIB_IPADDR_DYNAMIC 0x0004       /* Dynamic IP address */
 #define MIB_IPADDR_DISCONNECTED 0x0008  /* Address is on disconnected iface */
@@ -240,7 +252,8 @@ int checkIpAddrTableChanges(PMIB_IPADDRTABLE pNew, PMIB_IPADDRTABLE pOld)
           (pNew->table[i].wType != pOld->table[i].wType))
         {
           if ((pNew->table[i].wType & MIB_IPADDR_DELETED) ||
-              ((pNew->table[i].wType & MIB_IPADDR_DISCONNECTED)))
+              ((pNew->table[i].wType &
+                MIB_IPADDR_DISCONNECTED)))
             {
               netlink_send_addr(1, pOld->table[i].dwAddr,
                                 pOld->table[i].dwIndex);
@@ -252,7 +265,8 @@ int checkIpAddrTableChanges(PMIB_IPADDRTABLE pNew, PMIB_IPADDRTABLE pOld)
           /* unused2 is wType */
           /* Address deleted due to flags */
           if ((pNew->table[i].unused2 & MIB_IPADDR_DELETED) ||
-              ((pNew->table[i].unused2 & MIB_IPADDR_DISCONNECTED)))
+              ((pNew->table[i].unused2 &
+                MIB_IPADDR_DISCONNECTED)))
             {
               netlink_send_addr(1, pOld->table[i].dwAddr,
                                 pOld->table[i].dwIndex);
@@ -275,9 +289,11 @@ int checkIpAddrTableChanges(PMIB_IPADDRTABLE pNew, PMIB_IPADDRTABLE pOld)
                   (pOld->table[i].dwIndex ==
                    pNew->table[i].dwIndex))
                 {
-                  netlink_send_addr(1,
-                                    pOld->table[i].dwAddr,
-                                    pOld->table[i].dwIndex);
+                  netlink_send_addr(
+                    1,
+                    pOld->table[i].dwAddr,
+                    pOld->table[i].
+                    dwIndex);
                 }
               /* send new address */
               netlink_send_addr(0, pNew->table[i].dwAddr,
@@ -350,39 +366,6 @@ int netlink_send_addr(int add_del, DWORD addr, DWORD ifindex)
 
   return(0);
 }
-
-#ifdef ADAPTER_INFO
-PIP_ADAPTER_INFO pAdapterInfo;
-PIP_ADAPTER_INFO a = NULL;
-ULONG outBufLen;
-DWORD ret;
-
-pAdapterInfo = (IP_ADAPTER_INFO*) malloc( sizeof(IP_ADAPTER_INFO));
-outBufLen = sizeof(IP_ADAPTER_INFO);
-
-/* Determine size of buffer */
-if (GetAdaptersInfo(pAdapterInfo, &outBufLen) == ERROR_BUFFER_OVERFLOW)
-  {
-    free(pAdapterInfo);
-    pAdapterInfo = (IP_ADAPTER_INFO*) malloc(outBufLen);
-  }
-
-/* */
-if ((ret = GetAdaptersInfo( pAdapterInfo, &outBufLen)) == NO_ERROR)
-  {
-    for (a = pAdapterInfo; a; a = a->Next)
-      {
-        printf("Adapter: %s ", a->AdapterName);
-        printf("IP: %s\n", a->IpAddressList.IpAddress.String);
-      }
-  }
-else
-  {
-    printf("Error reading adapter info.\n");
-  }
-
-free(pAdapterInfo);
-#endif
 
 int sendIpAddrTable(PMIB_IPADDRTABLE pTable)
 {

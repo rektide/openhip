@@ -1,25 +1,34 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2004-06 the Boeing Company
+ * Copyright (c) 2005-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_sadb.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors  Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
  *
- *  hip_sadb.c
- *
- *  Authors: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
- *
- * the HIP Security Association database
+ *  \brief  the HIP Security Association database
  *
  */
-
 #include <stdio.h>      /* printf() */
 #include <stdlib.h>     /* malloc() */
 #include <string.h>     /* memset() */
@@ -48,8 +57,7 @@
 #include <hip/hip_types.h>
 #include <hip/hip_sadb.h>
 #include <hip/hip_funcs.h> /* gettimeofday() for win32 */
-#include <hip/hip_usermode.h> /* pfkey_send_expire() */
-#include <win32/pfkeyv2.h>
+#include <hip/hip_usermode.h>
 
 
 /*
@@ -57,6 +65,7 @@
  */
 extern int readsp[2];
 extern long g_read_usec;
+extern void esp_start_expire(__u32 spi);
 
 /* the SADB hash table
  * each entry has a rw_lock, and there is one lock for each hash chain */
@@ -235,31 +244,23 @@ void hip_sadb_deinit()
 /*
  * hip_sadb_add()
  *
- * Add an SADB entry to the SADB hash table.
+ * New call to add an SADB entry to the SADB hash table.
  */
-int hip_sadb_add(__u32 type,
-                 __u32 mode,
-                 struct sockaddr *src_hit,
-                 struct sockaddr *dst_hit,
-                 struct sockaddr *src,
-                 struct sockaddr *dst,
-                 __u16 port,
-                 __u32 spi,
-                 __u8 *e_key,
-                 __u32 e_type,
-                 __u32 e_keylen,
-                 __u8 *a_key,
-                 __u32 a_type,
-                 __u32 a_keylen,
-                 __u32 lifetime,
-                 __u16 hitmagic,
-                 __u32 spinat)
+int hip_sadb_add(__u32 mode, int direction,
+                 struct sockaddr *src_hit, struct sockaddr *dst_hit,
+                 struct sockaddr *src, struct sockaddr *dst,
+                 struct sockaddr *src_lsi, struct sockaddr *dst_lsi,
+                 __u32 spi, __u32 spinat,
+                 __u8 *e_key, __u32 e_type, __u32 e_keylen,
+                 __u8 *a_key, __u32 a_type, __u32 a_keylen,
+                 __u32 lifetime)
 {
   hip_sadb_entry *entry, *prev = NULL;
   hip_lsi_entry *lsi_entry;
   int hash, err, key_len;
   __u8 key1[8], key2[8], key3[8];       /* for 3-DES */
   struct timeval now;
+  struct sockaddr *peer_lsi;
 
   /* type is currently ignored */
   if (!src || !dst || !a_key)
@@ -275,7 +276,7 @@ int hip_sadb_add(__u32 type,
     {
       if (entry->spi == spi)
         {
-          goto hip_sadb_add_error_nofree;              /* already exists */
+          goto hip_sadb_add_error_nofree;               /* already exists */
         }
       prev = entry;
     }
@@ -290,16 +291,17 @@ int hip_sadb_add(__u32 type,
   pthread_mutex_init(&entry->rw_lock, NULL);
   pthread_mutex_lock(&entry->rw_lock);
   entry->mode = mode;
+  entry->direction = direction;
   entry->next = NULL;
   entry->spi = spi;
   entry->spinat = spinat;
-  entry->hit_magic = hitmagic;
+  entry->hit_magic = checksum_magic((const hip_hit*)(SA2IP(src_hit)),
+                                    (const hip_hit*)(SA2IP(dst_hit)));
   entry->src_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
   entry->dst_addrs = (sockaddr_list*)malloc(sizeof(sockaddr_list));
   memset(&entry->src_hit, 0, sizeof(struct sockaddr_storage));
   memset(&entry->dst_hit, 0, sizeof(struct sockaddr_storage));
   memset(&entry->lsi, 0, sizeof(struct sockaddr_storage));
-  memset(&entry->lsi6, 0, sizeof(struct sockaddr_storage));
   entry->a_type = a_type;
   entry->e_type = e_type;
   entry->a_keylen = a_keylen;
@@ -313,11 +315,15 @@ int hip_sadb_add(__u32 type,
   entry->exptime.tv_sec = now.tv_sec + lifetime;
   entry->exptime.tv_usec = now.tv_usec;
   entry->bytes = 0;
+  entry->packets = 0;
+  entry->lost = 0;
+  entry->dropped = 0;
   entry->usetime.tv_sec = 0;
   entry->usetime.tv_usec = 0;
-  entry->sequence = 1;
-  entry->replay_win = 0;
-  entry->replay_map = 0;
+  entry->sequence = 0;
+  entry->sequence_hi = 0;
+  entry->replay_win_max = 0;
+  entry->replay_win_map = 0;
 
   /* malloc error */
   if (!entry->src_addrs || !entry->dst_addrs || !entry->a_key)
@@ -336,6 +342,41 @@ int hip_sadb_add(__u32 type,
   memcpy(&entry->dst_addrs->addr, dst, SALEN(dst));
   memcpy(&entry->src_hit, src_hit, SALEN(src_hit));
   memcpy(&entry->dst_hit, dst_hit, SALEN(dst_hit));
+
+  /* 1 = incoming, 2 = outgoing */
+  if (!((direction == 1) || (direction == 2)))
+    {
+      printf("sadb_add() invalid direction specified: %d\n",
+             direction);
+      goto hip_sadb_add_error;
+    }
+  peer_lsi = (direction == 1) ? src_lsi : dst_lsi;
+  memcpy(&entry->lsi, peer_lsi, SALEN(peer_lsi));
+  if (entry->lsi.ss_family == AF_INET)
+    {
+      /* LSI parameters are in network byte order, but here
+       * they are used in host byte order */
+      LSI4(SA(&entry->lsi)) = ntohl(LSI4(SA(&entry->lsi)));
+    }
+
+  if (direction == 2)         /* outgoing */
+    {           /* add to destination cache for easy lookup via address */
+      hip_sadb_add_dst_entry(SA(&entry->lsi), entry);
+      hip_sadb_add_dst_entry(dst_hit, entry);
+      if ((lsi_entry = hip_lookup_lsi(SA(&entry->lsi))))
+        {
+          lsi_entry->send_packets = 1;
+          /* Once an incoming SA is added (outgoing is always
+           * added first in hipd) then we need to send unbuffered
+           * packets.
+           * While that could be done here, instead we decrease
+           * the timeout of hip_esp_input so it is done later.
+           * Otherwise, experience shows a race condition where
+           * the first unbuffered packet arrives at the peer
+           * before its SAs are built. */
+          g_read_usec = 200000;
+        }
+    }
 
   /* copy keys */
   memcpy(entry->a_key, a_key, a_keylen);
@@ -372,46 +413,6 @@ int hip_sadb_add(__u32 type,
       BF_set_key(entry->bf_key, e_keylen, e_key);
     }
 
-  /* add to destination cache for easy lookup via address */
-  hip_sadb_add_dst_entry(dst, entry);
-
-  /* TODO: remove the below code; now the HITs are stored in the sadb
-   * entry, so we can derive the lsi6/4 from that, and then trigger
-   * the lsi_entry->send_packets here (this would remove the ability to
-   * specify any number as an LSI)
-   */
-  /* fill in LSI, add entry to destination cache for outbound;
-   * the LSI is needed for both outbound and inbound SAs */
-  if ((lsi_entry = hip_lookup_lsi_by_addr(dst)))
-    {
-      if (lsi_entry->lsi4.ss_family == AF_INET)             /* lsi exists? */
-        {
-          memcpy(&entry->lsi,  &lsi_entry->lsi4,
-                 SALEN(&lsi_entry->lsi4));
-          hip_sadb_add_dst_entry(SA(&lsi_entry->lsi4), entry);
-        }
-      if (lsi_entry->lsi6.ss_family == AF_INET6)             /* lsi6 exists? */
-        {
-          memcpy(&entry->lsi6, &lsi_entry->lsi6,
-                 SALEN(&lsi_entry->lsi6));
-          hip_sadb_add_dst_entry(SA(&lsi_entry->lsi6), entry);
-        }
-    }
-  else if ((lsi_entry = hip_lookup_lsi_by_addr(src)))
-    {
-      memcpy(&entry->lsi,  &lsi_entry->lsi4, SALEN(&lsi_entry->lsi4));
-      memcpy(&entry->lsi6, &lsi_entry->lsi6, SALEN(&lsi_entry->lsi6));
-      lsi_entry->send_packets = 1;
-      /* Once an incoming SA is added (outgoing is always added
-       * first in hipd) then we need to send unbuffered packets.
-       * While that could be done here, instead we decrease the
-       * timeout of hip_esp_input so it is done later. Otherwise,
-       * experience shows a race condition where the first
-       * unbuffered packet arrives at the peer before its SAs
-       * are built. */
-      g_read_usec = 200000;
-    }
-
   /* finally, link the new entry into the chain */
   if (prev)
     {
@@ -437,12 +438,10 @@ hip_sadb_add_error_nofree:
  * hip_sadb_delete()
  *
  * Remove an SADB entry from the SADB hash table.
- * type, src, dst are provided for compatibility but are currently ignored.
  * First free dynamically-allocated elements, then unlink the entry and
  * either replace it or zero it.
  */
-int hip_sadb_delete(__u32 type, struct sockaddr *src, struct sockaddr *dst,
-                    __u32 spi)
+int hip_sadb_delete(__u32 spi)
 {
   hip_sadb_entry *entry;
   hip_lsi_entry *lsi_entry;
@@ -453,18 +452,10 @@ int hip_sadb_delete(__u32 type, struct sockaddr *src, struct sockaddr *dst,
     }
 
   pthread_mutex_lock(&entry->rw_lock);
-  if (entry->direction == 2)
+  if (entry->direction == 2)         /* outgoing */
     {
       hip_sadb_delete_dst_entry(SA(&entry->lsi));
-      hip_sadb_delete_dst_entry(SA(&entry->lsi6));
-    }
-  if (entry->mode == 3)       /*(HIP_ESP_OVER_UDP) */
-    {
       hip_sadb_delete_dst_entry(SA(&entry->dst_hit));
-    }
-  else
-    {
-      hip_sadb_delete_dst_entry(dst);
     }
 
   /* set LSI entry to expire */
@@ -475,6 +466,53 @@ int hip_sadb_delete(__u32 type, struct sockaddr *src, struct sockaddr *dst,
 
   hip_sadb_delete_entry(entry, TRUE);
   return(0);
+}
+
+/*
+ * hip_sadb_add_del_addr()
+ *
+ * Add or remove another address to the sadb_entry for use with multihoming.
+ * The flags are:
+ *      1 = add source address
+ *      2 = add destination address
+ *      3 = delete source address
+ *      4 = delete destination address
+ */
+int hip_sadb_add_del_addr(__u32 spi, struct sockaddr *addr, int flags)
+{
+  hip_sadb_entry *e;
+  sockaddr_list **l;
+  int hash, err;
+
+  if ((flags < 0) || (flags > 4))
+    {
+      return(-1);           /* invalid flags */
+    }
+  e = hip_sadb_lookup_spi(spi);
+  if (!e)
+    {
+      return(-1);           /* sadb entry not found */
+
+    }
+  hash = sadb_hashfn(spi);
+  pthread_mutex_lock(&hip_sadb_locks[hash]);
+  l = (flags == 1 || flags == 3) ? &e->src_addrs : &e->dst_addrs;
+  err = 0;
+  /* add source or destination address to entry */
+  if ((flags == 1) || (flags == 2))
+    {
+      if (!add_address_to_list(l, addr, 0))
+        {
+          err = -1;
+        }
+      /* remove source or destination address from entry */
+    }
+  else
+    {
+      delete_address_from_list(l, addr, 0);
+    }
+  pthread_mutex_unlock(&hip_sadb_locks[hash]);
+  return(err);
 }
 
 /*
@@ -496,7 +534,8 @@ int hip_sadb_delete_entry(hip_sadb_entry *entry, int unlink)
     {
       hash = sadb_hashfn(entry->spi);
       pthread_mutex_lock(&hip_sadb_locks[hash]);
-      for (last = NULL, e = hip_sadb[hash]; e; last = e, e = e->next)
+      for (last = NULL, e = hip_sadb[hash]; e; last = e, e =
+             e->next)
         {
           if (e == entry)
             {
@@ -607,8 +646,8 @@ hip_lsi_entry *create_lsi_entry(struct sockaddr *lsi)
 /*
  * hip_remove_expired_lsi_entries()
  *
- * LSI entries are only used temporarily, so sadb_add() can know the LSI
- * mapping and for embargoed packets that are buffered. This checks the
+ * LSI entries are only used temporarily, for embargoed packets that are
+ * buffered. This checks the
  * creation time and removes those entries older than LSI_ENTRY_LIFETIME.
  */
 void hip_remove_expired_lsi_entries(struct timeval *now)
@@ -643,34 +682,6 @@ void hip_remove_expired_lsi_entries(struct timeval *now)
       prev = entry;
       entry = entry->next;
     }
-}
-
-/*
- * hip_add_lsi()
- *
- * Adds an <IP,LSI> mapping to the temporary LSI list.
- * This list is used only on SA creation, to provide the <IP,LSI> mapping
- * before an SADB entry exists.
- */
-void hip_add_lsi(struct sockaddr *addr, struct sockaddr *lsi4,
-                 struct sockaddr *lsi6)
-{
-  hip_lsi_entry *entry;
-
-  if (!(entry = hip_lookup_lsi(lsi4)) &&
-      !(entry = hip_lookup_lsi(lsi6)))
-    {
-      entry = create_lsi_entry(lsi4);
-    }
-  else           /* refresh timer for existing LSI entry */
-    {
-      gettimeofday(&entry->creation_time, NULL);
-    }
-  if (lsi6)
-    {
-      memcpy(&entry->lsi6, lsi6, SALEN(lsi6));
-    }
-  memcpy(&entry->addr, addr, SALEN(addr));
 }
 
 /*
@@ -739,12 +750,12 @@ void unbuffer_packets(hip_lsi_entry *entry)
                 sizeof(struct arp_req_data) + 14;
           sprintf(ipstr, "ARP");
         }
-      else if (iph->ip_v == 4)              /* IPv4 packet */
+      else if (iph->ip_v == 4)               /* IPv4 packet */
         {
           len = ntohs(iph->ip_len) + 14;
           sprintf(ipstr, "IPv4");
         }
-      else if ((ip6h->ip6_vfc & 0xF0) == 0x60)              /* IPv6 packet */
+      else if ((ip6h->ip6_vfc & 0xF0) == 0x60)               /* IPv6 packet */
         {
           len = ntohs(ip6h->ip6_plen) + 14 +
                 sizeof(struct ip6_hdr);
@@ -786,28 +797,10 @@ void unbuffer_packets(hip_lsi_entry *entry)
 }
 
 /*
- * hip_lookup_lsi_by_addr()
- *
- * LSI entry lookup based on corresponding destination (peer) address.
- */
-hip_lsi_entry *hip_lookup_lsi_by_addr(struct sockaddr *addr)
-{
-  hip_lsi_entry *entry;
-  for (entry = lsi_temp; entry; entry = entry->next)
-    {
-      if (memcmp(SA2IP(&entry->addr),
-                 SA2IP(addr), SAIPLEN(addr)) == 0)
-        {
-          return(entry);
-        }
-    }
-  return(NULL);
-}
-
-/*
  * hip_lookup_lsi()
  *
  * LSI entry lookup based on the LSI.
+ * Used by buffer_packet() for outgoing data packets.
  */
 hip_lsi_entry *hip_lookup_lsi(struct sockaddr *lsi)
 {
@@ -933,7 +926,8 @@ int hip_sadb_delete_dst_entry(struct sockaddr *addr)
     {
       pthread_mutex_lock(&e->rw_lock);
       if ((addr->sa_family == e->addr.ss_family) &&
-          (memcmp(SA2IP(addr), SA2IP(&e->addr), SAIPLEN(addr)) == 0))
+          (memcmp(SA2IP(addr), SA2IP(&e->addr),
+                  SAIPLEN(addr)) == 0))
         {
           /* keep this entry's lock */
           break;
@@ -983,7 +977,8 @@ hip_sadb_entry *hip_sadb_lookup_addr(struct sockaddr *addr)
     {
       pthread_mutex_lock(&e->rw_lock);
       if ((addr->sa_family == e->addr.ss_family) &&
-          (memcmp(SA2IP(addr), SA2IP(&e->addr), SAIPLEN(addr)) == 0))
+          (memcmp(SA2IP(addr), SA2IP(&e->addr),
+                  SAIPLEN(addr)) == 0))
         {
           r = e->sadb_entry;
           pthread_mutex_unlock(&e->rw_lock);
@@ -1013,7 +1008,7 @@ hip_sadb_entry *hip_sadb_get_next(hip_sadb_entry *placemark)
       pthread_mutex_lock(&hip_sadb_locks[i]);
       for (e = hip_sadb[i]; e; e = e->next)
         {
-          if (e->direction != 2)               /* only outgoing entries */
+          if (e->direction != 2)                 /* only outgoing entries */
             {
               continue;
             }
@@ -1023,27 +1018,27 @@ hip_sadb_entry *hip_sadb_get_next(hip_sadb_entry *placemark)
             }
           else
             {
-              if (return_next)                   /* this is the next entry */
+              if (return_next)                     /* this is the next entry */
                 {
                   r = e;
                 }
-              /* search for placemark, and set flag to
-               * return the next entry */
               else if (e == placemark)
                 {
+                  /* search for placemark, and set flag to
+                   * return the next entry */
                   return_next = 1;
                 }
             }
           if (r)
             {
-              break;                  /* stop searching */
-            }
+              break;
+            }                             /* stop searching */
         }
       pthread_mutex_unlock(&hip_sadb_locks[i]);
       if (r)
         {
-          break;              /* done */
-        }
+          break;
+        }                         /* done */
     }
   return(r);
 }
@@ -1057,22 +1052,135 @@ void hip_sadb_expire(struct timeval *now)
 {
   int i;
   hip_sadb_entry *e;
+  __u32 spi;
 
   for (i = 0; i < SADB_SIZE; i++)
     {
+      spi = 0;
       pthread_mutex_lock(&hip_sadb_locks[i]);
       for (e = hip_sadb[i]; e; e = e->next)
         {
           if (now->tv_sec > e->exptime.tv_sec)
             {
-              /* wait another lifetime before expiring this SA again;
-               * this causes only one expire message to be sent */
-              e->exptime.tv_sec = now->tv_sec + (time_t)e->lifetime;
-              pfkey_send_expire(e->spi);
+              /* wait another lifetime before expiring this SA
+               * again;
+               * this causes only one expire message to be
+               *sent */
+              e->exptime.tv_sec = now->tv_sec +
+                                  (time_t)e->lifetime;
+              spi = e->spi;
             }
         }
       pthread_mutex_unlock(&hip_sadb_locks[i]);
+      if (spi > 0)
+        {
+          esp_start_expire(spi);
+        }
     }
+}
+
+/*
+ * hip_sadb_get_usage()
+ *
+ * Retrieve bytes and use time for the SADB entry matching the given SPI.
+ */
+int hip_sadb_get_usage(__u32 spi, __u64 *bytes, struct timeval *usetime)
+{
+  hip_sadb_entry *entry = hip_sadb_lookup_spi(spi);
+  if (!entry)
+    {
+      return(-1);           /* not found */
+    }
+  pthread_mutex_lock(&entry->rw_lock);
+  *bytes = entry->bytes;
+  usetime->tv_sec = entry->usetime.tv_sec;
+  usetime->tv_usec = entry->usetime.tv_usec;
+  pthread_mutex_unlock(&entry->rw_lock);
+  return(0);
+}
+
+/*
+ * hip_sadb_get_lost()
+ *
+ * Retrieve number of packets lost for the SADB entry matching the given SPI.
+ */
+int hip_sadb_get_lost(__u32 spi, __u32 *lost)
+{
+  hip_sadb_entry *entry = hip_sadb_lookup_spi(spi);
+  if (!entry)
+    {
+      return(-1);           /* not found */
+    }
+  pthread_mutex_lock(&entry->rw_lock);
+  *lost = entry->lost;
+  pthread_mutex_unlock(&entry->rw_lock);
+  return(0);
+}
+
+/*
+ * hip_sadb_inc_bytes()
+ *
+ * Increments bytes used, number of packets, and last used timestamp for an
+ * entry.
+ */
+void hip_sadb_inc_bytes(hip_sadb_entry *entry, __u64 bytes, struct timeval *now,
+                        int lock)
+{
+  if (lock)
+    {
+      pthread_mutex_lock(&entry->rw_lock);
+    }
+  entry->bytes += bytes;
+  entry->packets++;
+  entry->usetime.tv_sec = now->tv_sec;
+  entry->usetime.tv_usec = now->tv_usec;
+  if (lock)
+    {
+      pthread_mutex_unlock(&entry->rw_lock);
+    }
+}
+
+/*
+ * hip_sadb_inc_lost()
+ *
+ * Increments lost packets based on desintation address. Use the addr->nonce
+ * variable to count lost packets. Per-address loss statistics are needed to
+ * properly implement multihoming decisions that manage individual addresses.
+ * Only IPv4 is currently supported because the
+ * IPv6 destination address is not available (need to implement IPV6_PKTINFO).
+ *
+ * Returns the current loss counter, or 0 if not found.
+ */
+__u32 hip_sadb_inc_loss(hip_sadb_entry *entry, __u32 loss, struct sockaddr *dst)
+{
+  sockaddr_list *l;
+  for (l = entry->dst_addrs; l; l = l->next)
+    {
+      if ((l->addr.ss_family == dst->sa_family) &&
+          (!(memcmp(SA2IP(&l->addr), SA2IP(dst),
+                    SAIPLEN(&l->addr)))))
+        {
+          l->nonce += loss;
+          return(l->nonce);
+        }
+    }
+  return(0);
+}
+
+void hip_sadb_reset_loss(hip_sadb_entry *entry, struct sockaddr *dst)
+{
+  sockaddr_list *l;
+  for (l = entry->dst_addrs; l; l = l->next)
+    {
+      if ((l->addr.ss_family == dst->sa_family) &&
+          (!(memcmp(SA2IP(&l->addr), SA2IP(dst),
+                    SAIPLEN(&l->addr)))))
+        {
+          l->nonce = 0;
+          return;
+        }
+    }
+  return;
 }
 
 /*
@@ -1131,7 +1239,7 @@ int hip_select_family_by_proto(__u32 lsi, __u8 proto, __u8 *header,
  * of outgoing packets can then be matched for incoming
  * packets.
  *
- *  dir = 0 for outgoing, 1 for incoming
+ *      dir = 0 for outgoing, 1 for incoming
  */
 int hip_add_proto_sel_entry(__u32 lsi, __u8 proto, __u8 *header, int family,
                             int dir, struct timeval *now)
@@ -1218,8 +1326,9 @@ __u32 hip_proto_header_to_selector(__u32 lsi, __u8 proto, __u8 *header, int dir)
     case IPPROTO_TCP:
       tcph = (struct tcphdr *)header;
 #ifdef __MACOSX__
-      selector = (dir == 1) ? (tcph->th_sport << 16) + tcph->th_dport :
-                 (tcph->th_dport << 16) + tcph->th_sport;
+      selector =
+        (dir == 1) ? (tcph->th_sport << 16) + tcph->th_dport :
+        (tcph->th_dport << 16) + tcph->th_sport;
 #else
       selector = (dir == 1) ? (tcph->source << 16) + tcph->dest :
                  (tcph->dest << 16) + tcph->source;
@@ -1228,8 +1337,9 @@ __u32 hip_proto_header_to_selector(__u32 lsi, __u8 proto, __u8 *header, int dir)
     case IPPROTO_UDP:
       udph = (struct udphdr *)header;
 #ifdef __MACOSX__
-      selector = (dir == 1) ? (udph->uh_sport << 16) + udph->uh_dport :
-                 (udph->uh_dport << 16) + udph->uh_sport;
+      selector =
+        (dir == 1) ? (udph->uh_sport << 16) + udph->uh_dport :
+        (udph->uh_dport << 16) + udph->uh_sport;
 #else
       selector = (dir == 1) ? (udph->source << 16) + udph->dest :
                  (udph->dest << 16) + udph->source;
@@ -1341,11 +1451,15 @@ void print_sadb()
         {
           pthread_mutex_lock(&entry->rw_lock);
           printf("entry(%d): ", i);
-          printf("SPI=0x%x dir=%d magic=0x%x mode=%d lsi=%x ",
-                 entry->spi, entry->direction, entry->hit_magic,
-                 entry->mode,
-                 ((struct sockaddr_in*)&entry->lsi)->sin_addr.s_addr);
-          printf("lsi6= a_type=%d e_type=%d a_keylen=%d "
+          printf(
+            "SPI=0x%x dir=%d magic=0x%x mode=%d lsi=%x ",
+            entry->spi,
+            entry->direction,
+            entry->hit_magic,
+            entry->mode,
+            ((struct sockaddr_in*)&entry->lsi)->sin_addr.
+            s_addr);
+          printf("a_type=%d e_type=%d a_keylen=%d "
                  "e_keylen=%d lifetime=%llu seq=%d\n",
                  entry->a_type, entry->e_type,
                  entry->a_keylen, entry->e_keylen,

@@ -1,23 +1,34 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-05 the Boeing Company
+ * Copyright (c) 2002-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_mac.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- *  hip_mac.c
- *
- *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+ *  \authors	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *              Tom Henderson <thomas.r.henderson@boeing.com>
  *              Jeff Meegan  jeff.r.meegan@boeing.com
  *
+ *  \brief  Mac OS X specific functions.
  *
  */
 
@@ -33,18 +44,18 @@
 #include <openssl/dsa.h>
 #include <openssl/asn1.h>
 #include <openssl/rand.h>
-#include <arpa/inet.h>          /* inet_addr()      */
+#include <arpa/inet.h>          /* inet_addr()                  */
 #ifdef __MACOSX__
 #include <netinet/in_systm.h>
 #endif
 #include <netinet/in.h>         /* INADDR_NONE                  */
 #include <netinet/ip.h>         /* INADDR_NONE                  */
 #include <sys/types.h>
-#include <sys/wait.h>           /* wait_pid()       */
+#include <sys/wait.h>           /* wait_pid()                   */
 #include <sys/uio.h>            /* iovec			*/
 #include <errno.h>
 #include <fcntl.h>              /* open()			*/
-#include <netdb.h>              /* gethostbyname    */
+#include <netdb.h>              /* gethostbyname                */
 #ifndef __MACOSX__
 #include <asm/types.h>
 #else
@@ -122,7 +133,8 @@ int select_preferred_address()
                       SAIPLEN(&l->addr)) == 0))
             {
               l->preferred = TRUE;
-              log_(NORM, "%s selected as the", logaddr(SA(&l->addr)));
+              log_(NORM, "%s selected as the",
+                   logaddr(SA(&l->addr)));
               log_(NORM, " preferred address (conf).\n");
               preferred_selected = TRUE;
               break;
@@ -135,13 +147,17 @@ int select_preferred_address()
                 {
                   continue;
                 }
-              ip = ((struct sockaddr_in*)&l->addr)->sin_addr.s_addr;
-              if ((ntohl(ip) == INADDR_LOOPBACK) || (IS_LSI32(ip)))
+              ip =
+                ((struct sockaddr_in*)&l->addr)->
+                sin_addr.s_addr;
+              if ((ntohl(ip) == INADDR_LOOPBACK) ||
+                  (IS_LSI32(ip)))
                 {
                   continue;
                 }
               l->preferred = TRUE;
-              log_(NORM, "%s selected as the", logaddr(SA(&l->addr)));
+              log_(NORM, "%s selected as the",
+                   logaddr(SA(&l->addr)));
               log_(NORM, " preferred address (conf iface).\n");
               preferred_selected = TRUE;
               break;
@@ -191,7 +207,7 @@ int hip_handle_netlink(char *data, int len)
   struct if_msghdr *ifm;
   struct ifa_msghdr *ifam;
 
-  struct sockaddr *packed; /* For decoding addresses */
+  struct sockaddr *packed;       /* For decoding addresses */
   struct sockaddr unpacked[4096];
   int is_add, retval = 0,i = 0,loc = 0;
   struct sockaddr_storage ss_addr;
@@ -228,7 +244,8 @@ int hip_handle_netlink(char *data, int len)
               memcpy(&(unpacked[i]), packed,
                      packed->sa_len);
               packed = (struct sockaddr*)
-                       (((char*)packed) + ROUNDUP(packed->sa_len));
+                       (((char*)packed) +
+                        ROUNDUP(packed->sa_len));
               if (i == RTAX_IFA)
                 {
                   loc = i;
@@ -285,8 +302,8 @@ int hip_handle_netlink(char *data, int len)
  *
  * Uses ioctl(), not rtnetlink, just like ip command.
  * equivalent of:
- *  "/sbin/ip link set hip0 mtu 1400"
- *  "/sbin/ip link set hip0 up"
+ *      "/sbin/ip link set hip0 mtu 1400"
+ *      "/sbin/ip link set hip0 up"
  * (see iproute2 source file ip/iplink.c)
  */
 int set_link_params(char *dev, int mtu)
@@ -330,7 +347,7 @@ int set_link_params(char *dev, int mtu)
     }
 
   flags = mask = IFF_UP;
-  if ((ifr.ifr_flags ^ flags) & mask)     /* modify flags */
+  if ((ifr.ifr_flags ^ flags) & mask)         /* modify flags */
     {
       ifr.ifr_flags &= ~mask;
       ifr.ifr_flags |= mask & flags;

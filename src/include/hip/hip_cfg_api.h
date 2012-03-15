@@ -1,22 +1,36 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2009 the Boeing Company
+ * Copyright (c) 2008-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_cfg_api.h
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors	Jin Fang <jin.fang@boeing.com>
  *
- *  Authors:    Jin Fang
+ *  \brief  Configuration API definitions.
  */
 
-#ifndef _HIPCFGAPI_H_
-#define _HIPCFGAPI_H_
+#ifndef _HIP_CFG_API_H_
+#define _HIP_CFG_API_H_
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <net/ethernet.h>
@@ -51,7 +65,7 @@ extern int hipcfg_allowed_peers(const hip_hit hit1, const hip_hit hit2);
  *         0 if no such hit pair
  *         -1 if error.
  * Note: hits1 and hits2 are arrays with the at least max_cnt size, and have
- *pre-alloced
+ **pre-alloced
  *       when calling this function.
  */
 #define hipcfg_peers_allowed_fn "hipcfg_peers_allowed"
@@ -64,9 +78,9 @@ extern int hipcfg_peers_allowed(hip_hit *hits1, hip_hit *hits2, int max_cnt);
  * Input: ip - the current Underlay IP address of the endbox
  *             the sockaddr should point to a sockaddr_storage structure so that
  *             either an IPv4 or IPv6 address can be passed in. The sa_family
- *must
+ **must
  *             be set to AF_INET for an IPv4 address, or AF_INET6 for an IPv6
- *address.
+ **address.
  *
  * Output: none
  *
@@ -79,15 +93,15 @@ extern int hipcfg_setUnderlayIpAddress(const char *ip);
 
 /* Input: host - the legacy host IPv4/IPv6 address
  *               the sockaddr should point to a sockaddr_storage structure so
- *that
+ **that
  *               either an IPv4 or IPv6 address can be passed in. The sa_family
- *must
+ **must
  *               be set to AF_INET for an IPv4 address, or AF_INET6 for an IPv6
- *address.
+ **address.
  * Output: eb - the endbox's LSI/HIT. sockaddr should point to a
- *sockaddr_storage
+ **sockaddr_storage
  *              structure so that either an IPv4 or IPv6 address can be
- *returned.
+ **returned.
  *              When the call is returned, the sa_family is set to AF_INET if
  *              sockaddr_storage contains an IPv4 address, or AF_INET6 if it
  *              contains an IPv6 address.
@@ -107,10 +121,10 @@ extern int hipcfg_getEndboxByLegacyNode(const struct sockaddr *host,
  *             before calling this function.
  * Output: llip -  lower layer IP address, either IPv4/v6.
  *             sa_family will be set to either AF_INET or AF_INET6 after
- *successfully
+ **successfully
  *             calling this function per its actual IP address family.
  * Return: 0 - if the lookup succeeed, 1 - if the mapping is not found, -1 if
- *error.
+ **error.
  */
 #define hipcfg_getLlipByEndbox_fn "hipcfg_getLlipByEndbox"
 extern int (*hipcfg_getLlipByEndbox_p)(const struct sockaddr *eb,
@@ -119,16 +133,16 @@ extern int hipcfg_getLlipByEndbox(const struct sockaddr *eb,
                                   struct sockaddr *llip);
 
 /* Input eb - endbox address either in IPv4 (LSI) or IPv6 (HIT)
- *        The sa_family must be set to ether  AF_INET or AF_INET6
+ *            The sa_family must be set to ether  AF_INET or AF_INET6
  *            before calling this function.
  * Output hosts - an array of legacy nodes. sa_family of each element
  *                will be set to either AF_INET or AF_INET6 per its actual IP
- *address family
+ **address family
  *                The caller must provide the storage for the  array.
  *        size - the size of array hosts (maximum number of elements can be
- *returned).
+ **returned).
  * Return -1 if error,  0 if cannot find a match, a positivie number for the
- *actual elements in hosts.
+ **actual elements in hosts.
  */
 #define hipcfg_getLegacyNodesByEndbox_fn "hipcfg_getLegacyNodesByEndbox"
 extern int (*hipcfg_getLegacyNodesByEndbox_p)(const struct sockaddr *eb,

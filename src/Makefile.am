@@ -1,27 +1,35 @@
 #
 # Host Identity Protocol
-# Copyright (c) 2006-2011 the Boeing Company
+# Copyright (c) 2006-2012 the Boeing Company
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 #
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
+#  \file  src/Makefile.am
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+#  \authors  Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
 #
-# Makefile.am
-#
-# Author: Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>
-#
+#  \brief  Automake makefile.
 #
 
+AUTOMAKE_OPTIONS=color-tests
+
 sbin_PROGRAMS = hitgen hip hipstatus
-if WANT_KERNEL
-sbin_PROGRAMS += hipd
-endif
 
 # HIP protocol source files
 SRC_PROTO = 	protocol/hip_addr.c protocol/hip_cache.c protocol/hip_dht.c \
@@ -33,23 +41,20 @@ SRC_PROTO = 	protocol/hip_addr.c protocol/hip_cache.c protocol/hip_dht.c \
 SRC_UTIL =	util/hip_util.c util/hip_xml.c
 
 # Linux main files 
-SRC_MAIN_KERN = linux/hip_linux_main.c
 SRC_MAIN_UMH =	linux/hip_linux_umh.c
 
 # Hitgen source files
 SRC_HITGEN = 	util/hitgen.c util/hip_util.c protocol/hip_globals.c
 
-hitgen_CFLAGS =	-DHITGEN
-if !WANT_KERNEL
-hitgen_CFLAGS += -D__UMH__
-endif
+hitgen_CFLAGS =	-DHITGEN -D__UMH__
 
 # Usermode version
 hip_CFLAGS =	-D__UMH__
 SRC_USERMODE =	usermode/hip_umh_main.c \
-		usermode/hip_dns.c  usermode/hip_pfkey.c \
-		usermode/libipsec_stub.c usermode/hip_esp.c \
-		usermode/hip_sadb.c   usermode/hip_status2.c
+		usermode/hip_dns.c \
+		usermode/hip_esp.c \
+		usermode/hip_sadb.c \
+		usermode/hip_status2.c
 if WANT_MOBILE_ROUTER
 SRC_USERMODE += usermode/hip_mr.c
 endif
@@ -72,14 +77,20 @@ SRC_UTIL +=	util/cfg-api/hip_cfg_api.c
 SUBDIRS = util
 endif
 
-# i3 support
-SRC_PROTO_I3 = protocol/i3_send.c protocol/i3_recv.c
-
 # different targets
 hitgen_SOURCES = $(SRC_HITGEN)
-hipd_SOURCES =	$(SRC_PROTO) $(SRC_UTIL) $(SRC_MAIN_KERN)
 hip_SOURCES = 	$(SRC_PROTO) $(SRC_UTIL) $(SRC_MAIN_UMH) $(SRC_USERMODE)
 hipstatus_SOURCES = util/usermode-status.c
+
+AM_COLOR_TESTS=always
+scriptdir=util/scripts
+TESTS = $(scriptdir)/test-bex.sh $(scriptdir)/test-mobility.sh \
+	$(scriptdir)/test-rekey.sh
+
+.PHONY : shell
+shell:
+	python $(scriptdir)/hiptest.py shell
+
 
 # this would be nice to use, but it overwrites the file upon 'make install'
 #dist_sysconf_DATA = ../conf/known_host_identities.xml

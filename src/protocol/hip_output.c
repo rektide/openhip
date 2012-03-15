@@ -1,23 +1,33 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-06 the Boeing Company
+ * Copyright (c) 2002-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_output.c
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- *  hip_output.c
- *
- *  Author:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+ *  \authors	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *              Tom Henderson,  <thomas.r.henderson@boeing.com>
  *
- * Routines for building and sending HIP packets.
+ *  \brief  Routines for building and sending HIP packets.
  *
  */
 
@@ -31,11 +41,11 @@
 #include <openssl/crypto.h>     /* OpenSSL's crypto library     */
 #include <openssl/bn.h>         /* Big Numbers                  */
 #include <openssl/des.h>        /* 3DES support			*/
-#include <openssl/blowfish.h>   /* BLOWFISH support     */
+#include <openssl/blowfish.h>   /* BLOWFISH support             */
 #include <openssl/aes.h>        /* AES support			*/
 #include <openssl/dsa.h>        /* DSA support                  */
 #include <openssl/dh.h>         /* Diffie-Hellman contexts      */
-#include <openssl/sha.h>        /* SHA1 algorithms    */
+#include <openssl/sha.h>        /* SHA1 algorithms              */
 #include <openssl/rand.h>       /* RAND_seed()                  */
 #include <openssl/err.h>        /* ERR_ functions		*/
 #ifdef __WIN32__
@@ -57,20 +67,11 @@
 #endif
 #include <netinet/ip.h>         /* struct iphdr                 */
 #endif
-#if defined(__MACOSX__) || defined(__UMH__)
-#include <win32/pfkeyv2.h>
-#else
-#include <linux/pfkeyv2.h> /* PF_KEY_V2 support */
-#endif
 
 #include <hip/hip_types.h>
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
-
-#ifdef HIP_I3
-#include "i3_hip.h"
-#endif
 
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
@@ -82,6 +83,7 @@
 int hip_check_bind(struct sockaddr *src, int num_attempts);
 int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug);
 int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single);
+int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
 int build_tlv_cert(__u8 *buff);
 int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type);
@@ -101,9 +103,9 @@ extern void del_divert_rule(int);
  *
  * in:		hit  = receiver's HIT, who we want to start communications with
  *                     or sender's HIT if we are a RVS relaying this I1 packet
- *    hip_a = association to use for addresses and retransmission;
- *            if this is RVS relaying, then this is the assoc between
- *            the RVS and the responder client
+ *              hip_a = association to use for addresses and retransmission;
+ *                      if this is RVS relaying, then this is the assoc between
+ *                      the RVS and the responder client
  *
  * out:		Returns bytes sent when successful, -1 on failure.
  *
@@ -169,12 +171,13 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
       if (*(hip_a->peer_hi->rvs_count) > 0)
         {
           log_(NORMT, "Waiting for RVS DNS resolution\n");
-          pthread_cond_wait(hip_a->peer_hi->rvs_cond, hip_a->peer_hi->rvs_mutex);
+          pthread_cond_wait(hip_a->peer_hi->rvs_cond,
+                            hip_a->peer_hi->rvs_mutex);
           log_(NORMT, "Waiting done, sending I1 now.\n");
         }
       pthread_mutex_unlock(hip_a->peer_hi->rvs_mutex);
-      if (*(hip_a->peer_hi->rvs_addrs) != NULL)           /* use RVS instead of
-                                                           *DST*/
+      if (*(hip_a->peer_hi->rvs_addrs) != NULL)             /* use RVS instead
+                                                             *of DST*/
         {
           dst = SA(&(*(hip_a->peer_hi->rvs_addrs))->addr);
           if (hip_a->udp && (dst->sa_family == AF_INET))
@@ -202,7 +205,7 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
         }
 
       memcpy(hiph->hit_sndr, hip_a->hi->hit, sizeof(hip_hit));
-      if (hit == NULL)           /* opportunistic */
+      if (hit == NULL)             /* opportunistic */
         {
           memset(hiph->hit_rcvr, 0, sizeof(hip_hit));
         }
@@ -221,13 +224,6 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
     }
 
   /* send the packet */
-#ifdef HIP_I3
-  if (OPT.i3)
-    {
-      return(send_i3(buff, location, hit, src, dst));
-    }
-  else
-#endif
   return(hip_send(buff, location, src, dst, hip_a, do_retrans));
 }
 
@@ -236,12 +232,12 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
  * function hip_send_R1()
  *
  * in:		src
- *    dst
- *    hiti
- *    hi
+ *              dst
+ *              hiti
+ *              hi
  *
  * out:		Returns bytes sent when successful, -1 on error.
- *    hip_a will have DH context and retransmission packets
+ *              hip_a will have DH context and retransmission packets
  *
  * Opens a socket and sends the HIP Responder packet.
  *
@@ -312,13 +308,6 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 
   /* send the packet */
   log_(NORMT, "Sending HIP_R1 packet (%d bytes)...\n", total_len);
-#ifdef HIP_I3
-  if (OPT.i3)
-    {
-      err = send_i3(data, r1_entry->len, hiti, src, dst);
-    }
-  else
-#endif
   err = hip_send(data, total_len, src, dst, NULL, FALSE);
 
   free(data);       /* not retransmitted */
@@ -330,9 +319,9 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
  * function hip_generate_R1()
  *
  * in:		data = ptr of where to store R1 (must have enough space)
- *    hi = ptr to my Host Identity to use
- *    cookie = the puzzle to insert into the R1
- *    dh_entry = the DH cache entry to use
+ *              hi = ptr to my Host Identity to use
+ *              cookie = the puzzle to insert into the R1
+ *              dh_entry = the DH cache entry to use
  *
  */
 int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
@@ -402,7 +391,9 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 
   /* HIP transform */
   location += build_tlv_transform(&data[location],
-                                  PARAM_HIP_TRANSFORM, HCNF.hip_transforms, 0);
+                                  PARAM_HIP_TRANSFORM,
+                                  HCNF.hip_transforms,
+                                  0);
 
   /* host_id */
   location += build_tlv_hostid(&data[location], hi, HCNF.send_hi_name);
@@ -417,7 +408,9 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 
   /* ESP transform */
   location += build_tlv_transform(&data[location],
-                                  PARAM_ESP_TRANSFORM, HCNF.esp_transforms, 0);
+                                  PARAM_ESP_TRANSFORM,
+                                  HCNF.esp_transforms,
+                                  0);
 
   /* hip_signature_2 - receiver's HIT and checksum zeroed */
   hiph->hdr_len = (location / 8) - 1;
@@ -667,13 +660,17 @@ int hip_send_I2(hip_assoc *hip_a)
       log_(NORM, "\n");
 
       if (((err = des_set_key_checked((
-                                        (des_cblock *)&secret_key1),
+                                        (des_cblock *)&
+                                        secret_key1),
                                       ks1)) != 0) ||
           ((err = des_set_key_checked((
-                                        (des_cblock *)&secret_key2),
+                                        (des_cblock *)&
+                                        secret_key2),
                                       ks2)) != 0) ||
           ((err = des_set_key_checked((
-                                        (des_cblock *)&secret_key3), ks3)) != 0))
+                                        (des_cblock *)&
+                                        secret_key3),
+                                      ks3)) != 0))
         {
           log_(WARN, "Unable to use calculated DH secret for ");
           log_(NORM, "3DES key (%d)\n", err);
@@ -682,8 +679,14 @@ int hip_send_I2(hip_assoc *hip_a)
           return(-1);
         }
       log_(NORM, "Encrypting %d bytes using 3-DES.\n", data_len);
-      des_ede3_cbc_encrypt(unenc_data, enc_data, data_len,
-                           ks1, ks2, ks3, (des_cblock*)cbc_iv, DES_ENCRYPT);
+      des_ede3_cbc_encrypt(unenc_data,
+                           enc_data,
+                           data_len,
+                           ks1,
+                           ks2,
+                           ks3,
+                           (des_cblock*)cbc_iv,
+                           DES_ENCRYPT);
       memcpy(enc->iv + iv_len, enc_data, data_len);
       break;
     case ESP_BLOWFISH_CBC_HMAC_SHA1:
@@ -764,14 +767,6 @@ int hip_send_I2(hip_assoc *hip_a)
 
   /* send the packet */
   log_(NORMT, "Sending HIP_I2 packet (%d bytes)...\n", location);
-#ifdef HIP_I3
-  if (OPT.i3)
-    {
-      return(send_i3(buff, location, &hip_a->peer_hi->hit, HIPA_SRC(hip_a),
-                     HIPA_DST(hip_a)));
-    }
-  else
-#endif
   return(hip_send(buff, location, HIPA_SRC(hip_a), HIPA_DST(hip_a),
                   hip_a, TRUE));
 }
@@ -781,7 +776,7 @@ int hip_send_I2(hip_assoc *hip_a)
  * function hip_send_R2()
  *
  * in:		hip_a = HIP association containing valid source/destination
- *      addresses, HITs, SPIs, key material, pub key
+ *                      addresses, HITs, SPIs, key material, pub key
  *
  * out:		Returns bytes sent when successful, -1 on error.
  *
@@ -866,14 +861,6 @@ int hip_send_R2(hip_assoc *hip_a)
   log_(NORMT, "Sending HIP_R2 packet (%d bytes)...\n", location);
   /* R2 packet is not scheduled for retrans., but saved for retrans. */
 
-#ifdef HIP_I3
-  if (OPT.i3)
-    {
-      return(send_i3(buff, location, &hiph->hit_rcvr, HIPA_SRC(hip_a),
-                     HIPA_DST(hip_a)));
-    }
-  else
-#endif
   return(hip_send(buff, location, HIPA_SRC(hip_a), HIPA_DST(hip_a),
                   hip_a, TRUE));
 }
@@ -963,10 +950,10 @@ int hip_send_update_relay(__u8 *data, hip_assoc *hip_a_client)
  * function hip_send_update()
  *
  * in:		hip_a = HIP association containing valid source/destination
- *      addresses, HITs, SPIs, key material, pub key
- *    newaddr = new preferred address to include in LOCATOR, or NULL
- *    dstaddr = alternate destination address, if this is an address
- *      check message, otherwise NULL
+ *                      addresses, HITs, SPIs, key material, pub key
+ *              newaddr = new preferred address to include in LOCATOR, or NULL
+ *              dstaddr = alternate destination address, if this is an address
+ *                      check message, otherwise NULL
  *
  * out:		Returns bytes sent when successful, -1 on error.
  *
@@ -976,11 +963,12 @@ int hip_send_update_relay(__u8 *data, hip_assoc *hip_a_client)
  *
  */
 int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
-                    struct sockaddr *dstaddr)
+                    struct sockaddr *src, struct sockaddr *dstaddr)
 {
-  struct sockaddr *src, *dst;
+  struct sockaddr *dst;
   hiphdr *hiph;
-  __u8 buff[sizeof(hiphdr)             + 2 * sizeof(tlv_locator) +
+  __u8 buff[sizeof(hiphdr)             +
+            sizeof(tlv_locator)        + MAX_LOCATORS * sizeof(locator) +
             sizeof(tlv_esp_info)       +
             sizeof(tlv_seq)            + sizeof(tlv_ack) +
             sizeof(tlv_diffie_hellman) + DH_MAX_LEN +
@@ -990,20 +978,22 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
             sizeof(tlv_via_rvs)        + MAX_SIG_SIZE + 2];
   int location = 0, retransmit = FALSE;
 
-  tlv_locator *loc;
-  locator *loc1;
   tlv_esp_info *esp_info;
   tlv_seq *seq;
   tlv_ack *ack;
   tlv_echo *echo;
-  __u32 *nonce, loc_spi;
+  __u32 *nonce;
   sockaddr_list *l, *l2;
   hip_assoc *hip_mr;
 
   memset(buff, 0, sizeof(buff));
 
+  /* address verfication reply may need to be sent from a different src */
+  if (!src)
+    {
+      src = HIPA_SRC(hip_a);
+    }
   /* for address verification, a new destination address will be given */
-  src = HIPA_SRC(hip_a);
   dst = dstaddr ? dstaddr : HIPA_DST(hip_a);
   if (dst->sa_family != src->sa_family)
     {
@@ -1019,7 +1009,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
             }
           if (!l2)
             {
-              l2 = l;                    /* save first address in same family */
+              l2 = l;                   /* save first address in same family */
             }
           if (l->preferred)
             {
@@ -1052,7 +1042,8 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
    * hip_a->rekey; also, rekey->keymat_index should be set.
    */
   if (newaddr ||
-      (hip_a->rekey && hip_a->rekey->new_spi && hip_a->rekey->need_ack))
+      (hip_a->rekey && hip_a->rekey->new_spi &&
+       hip_a->rekey->need_ack))
     {
       /* ESP_INFO */
       esp_info = (tlv_esp_info*) &buff[location];
@@ -1090,37 +1081,16 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
     }
 
   /*
-   * add LOCATOR parameter when supplied with readdressing info
+   * Possibly add LOCATOR parameter when supplied with readdressing info,
+   * or when unsent locators exist in hip_a->hi->addrs.
    */
-  if (newaddr)
-    {
-      loc = (tlv_locator*) &buff[location];
-      loc->type = htons(PARAM_LOCATOR);
-      loc->length = htons(sizeof(tlv_locator) - 4);
-      loc1 = &loc->locator1[0];
-      loc1->traffic_type = LOCATOR_TRAFFIC_TYPE_BOTH;
-      loc1->locator_type = LOCATOR_TYPE_SPI_IPV6;
-      loc1->locator_length = 5;           /* (32 + 128 bits) / 4 */
-      loc1->reserved = LOCATOR_PREFERRED;           /* set the P-bit */
-      loc1->locator_lifetime = htonl(HCNF.loc_lifetime);
-      memset(loc1->locator, 0, sizeof(loc1->locator));
-      loc_spi = htonl(hip_a->rekey ?  hip_a->rekey->new_spi :
-                      hip_a->spi_in);
-      memcpy(loc1->locator, &loc_spi, 4);
-      if (newaddr->sa_family == AF_INET6)
-        {
-          memcpy(&loc1->locator[4], SA2IP(newaddr),
-                 SAIPLEN(newaddr));
-        }
-      else              /* IPv4-in-IPv6 address format */
-        {
-          memset(&loc1->locator[14], 0xFF, 2);
-          memcpy(&loc1->locator[16], SA2IP(newaddr),
-                 SAIPLEN(newaddr));
-        }
-      location += sizeof(tlv_locator);
-      location = eight_byte_align(location);
-    }
+  location += build_tlv_locators(
+    &buff[location],
+    &hip_a->hi->addrs,
+    hip_a->rekey ? hip_a->rekey->new_spi :
+    hip_a->spi_in,
+    newaddr != NULL);
+
 
   if (hip_a->rekey && hip_a->rekey->need_ack)
     {
@@ -1310,8 +1280,8 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
  * function hip_send_update_proxy_ticket()
  *
  * in:		hip_mr = HIP association between mobile node and mobile router
- *    hip_a = HIP association between mobile node and peer node
- *    keymat_index = index to key material delagated from mobile
+ *              hip_a = HIP association between mobile node and peer node
+ *              keymat_index = index to key material delagated from mobile
  *			node to mobile router
  *
  * out:		Returns bytes sent when successful, -1 on error.
@@ -1433,11 +1403,81 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
 
 /*
  *
+ * function hip_send_update_locators()
+ *
+ * in:		hip_a = HIP association containing valid source/destination
+ *                      addresses
+ *
+ * out:		Returns bytes sent when successful, -1 on error.
+ *
+ * Inform peer of our current address list (hip_a->hi->addrs).
+ *
+ */
+int hip_send_update_locators(hip_assoc *hip_a)
+{
+  hiphdr *hiph;
+  __u8 buff[sizeof(hiphdr) + sizeof(tlv_locator) - sizeof(locator) +
+            MAX_LOCATORS * sizeof(locator) + sizeof(tlv_hmac) +
+            sizeof(tlv_hip_sig) + MAX_SIG_SIZE + 2];
+  int locators_len, location = 0;
+  struct sockaddr *src, *dst;
+
+  memset(buff, 0, sizeof(buff));
+
+  /* build the HIP header */
+  hiph = (hiphdr*) buff;
+  hiph->nxt_hdr = IPPROTO_NONE;
+  hiph->hdr_len = 0;
+  hiph->packet_type = UPDATE;
+  hiph->version = HIP_PROTO_VER;
+  hiph->res = HIP_RES_SHIM6_BITS;
+  hiph->control = 0;
+  hiph->checksum = 0;
+  memcpy(&hiph->hit_sndr, hip_a->hi->hit, sizeof(hip_hit));
+  memcpy(&hiph->hit_rcvr, hip_a->peer_hi->hit, sizeof(hip_hit));
+  location = sizeof(hiphdr);
+
+  /* build a locator parameter containing all of our addresses */
+  locators_len = build_tlv_locators(&buff[location], &hip_a->hi->addrs,
+                                    hip_a->spi_in, 0);
+  if (locators_len == 0)
+    {
+      return(0);           /* no need to send this UPDATE packet */
+    }
+  location += locators_len;
+
+  /* HMAC */
+  hiph->hdr_len = (location / 8) - 1;
+  location += build_tlv_hmac(hip_a, buff, location, PARAM_HMAC);
+
+  /* HIP signature */
+  hiph->hdr_len = (location / 8) - 1;
+  location += build_tlv_signature(hip_a->hi, buff, location, FALSE);
+
+  src = HIPA_SRC(hip_a);
+  dst = HIPA_DST(hip_a);
+
+  hiph->hdr_len = (location / 8) - 1;
+  hiph->checksum = 0;
+  if (!hip_a->udp)
+    {
+      hiph->checksum = checksum_packet(buff, src, dst);
+    }
+
+  /* send the packet */
+  log_(NORMT, "Sending UPDATE locators packet (%d bytes)...\n", location);
+  log_(NORM, "Sending UPDATE packet to dst : %s \n", logaddr(dst));
+  hip_check_bind(src, HIP_UPDATE_BIND_CHECKS);
+  return(hip_send(buff, location, src, dst, hip_a, FALSE));
+}
+
+/*
+ *
  * function hip_send_close()
  *
  * in:		hip_a = HIP association containing valid source/destination
- *      addresses, HITs, SPIs, key material, pub key
- *    send_ack   = send CLOSE_ACK if true, CLOSE otherwise
+ *                      addresses, HITs, SPIs, key material, pub key
+ *              send_ack   = send CLOSE_ACK if true, CLOSE otherwise
  *
  * out:		Returns bytes sent when successful, -1 on error.
  *
@@ -1496,7 +1536,7 @@ int hip_send_close(hip_assoc *hip_a, int send_ack)
     }
   else                  /* ECHO_REQUEST */
     {           /* generate a 4-byte nonce and save it to hip_a->opaque */
-      if (hip_a->opaque)           /* this should not be set */
+      if (hip_a->opaque)             /* this should not be set */
         {
           free(hip_a->opaque);
         }
@@ -1553,7 +1593,7 @@ int hip_send_close(hip_assoc *hip_a, int send_ack)
  * function hip_send_notify()
  *
  * in:		hip_a = HIP association containing valid source/destination
- *      addresses, HITs, SPIs, key material, pub key
+ *                      addresses, HITs, SPIs, key material, pub key
  *
  * out:		Returns bytes sent when successful, -1 on error.
  *
@@ -1638,10 +1678,10 @@ int hip_send_notify(hip_assoc *hip_a, int code, __u8 *data, int data_len)
  * function hip_send()
  *
  * in:		data = pointer to data to send
- *    len = length of data
- *    hip_a = hip assoc for getting src, dst addresses and for
- *            storing packet for retransmission
- *    retransmit = flag T/F to store packet in rexmt_cache
+ *              len = length of data
+ *              hip_a = hip assoc for getting src, dst addresses and for
+ *                      storing packet for retransmission
+ *              retransmit = flag T/F to store packet in rexmt_cache
  *
  * out:		returns bytes sent
  *
@@ -1774,7 +1814,7 @@ int hip_send(__u8 *data, int len, struct sockaddr* src, struct sockaddr* dst,
 
   /* queue packet for retransmission, even if there are errors */
 queue_retrans:
-  if (hip_a != NULL)       /* XXX incorrect for RVS relaying */
+  if (hip_a != NULL)         /* XXX incorrect for RVS relaying */
     {
       clear_retransmissions(hip_a);
     }
@@ -1802,10 +1842,10 @@ queue_retrans:
  * function hip_retransmit()
  *
  * in:		hip_a = hip association
- *    data = packet data
- *    len = data length
- *    src = source address to bind to
- *    dst = destination address to send to
+ *              data = packet data
+ *              len = data length
+ *              src = source address to bind to
+ *              dst = destination address to send to
  *
  * out:		returns bytes sent if successful, -1 otherwise
  *
@@ -1882,7 +1922,7 @@ int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len,
  * function hip_check_bind()
  *
  * in:		addr = pointer to address to bind
- *    num_attempts = number of times to try the bind() call
+ *              num_attempts = number of times to try the bind() call
  *
  * out:		returns 0 if bind is successful, -1 otherwise
  *
@@ -2079,7 +2119,7 @@ int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name)
   if (use_hi_name && (hi->name_len > 0))
     {
       /* 4 bits type + 12 bits length */
-      di_len = hi->name_len;          /* preserves any trailing NULL */
+      di_len = hi->name_len;           /* preserves any trailing NULL */
       hostid->di_type_length =  htons((__u16)((DIT_FQDN << 12) |
                                               di_len));
     }
@@ -2097,7 +2137,7 @@ int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name)
   switch (hi->algorithm_id)
     {
     case HI_ALG_DSA:     /* RDATA word: flags(16), proto(8), alg(8) */
-      data[len] = (__u8) (hi->size - 64) / 8;         /* T value (1 byte) */
+      data[len] = (__u8) (hi->size - 64) / 8;           /* T value (1 byte) */
       len++;
       len += bn2bin_safe(hi->dsa->q, &data[len], DSA_PRIV);
       len += bn2bin_safe(hi->dsa->p, &data[len], hi->size);
@@ -2141,6 +2181,104 @@ int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name)
   /* Subtract off 4 for Type, Length in TLV */
   hostid->length = htons((__u16)(len - 4));
   return(eight_byte_align(len));
+}
+
+/*
+ * function build_tlv_locators()
+ *
+ * in:		data  = ptr to destination buffer
+ *              addrs = list of addresses to include in the locator TLV
+ *              spi   = SPI to use with LOCATOR_TYPE_SPI_IPV6 format
+ *              force = when TRUE, add locators regardless of locator state
+ *
+ * out:		returns aligned length of buffer used
+ *
+ * All locators are included in the locator TLV (no incremental updates).
+ * One has the preferred bit set.
+ * This TLV will only be built if the force flag is TRUE or there are locators
+ * in the addr list in the UNVERIFIED state (they have not already been sent).
+ *
+ */
+int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi,
+                       int force)
+{
+  int n = 0;
+  __u16 len = 0;
+  sockaddr_list *l;
+  tlv_locator *loc;
+  locator *lp;
+
+  /* calculate length based on number of locators */
+  for (l = addrs; l; l = l->next)
+    {
+      len += sizeof(locator);
+      if (l->status == UNVERIFIED)
+        {
+          n++;               /* locator has not already been sent */
+        }
+    }
+
+  if (!force && (n < 2))         /* no other locators besides preferred */
+    {
+      return(0);
+    }
+  if (!force && !OPT.mh)         /* multihoming turned off, don't send all */
+    {
+      return(0);
+    }
+  memset(data, 0, len + sizeof(tlv_locator) - sizeof(locator));
+
+  /* build a locator parameter containing all of our addresses */
+  loc = (tlv_locator*) data;
+  loc->type = htons(PARAM_LOCATOR);
+  loc->length = htons(len);
+  lp = &loc->locator1[0];
+
+  for (l = addrs, n = 0; l; l = l->next, lp++, n++)
+    {
+      if (n > MAX_LOCATORS)             /* an artificial limit (for buff size)
+                                         */
+        {
+          break;
+        }
+      lp->traffic_type = LOCATOR_TRAFFIC_TYPE_BOTH;
+      lp->locator_type = LOCATOR_TYPE_SPI_IPV6;
+      lp->locator_length = 5;           /* (32 + 128 bits) / 4 */
+      if (l == addrs)             /* l->preferred */
+        {
+          lp->reserved = LOCATOR_PREFERRED;               /* set the P-bit */
+        }
+      else
+        {
+          lp->reserved = 0;
+        }
+      lp->locator_lifetime = htonl(HCNF.loc_lifetime);
+      build_spi_locator(lp->locator, htonl(spi), SA(&l->addr));
+      /* flag that this locator has been sent to peer */
+      l->status = ACTIVE;
+    }
+
+  len += sizeof(tlv_locator) - sizeof(locator);
+  return(eight_byte_align(len));
+}
+
+/* 32-bit SPI + 128-bit IPv6/IPv4-in-IPv6 address
+ */
+int build_spi_locator(__u8 *data, __u32 spi, struct sockaddr *addr)
+{
+  const int locator_size = 20;       /* 32 + 128 bits */
+  memset(data, 0, locator_size);
+  memcpy(&data[0], &spi, 4);
+  if (addr->sa_family == AF_INET6)
+    {
+      memcpy(&data[4], SA2IP(addr), SAIPLEN(addr));
+    }
+  else           /* IPv4-in-IPv6 address format */
+    {
+      memset(&data[14], 0xFF, 2);
+      memcpy(&data[16], SA2IP(addr), SAIPLEN(addr));
+    }
+  return(locator_size);
 }
 
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data)
@@ -2329,7 +2467,8 @@ int build_tlv_reg_info(__u8 *data)
   reg_types = &(info->reg_type);
   for (i = 0; i < HCNF.num_reg_types; i++)
     {
-      if (regtype_to_string(HCNF.reg_types[i], str, sizeof(str)) < 0)
+      if (regtype_to_string(HCNF.reg_types[i], str,
+                            sizeof(str)) < 0)
         {
           continue;               /* unknown type */
         }
@@ -2490,7 +2629,8 @@ int build_tlv_reg_failed(__u8 *data, struct reg_entry *regs)
   if (num)
     {
       fail->type = htons(PARAM_REG_FAILED);
-      fail->length = htons((__u16)(1 + num));         /* fail_type+reg_types */
+      fail->length = htons((__u16)(1 + num));           /* fail_type+reg_types
+                                                         */
       fail->fail_type = failure_code;
       return (eight_byte_align(sizeof(tlv_reg_failed) + (num - 1)));
     }
@@ -2548,7 +2688,8 @@ int build_rekey(hip_assoc *hip_a)
 
   /* Generate new DH if we were to run out of keymat material when
    * drawing 4 new ESP keys or if the proposed DH group is different */
-  if (((hip_a->rekey->keymat_index + (4 * HIP_KEY_SIZE)) > KEYMAT_SIZE) ||
+  if (((hip_a->rekey->keymat_index + (4 * HIP_KEY_SIZE)) >
+       KEYMAT_SIZE) ||
       (new_group_id && (new_group_id != hip_a->dh_group_id)))
     {
       log_(NORM, "Including a new DH key in UPDATE.\n");
@@ -2564,7 +2705,7 @@ int build_rekey(hip_assoc *hip_a)
     }
 
   gettimeofday(&hip_a->rekey->rk_time, NULL);
-  hip_a->rekey->new_spi = get_next_spi(hip_a);
+  hip_a->rekey->new_spi = get_next_spi();
   hip_a->rekey->need_ack = TRUE;
   hip_a->rekey->update_id = hip_a->hi->update_id++;
 

@@ -1,15 +1,32 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
- * Copyright (C) 2009 the Boeing Company
+ * Host Identity Protocol
+ * Copyright (c) 2008-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  hip_cfg.cpp
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors	Jin Fang <jin.fang@boeing.com>
+ *
+ * Implementation of HIP configuration API classes.
  *
  */
 
@@ -127,8 +144,8 @@ int hipCfg::hit_peer_allowed(const hip_hit hit1, const hip_hit hit2)
  *    printf("%02x", hit2[i]);
  *  cout<<endl;
  */
-/* DM: 17May2010: Return 0 if hit1==hit2 does not allow EB to talk over HIP to
- * itself */
+  /* DM: 17May2010: Return 0 if hit1==hit2 does not allow EB to talk over
+   * HIP to itself */
   if (memcmp(hit1, hit2, HIT_SIZE) < 0)
     {
       hpp = new hitPair(hit1, hit2);
@@ -300,10 +317,10 @@ int hipCfg::endbox2Llip(const struct sockaddr *eb, struct sockaddr *llip)
       if (i != _endbox2LlipMap.end())
         {
           llip_s = (*i).second;
-          llip->sa_family = AF_INET; /* only handle IPv4 address only */
+          llip->sa_family=AF_INET; /* only handle IPv4 address */
           str_to_addr(llip_s.c_str(), llip);
           cout << "endbox2Llip: got IP " << llip_s.c_str() <<
-          " for endbox = " << eb_s << endl;
+                  " for endbox = " << eb_s << endl;
           rc = 0;
         }
     }
@@ -601,7 +618,6 @@ int hipCfg::verify_certificate(X509 *cert)
       fprintf(stderr, "Error creating a cert store context\n");
       return(0);
     }
-
   ret = X509_STORE_CTX_init(ctx, _store, cert, NULL);
   if (ret != 1)
     {
@@ -612,10 +628,9 @@ int hipCfg::verify_certificate(X509 *cert)
 
   ret = X509_verify_cert(ctx);
   X509_STORE_CTX_free(ctx);
-
   if (ret != 1)
     {
-      fprintf(stderr, "Error verifying certificate against cert chain\n");
+      fprintf(stderr, "Error verifying signature against cert chain\n");
       return(0);
     }
 
@@ -945,7 +960,7 @@ int hipCfg::getEndboxMapsFromLocalFile()
           list<string> legacyNodes;
           xmlAttrPtr attr;
 
-          p = new(struct peer_node);
+          p = new (struct peer_node);
           memset(p, 0, sizeof(struct peer_node));
 
           attr = node->properties;

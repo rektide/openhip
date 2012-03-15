@@ -1,24 +1,33 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-05 the Boeing Company
+ * Copyright (c) 2002-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_funcs.h
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- *    Definitions for the HIP protocol.
- *
- *  Version:	@(#)hip.h	1.5	08/12/04
- *
- *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+ *  \authors	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *		Tom Henderson, <thomas.r.henderson@boeing.com>
  *
+ *  \brief  Function prototypes and inline definitions.
  *
  */
 
@@ -100,9 +109,10 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 int hip_send_I2(hip_assoc *hip_a);
 int hip_send_R2(hip_assoc *hip_a);
 int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
-                    struct sockaddr *dstaddr);
+                    struct sockaddr *src, struct sockaddr *dstaddr);
 int hip_send_update_relay(__u8 *data, hip_assoc *hip_a_client);
 int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a);
+int hip_send_update_locators(hip_assoc *hip_a);
 int hip_send_close(hip_assoc *hip_a, int send_ack);
 int hip_send_notify(hip_assoc *hip_a, int code, __u8 *data, int data_len);
 int hip_send(__u8 *data, int len, struct sockaddr *src, struct sockaddr *dst,
@@ -111,6 +121,7 @@ int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len, struct sockaddr *src,
                    struct sockaddr *dst);
 int build_tlv_hostid_len(hi_node *hi, int use_hi_name);
 int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name);
+int build_spi_locator(__u8 *data, __u32 spi, struct sockaddr *addr);
 int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1);
 int build_rekey(hip_assoc *hip_a);
 
@@ -123,7 +134,8 @@ int hip_handle_R1(__u8 *data, hip_assoc *hip_a, struct sockaddr *src);
 int hip_handle_I2(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
                   struct sockaddr *dst);
 int hip_handle_R2(__u8 *data, hip_assoc *hip_a);
-int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src);
+int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
+                      struct sockaddr *dst);
 int hip_handle_close(__u8 *data, hip_assoc *hip_a);
 int hip_handle_notify(__u8 *buff, hip_assoc *hip_a);
 int hip_finish_rekey(hip_assoc *hip_a, int rebuild);
@@ -132,33 +144,24 @@ int hip_handle_CER(__u8 *data, hip_assoc *hip_a);
 int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
                        DSA *dsa, RSA *rsa);
 int handle_hi(hi_node **hi_p, const __u8 *data);
+int complete_base_exchange(hip_assoc *hip_a);
 int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
                int in, int peer);
 int rebuild_sa_x2(hip_assoc *hip_a, struct sockaddr *newsrcaddr,
                   struct sockaddr *newdstaddr, __u32 newspi, int in);
 
 /* hip_ipsec.c */
-__u32 get_next_spi(hip_assoc *hip_a);
-int sadb_add(struct sockaddr *src, struct sockaddr *dst, hip_assoc *hip_a,
-             __u32 spi, int direction);
-int sadb_readdress(struct sockaddr *src, struct sockaddr *dst, hip_assoc *hip_a,
-                   __u32 spi);
-int sadb_add_policy(hip_assoc *hip_a, struct sockaddr *src,
-                    struct sockaddr *dst, int direction);
-int sadb_delete(hip_assoc *hip_a, struct sockaddr *src, struct sockaddr *dst,
-                __u32 spi);
-int sadb_delete_policy(struct sockaddr *src,struct sockaddr *dst,int direction);
-int sadb_register(int satype);
+__u32 get_next_spi();
 int check_last_used(hip_assoc *hip_a, int direction, struct timeval *now);
-int sadb_lsi(struct sockaddr *ip, struct sockaddr *lsi4, struct sockaddr *lsi6);
 int delete_associations(hip_assoc *hip_a, __u32 old_spi_in, __u32 old_spi_out);
 int flush_hip_associations();
-int parse_acquire(char *data, struct sockaddr *src, struct sockaddr *dst);
-int parse_expire(char *data, __u32 *spi);
-void pfkey_packet_type(int type, char *r);
-void hip_handle_pfkey(char *buff);
-void hip_check_pfkey_buffer();
-void update_lsi_mapping(struct sockaddr *dst, struct sockaddr *lsi,hip_hit hit);
+void hip_handle_esp(char *data, int length);
+void start_base_exchange(struct sockaddr *dst);
+void start_expire(__u32 spi);
+void receive_udp_hip_packet(char *buff, int len);
+void start_loss_multihoming(char *data, int len);
+int handle_notify_loss(__u8 *data, int data_len);
+void hip_handle_multihoming_timeouts(struct timeval *now);
 
 /* hip_keymat.c */
 int set_secret_key(unsigned char *key, hip_assoc *hip_a);
@@ -170,6 +173,8 @@ int draw_mr_key(hip_assoc *hip_a, int keymat_index);
 int auth_key_len(int suite_id);
 int enc_key_len(int suite_id);
 int enc_iv_len(int suite_id);
+int transform_to_ealg(int transform);
+int transform_to_aalg(int transform);
 
 /* hip_util.c */
 int add_addresses_from_dns(char *name, hi_node *hi);
@@ -186,6 +191,8 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
 hi_node *get_preferred_hi(hi_node *node);
 int get_addr_from_list(sockaddr_list *list, int family,
                        struct sockaddr *addr);
+int get_other_addr_from_list(sockaddr_list *list, struct sockaddr *exclude,
+                             struct sockaddr *addr);
 hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit);
 void replace_hip_assoc(hip_assoc *a_old, hip_assoc *a_new);
 int free_hip_assoc(hip_assoc *hip_a);
@@ -233,6 +240,7 @@ hip_assoc* find_hip_association(struct sockaddr *src, struct sockaddr *dst,
 hip_assoc* find_hip_association2(hiphdr* hiph);
 hip_assoc* find_hip_association3(struct sockaddr *src, struct sockaddr *dst);
 hip_assoc* find_hip_association4(hip_hit hit);
+hip_assoc* find_hip_association_by_spi(__u32 spi, int dir);
 hip_assoc *search_registrations(hip_hit hit, __u8 type);
 hip_assoc *search_registrations2(__u8 type, int state);
 void cb(int p, int n, void *arg);
@@ -275,12 +283,14 @@ void print_hi_to_buff(uint8_t **bufp, int *buf_len, hi_node *hi, int mine);
 int save_identities_file(int);
 int read_conf_file(char *);
 
-/* hip_netlink.c */
+/* hip_addr.c */
 int hip_netlink_open();
 int get_my_addresses();
 int select_preferred_address();
 int is_my_address(struct sockaddr *addr);
 int hip_handle_netlink(char *data, int length);
+void readdress_association(hip_assoc *hip_a, struct sockaddr *newaddr,
+                           int if_index);
 int add_address_to_iface(struct sockaddr *addr, int plen, int if_index);
 int devname_to_index(char *dev, __u64 *mac);
 sockaddr_list *add_address_to_list(sockaddr_list **list, struct sockaddr *addr,

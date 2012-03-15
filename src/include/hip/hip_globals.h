@@ -1,22 +1,37 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-05 the Boeing Company
+ * Copyright (c) 2002-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_globals.h
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *
- *  hip_globals.h
- *
- *  Author:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+ *  \brief  Global variable definitions.
  *
  */
+#ifndef _HIP_GLOBALS_H_
+#define _HIP_GLOBALS_H_
+
 #include <openssl/dsa.h>        /* DSA support                  */
 #include <openssl/dh.h>         /* Diffie-Hellman contexts      */
 #include <math.h>               /* for exponential macros (reg life) */
@@ -47,9 +62,8 @@ extern const int dhprime_len[DH_MAX]; /* only used by new_dh_cache_entry()
                                        *    use DH_size() elsewhere */
 extern unsigned char dhgen[DH_MAX];
 
-extern int pfk_seqno; /* PFKEY messages need to be numbered */
 
-extern int s_hip, s_pfk; /* PFKEY and RAW socket handles */
+extern int s_hip; /* RAW socket handle */
 #undef s_net
 extern int s_net; /* netlink socket */
 extern int s6_hip; /* RAW IPv6 socket handle */
@@ -61,13 +75,12 @@ extern struct hip_opt OPT;
 /* Global configuration data */
 extern struct hip_conf HCNF;
 
-#ifdef __UMH__
-extern int pfkeysp[2];
+extern int espsp[2]; /* ESP thread socket pair */
 extern int g_state;
-#endif
 #ifdef __WIN32__
 extern int netlsp[2];
 #endif
 
 const unsigned char khi_context_id[16];
 
+#endif

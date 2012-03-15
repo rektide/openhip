@@ -1,29 +1,38 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2002-06 the Boeing Company
+ * Copyright (c) 2002-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_proto.h
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- *    Definitions for the HIP protocol.
- *
- *  Version:	@(#)hip.h	1.5	08/12/04
- *
- *  Authors:	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
+ *  \authors	Jeff Ahrenholz, <jeffrey.m.ahrenholz@boeing.com>
  *		Tom Henderson, <thomas.r.henderson@boeing.com>
  *
+ *  \brief  Definitions for the HIP protocol.
  *
  */
 
-#ifndef _HIP_PROTOCOL_H_
-#define _HIP_PROTOCOL_H_
+#ifndef _HIP_PROTO_H_
+#define _HIP_PROTO_H_
 
 #include <openssl/bn.h>
 #include <openssl/hmac.h>
@@ -69,11 +78,11 @@ typedef enum {
   HIP_I2,
   HIP_R2,
   CER,          /* 5 - removed from draft-ietf-hip-base-03 */
-  BOS = 11,     /* 11 - removed from draft-ietf-hip-base-01 */
-  UPDATE = 16,     /* 16 */
-  NOTIFY = 17,     /* 17 */
-  CLOSE = 18,      /* 18 */
-  CLOSE_ACK = 19,     /* 19 */
+  BOS = 11,       /* 11 - removed from draft-ietf-hip-base-01 */
+  UPDATE = 16,       /* 16 */
+  NOTIFY = 17,       /* 17 */
+  CLOSE = 18,        /* 18 */
+  CLOSE_ACK = 19,       /* 19 */
   HIP_HDRR,       /* 20 */
 } HIP_PACKETS;
 
@@ -163,6 +172,14 @@ typedef enum {
 #define HI_TYPESTR(a)  ((a == HI_ALG_DSA) ? "DSA" : \
                         (a == HI_ALG_RSA) ? "RSA" : "UNKNOWN")
 
+/* SADB algorithms */
+#define SADB_EALG_3DESCBC 3
+#define SADB_X_EALG_BLOWFISHCBC 7
+#define SADB_EALG_NULL 11
+#define SADB_X_EALG_AESCBC 12
+#define SADB_AALG_MD5HMAC 2
+#define SADB_AALG_SHA1HMAC 3
+
 /* HI Domain Identifier types */
 typedef enum {
   DIT_NONE,             /* none included */
@@ -249,6 +266,7 @@ typedef enum {
 #define NOTIFY_SERVER_BUSY_PLEASE_RETRY                  44
 #define NOTIFY_LOCATOR_TYPE_UNSUPPORTED                  46
 #define NOTIFY_I2_ACKNOWLEDGEMENT                        16384
+#define NOTIFY_LOSS_DETECT                               16385
 
 /*
  * Registration types
@@ -260,6 +278,6 @@ typedef enum {
   REGTYPE_MR,                   /* 3 = Mobile Router */
 } HIP_REGTYPES;
 
-#endif /* !_HIP_PROTOCOL_H_ */
+#endif /* !_HIP_PROTO_H_ */
 
 

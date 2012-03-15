@@ -1,22 +1,37 @@
+/* -*- Mode:cc-mode; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* vim: set ai sw=2 ts=2 et cindent cino={1s: */
 /*
  * Host Identity Protocol
- * Copyright (C) 2009 the Boeing Company
+ * Copyright (c) 2008-2012 the Boeing Company
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *  \file  hip_cfg.h
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  \authors	Jin Fang <jin.fang@boeing.com>
  *
- *  Authors:    Jin Fang
+ *  \brief  Common configuration API class definitions.
+ *
  */
 
-#ifndef _HIPSPD_H_
-#define _HIPSPD_H_
+#ifndef _HIP_CFG_H_
+#define _HIP_CFG_H_
 #include <netinet/in.h>
 #include <netinet/ether.h>
 #include <map>
@@ -144,15 +159,17 @@ protected:
 
 protected:
   map <string, string> _legacyNode2EndboxMap;
-  map <string, string> _endbox2LlipMap; /* endbox (LSI) to Llip mapping */
+  map <string, string> _endbox2LlipMap;       /* endbox (LSI) to Llip mapping */
   string _localCertUrl;
-  map <string, certInfo> _certs; /* cached certificates data indexed by cert
-                                  *url*/
-  set <hitPair, hp_compare> _allowed_peers; /* pairs of hits allowed to start
-                                             *HIP base exchange */
+  map <string, certInfo> _certs;       /* cached certificates data indexed by
+                                        *cert url*/
+  set <hitPair, hp_compare> _allowed_peers;       /* pairs of hits allowed to
+                                                   *start HIP base exchange */
   struct hip_conf *_hcfg;
-  map <string, struct peer_node *> _hit_to_peers; /* configured peers indexed by
-                                                   *hit string */
+  map <string, struct peer_node *> _hit_to_peers;       /* configured peers
+                                                         * *indexed by hit
+                                                         * string
+                                                         **/
   string _PrivKeyID;
   string _Cert;
   string _caCert;
