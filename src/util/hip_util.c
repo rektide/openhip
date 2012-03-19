@@ -920,6 +920,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
 
 #endif /* HITGEN */
 
+
 /*
  * function free_hip_assoc()
  *
@@ -1019,6 +1020,23 @@ int free_hip_assoc(hip_assoc *hip_a)
   return(i);
 }
 
+/*
+ * function free_hip_associations()
+ *
+ * Frees all associations in the association table by calling free_hip_assoc()
+ * on them.
+ */
+void free_hip_associations()
+{
+  int i;
+  for (i = 0; i < max_hip_assoc; i++)
+    {
+      if (hip_assoc_table[i].state != UNASSOCIATED)
+        {
+          free_hip_assoc(&hip_assoc_table[i]);
+        }
+    }
+}
 #endif /* HITGEN */
 
 void free_hi_node(hi_node *hi)
@@ -3575,6 +3593,7 @@ void hip_exit(int signal)
   waitpid(0, &err, WNOHANG);       /* cleanup zombie processes from fork() */
 #endif
   flush_hip_associations();             /* delete from SDB and SPD */
+  free_hip_associations();
   /*
    *  any other cleanup should be done here,
    *  such as closing sockets, files

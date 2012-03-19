@@ -171,10 +171,7 @@ int check_last_used(hip_assoc *hip_a, int incoming, struct timeval *now)
 /*
  * delete_associations()
  *
- * Remove associations from kernel by calling sadb_delete(),
- * and sadb_delete_policy() for the incoming policy. (Outgoing policy is not
- * removed so further traffic will trigger a new exchange, if we are the
- * initiator) Called upon moving to CLOSING when no more packets may be sent.
+ * Remove incoming/outgoing associations by calling sadb_delete.
  */
 int delete_associations(hip_assoc *hip_a, __u32 old_spi_in, __u32 old_spi_out)
 {
@@ -232,11 +229,7 @@ int flush_hip_associations()
                           hip_a, FALSE, TRUE);
           hip_send_close(hip_a, FALSE);
           set_state(hip_a, CLOSED);
-#ifndef __UMH__         /* delete SAs from kernel; for UMH, all threads
-                         * will be terminated anyway, and this hangs when
-                         * called upon exit in Linux */
           delete_associations(hip_a, 0, 0);
-#endif
           break;
         default:
           break;
