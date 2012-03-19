@@ -1110,12 +1110,10 @@ connect_retry:
       log_(WARN, "DHT connect - bind error: %s\n", strerror(errno));
     }
 
-#ifdef __UMH__
   if (g_state != 0)
     {
       return(-1);
     }
-#endif
   if (retry && (retry_attempts > 0))
     {
       /* quit after a certain number of retries */

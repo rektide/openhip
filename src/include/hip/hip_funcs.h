@@ -261,9 +261,7 @@ void log_hipopts();
 #ifdef __WIN32__
 void log_WinError(int code);
 #endif
-#ifdef __UMH__
 int do_bcast();
-#endif
 void hip_sleep(int seconds);
 void hip_writelock();
 void hip_exit(int signal);

@@ -46,7 +46,7 @@ SRCW32	= win32
 # /MT is for threading /MD for MSVCRT.LIB
 # /GZ enable runtime debug checks, /Zi enable debugging information, /MDd debug lib
 # /MDd for debug
-CFLAGS= /MD /Ox /O2 /Ob2 /W3 /WX /Gs0 /GF /Gy /Zi /Zp1 /nologo -DWIN32_LEAN_AND_MEAN $(INC) -D__UMH__ -D__WIN32__ -DCONFIG_HIP -DSYSCONFDIR="\".\""
+CFLAGS= /MD /Ox /O2 /Ob2 /W3 /WX /Gs0 /GF /Gy /Zi /Zp1 /nologo -DWIN32_LEAN_AND_MEAN $(INC) -D__WIN32__ -DCONFIG_HIP -DSYSCONFDIR="\".\""
 
 OBJS =	$(SRC)\$(SRCPROTO)\hip_addr.obj \
 	$(SRC)\$(SRCPROTO)\hip_cache.obj \

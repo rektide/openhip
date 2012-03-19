@@ -67,9 +67,7 @@
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
 #endif /* HIP_VPLS */
-#ifdef __UMH__
 #include <hip/hip_dns.h>        /* DNS headers			*/
-#endif
 
 /*
  * function locate_config_file()
@@ -420,7 +418,6 @@ int read_peer_identities_from_hipcfg()
       memcpy(hi->hit, np->hit, sizeof(hip_hit));
 
       __u32 lsi = ntohl(HIT2LSI(hi->hit));
-#ifdef __UMH__  /* must have an LSI in UMH */
       if (hits_equal(hi->hit, zero_hit))
         {
           log_(WARN, "No HIT or LSI for %s,", hi->name);
@@ -428,12 +425,9 @@ int read_peer_identities_from_hipcfg()
           free_hi_node(hi);
           continue;
         }
-#endif
       hi->lsi.ss_family = AF_INET;
       memcpy(SA2IP(&hi->lsi), &lsi, sizeof(__u32));
-#ifdef __UMH__
       log_(NORM, "%s ", logaddr(SA(&hi->lsi)));
-#endif
       /* get HI name */
       strcpy(name, hi->name);
 
@@ -564,7 +558,6 @@ int read_identities_file(char *filename, int mine)
           if (!VALID_FAM(&hi->lsi))
             {
               __u32 lsi = ntohl(HIT2LSI(hi->hit));
-#ifdef __UMH__                  /* must have an LSI in UMH */
               if (hits_equal(hi->hit, zero_hit))
                 {
                   log_(WARN, "No HIT or LSI for %s,",
@@ -573,7 +566,6 @@ int read_identities_file(char *filename, int mine)
                   free_hi_node(hi);
                   continue;
                 }
-#endif
               hi->lsi.ss_family = AF_INET;
               memcpy(SA2IP(&hi->lsi), &lsi, sizeof(__u32));
             }
@@ -1185,7 +1177,6 @@ int read_conf_file(char *filename)
             {
               HCNF.disable_notify = FALSE;
             }
-#ifdef __UMH__
         }
       else if (strcmp((char *)node->name,
                       "disable_dns_thread") == 0)
@@ -1210,7 +1201,6 @@ int read_conf_file(char *filename)
             {
               HCNF.enable_bcast = FALSE;
             }
-#endif
         }
       else if (strcmp((char *)node->name,
                       "disable_udp") == 0)

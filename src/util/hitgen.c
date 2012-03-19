@@ -59,10 +59,8 @@
 #include <hip/hip_globals.h>
 
 /* dummy globals to fix undefined variables when building */
-#ifdef __UMH__
 int g_state;
 int netlsp[2];
-#endif
 
 #ifdef __WIN32__
 #define access _access
@@ -453,11 +451,9 @@ void generate_conf_file(char *filename)
   xmlNewChild(root_node, NULL, BAD_CAST "save_known_identities",
               BAD_CAST "no");
   xmlNewChild(root_node, NULL, BAD_CAST "disable_notify", BAD_CAST "no");
-#ifdef __UMH__
   xmlNewChild(root_node, NULL, BAD_CAST "disable_dns_thread",
               BAD_CAST "yes");
   xmlNewChild(root_node, NULL, BAD_CAST "enable_broadcast",BAD_CAST "no");
-#endif
   xmlNewChild(root_node, NULL, BAD_CAST "disable_udp",
 #ifdef __MACOSX__
               BAD_CAST "yes");

@@ -101,35 +101,4 @@ enum responses {
   HIP_STATUS_REPLY_MAX
 };
 
-
-/* Problems with multiple definitions of the arrays below */
-#ifndef __UMH__
-
-/*
- * Useful text definitions
- */
-const char enc_alg_texts[7][28] = {
-  "",
-  "AES CBC with HMAC SHA1",
-  "3DES CBC with HMAC SHA1",
-  "3DES CBC with HMAC MD5",
-  "BLOWFISH CBC with HMAC SHA1",
-  "NULL with HMAC SHA1",
-  "NULL with HMAC MD5",
-};
-
-const char state_texts[9][16] = {
-  "Unassociated",
-  "I1 Sent",
-  "I2 Sent",
-  "R2 Sent",
-  "Established",
-  "Rekeying",
-  "Closing",
-  "Closed",
-  "E Failed",
-};
-
-#endif
-
 #endif /* _HIP_STATUS_H_ */

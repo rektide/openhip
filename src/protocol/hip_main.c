@@ -59,10 +59,8 @@
 #include <netinet/ip.h>      /* struct iphdr                 */
 #include <unistd.h>          /* fork(), getpid()             */
 #include <math.h>            /* pow()                        */
-#ifdef __UMH__
 #include <pthread.h>
 #include <netdb.h>
-#endif
 #endif
 #include <sys/types.h>       /* getpid() support, etc        */
 #include <signal.h>          /* signal()                     */
@@ -112,10 +110,8 @@ static void hip_retransmit_waiting_packets(struct timeval *time1);
 int hip_trigger(struct sockaddr *dst);
 int hip_trigger_rvs(struct sockaddr*rvs, hip_hit *responder);
 
-#ifdef __UMH__
 #ifndef __WIN32__
 void post_init_tap();
-#endif
 #endif
 #ifdef HIP_VPLS
 void endbox_init();
@@ -162,12 +158,6 @@ int main_loop(int argc, char **argv)
 
   /* Initializing global variables */
   memset(hip_assoc_table, 0, sizeof(hip_assoc_table));
-
-#ifndef __UMH__
-  /* Initialize OpenSSL crypto library, if not already done
-   * in init_hip() */
-  init_crypto();
-#endif
 
   /*
    * Set default options
@@ -375,21 +365,6 @@ int main_loop(int argc, char **argv)
       exit(1);
     }
 
-#ifndef __UMH__ /* don't mix pthreads with fork() */
-  if (OPT.daemon)
-    {
-      if (fork() > 0)
-        {
-          return(0);
-        }
-      /* TODO: properly daemonize the program here:
-       *  change file mode mask
-       *  setsid() obtain a new process group
-       *  chdir("/")
-       *  replace stdout, stderr, stdin
-       */
-    }
-#endif
   if (init_log() < 0)
     {
       goto hip_main_error_exit;
@@ -537,10 +512,8 @@ int main_loop(int argc, char **argv)
   gettimeofday(&time1, NULL);
   last_expire = time1.tv_sec;
   hip_dht_update_my_entries(1);       /* initalize and publish */
-#ifdef __UMH__
 #ifndef __WIN32__
   post_init_tap();
-#endif
 #endif
   /* Status socket */
   if (hip_status_open() < 0)
@@ -631,12 +604,10 @@ int main_loop(int argc, char **argv)
       /* this line causes a performance hit, used for debugging... */
       fflush_log();
 
-#ifdef __UMH__
       if (g_state != 0)
         {
           return(-EINTR);
         }
-#endif
 
       /* prepare file descriptor sets */
       FD_ZERO(&read_fdset);
@@ -683,11 +654,9 @@ int main_loop(int argc, char **argv)
           /* sometimes select receives interrupt in addition
            * to the hip_exit() signal handler */
           if (errno == EINTR)
-#ifdef __UMH__
-            { return(-EINTR); }
-#else
-            { hip_exit(SIGINT); }
-#endif
+            {
+              return(-EINTR);
+            }
           log_(WARN, "select() error: %s.\n", strerror(errno));
         }
       else if (err == 0)
@@ -732,13 +701,11 @@ int main_loop(int argc, char **argv)
         {
           /* Something on HIP socket */
           flags = 0;
-#ifdef __UMH__
           /* extra check to prevent recvmsg() from blocking */
           if (g_state != 0)
             {
               return(-EINTR);
             }
-#endif
 #ifdef __WIN32__
           addr_from_len = sizeof(addr_from);
           length = recvfrom(s_hip, buff, sizeof(buff), flags,

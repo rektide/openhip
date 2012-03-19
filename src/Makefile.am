@@ -41,15 +41,15 @@ SRC_PROTO = 	protocol/hip_addr.c protocol/hip_cache.c protocol/hip_dht.c \
 SRC_UTIL =	util/hip_util.c util/hip_xml.c
 
 # Linux main files 
-SRC_MAIN_UMH =	linux/hip_linux_umh.c
+SRC_HIP =	linux/hip_linux_umh.c
 
 # Hitgen source files
 SRC_HITGEN = 	util/hitgen.c util/hip_util.c protocol/hip_globals.c
 
-hitgen_CFLAGS =	-DHITGEN -D__UMH__
+hitgen_CFLAGS =	-DHITGEN
 
 # Usermode version
-hip_CFLAGS =	-D__UMH__
+hip_CFLAGS =	
 SRC_USERMODE =	usermode/hip_umh_main.c \
 		usermode/hip_dns.c \
 		usermode/hip_esp.c \
@@ -77,7 +77,7 @@ endif
 
 # different targets
 hitgen_SOURCES = $(SRC_HITGEN)
-hip_SOURCES = 	$(SRC_PROTO) $(SRC_UTIL) $(SRC_MAIN_UMH) $(SRC_USERMODE)
+hip_SOURCES = 	$(SRC_HIP) $(SRC_PROTO) $(SRC_UTIL) $(SRC_USERMODE)
 hipstatus_SOURCES = util/usermode-status.c
 
 AM_COLOR_TESTS=always

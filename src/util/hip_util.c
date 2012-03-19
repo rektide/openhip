@@ -71,7 +71,6 @@
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
-#ifdef __UMH__
 #ifdef __WIN32__
 #include <WinDNS.h>
 #define NS_MAXDNAME DNS_MAX_NAME_LENGTH
@@ -81,7 +80,6 @@
 #include <resolv.h>             /* res_search()			*/
 #endif /* __WIN32__ */
 #include <hip/hip_dns.h>        /* DNS headers			*/
-#endif
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
 #endif
@@ -567,9 +565,6 @@ int get_preferred_lsi(struct sockaddr *lsi)
 {
   hi_node *hi = NULL;
   __u32 lsi32;
-#ifndef __UMH__
-  int g_state = 0;       /* dummy var */
-#endif
 #ifndef __WIN32__
   struct timeval timeout;
 #endif
@@ -1364,7 +1359,6 @@ struct sockaddr *get_hip_dns_server()
     }
 }
 
-#ifdef __UMH__
 int is_dns_thread_disabled()
 {
   return(HCNF.disable_dns_thread);
@@ -1682,8 +1676,6 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
 
   return(0);
 }
-
-#endif /* __UMH__ */
 
 /*
  * function hits_equal()
@@ -3456,10 +3448,8 @@ void log_WinError(int code)
   log_(NORM, "error %d: %s", code, lpMsgBuf);
   LocalFree(lpMsgBuf);
 }
-
 #endif
 
-#ifdef __UMH__
 /*
  * Access HCNF.enable_bcast
  */
@@ -3468,7 +3458,6 @@ int do_bcast()
   return(HCNF.enable_bcast == TRUE);
 }
 
-#endif
 
 /*
  * Platform-independent sleep function.
@@ -3551,11 +3540,7 @@ void hip_exit(int signal)
 #ifndef __WIN32__
   int err;
   char lockname[255];
-#endif
-#ifdef __UMH__
-#ifndef __WIN32__
   struct sockaddr_storage lsi;
-#endif
 #endif
   static int been_here_before = 0;
   if (been_here_before)
@@ -3608,22 +3593,17 @@ void hip_exit(int signal)
   /* Allow config library to perform any shutdown ops */
   hipcfg_close();
 #endif
-#ifdef __UMH__
 #ifndef __WIN32__
   /* in Linux UMH, remove /etc/resolv.conf entry */
   lsi.ss_family = AF_INET;
   get_preferred_lsi(SA(&lsi));
-  delete_local_hip_nameserver(
-    ((struct sockaddr_in *)&lsi)->sin_addr.s_addr );
+  delete_local_hip_nameserver( ((struct sockaddr_in *)&lsi)->sin_addr.s_addr );
 #endif /* __WIN32__ */
   g_state = 2;
   printf("Shutting down threads...\n");
   /* do not pthread_exit() here because
    * this is just the signal handler
    */
-#else
-  exit(signal);
-#endif /* __UMH__ */
 }
 
 #endif /* HITGEN */
