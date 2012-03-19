@@ -33,12 +33,6 @@
 /* Define to 1 if you have the `crypto' library (-lcrypto). */
 #undef HAVE_LIBCRYPTO
 
-/* Define to 1 if you have the `ldap' library (-lldap). */
-#undef HAVE_LIBLDAP
-
-/* Define to 1 if you have the `ldapcpp' library (-lldapcpp). */
-#undef HAVE_LIBLDAPCPP
-
 /* Define to 1 if you have the `pthread' library (-lpthread). */
 #undef HAVE_LIBPTHREAD
 
