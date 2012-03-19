@@ -1429,10 +1429,12 @@ void handle_local_address_change(int add, struct sockaddr *newaddr,int if_index)
           association_del_address(hip_a, newaddr, if_index);
         }
     }
+#ifndef __WIN32__
   if (OPT.mr)
     {
       hip_mr_handle_address_change(add, newaddr, if_index);
     }
+#endif /* !__WIN32__ */
 }
 
 /*

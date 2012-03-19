@@ -2438,7 +2438,9 @@ void print_usage()
   printf("  -t <addr>  manually trigger a HIP exchange with the ");
   printf("given address\n");
   printf("  -rvs\t rendezvous server mode\n");
+#ifndef __WIN32__
   printf("  -mr\t mobile router mode\n");
+#endif /* !__WIN32__ */
   printf("  -mh\t turn on loss-based multihoming\n");
   printf("With no options, simple output will be displayed.\n\n");
 }

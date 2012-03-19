@@ -2371,11 +2371,13 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
         }
       else if (type == PARAM_PROXY_TICKET)
         {
+#ifndef __WIN32__
           if (OPT.mr)
             {
               add_proxy_ticket(&data[location]);
             }
           else
+#endif /* !__WIN32__ */
             {
               log_(WARN, "Ignoring proxy ticket in UPDATE packet.\n");
             }
@@ -4995,6 +4997,7 @@ int handle_reg_request(hip_assoc *hip_a, const __u8 *data)
           log_(NORM, "Registration with Rendezvous Service "
                "accepted.\n");
         }
+#ifndef __WIN32__
       else if ((reg_types[i] == REGTYPE_MR) && OPT.mr)
         {
           if (init_hip_mr_client( hip_a->peer_hi->hit,
@@ -5007,6 +5010,7 @@ int handle_reg_request(hip_assoc *hip_a, const __u8 *data)
                "accepted.\n");
           state = REG_SEND_RESP;
         }
+#endif /* !__WIN32__ */
       else               /* Unknown or unsupported type */
         {
           state = REG_SEND_FAILED;

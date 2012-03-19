@@ -528,7 +528,9 @@ int main_loop(int argc, char **argv)
     }
   get_my_addresses();
   select_preferred_address();
+#ifndef __WIN32__
   hip_mr_set_external_ifs();
+#endif /* !__WIN32__ */
   /* Precompute R1s, cookies, DH material */
   init_dh_cache();
   init_all_R1_caches();
@@ -1211,12 +1213,14 @@ hip_retransmit_waiting_packets(struct timeval* time1)
   for (i = 0; i < max_hip_assoc; i++)
     {
       hip_a = &hip_assoc_table[i];
+#ifndef __WIN32__
       /* retransmit UPDATE-PROXY packets for mobile router clients
        * that have registered and are ESTABLISHED */
       if (OPT.mr && (hip_a->state == ESTABLISHED))
         {
           hip_mr_retransmit(time1, hip_a->peer_hi->hit);
         }
+#endif /* !__WIN32__ */
       if ((hip_a->rexmt_cache.len < 1) ||
           (TDIFF(*time1, hip_a->rexmt_cache.xmit_time) <=
            (int)HCNF.packet_timeout))
