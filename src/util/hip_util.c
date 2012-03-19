@@ -238,12 +238,32 @@ hi_node *create_new_hi_node()
   memset(ret, 0, sizeof(hi_node));
   pthread_mutex_init(&ret->addrs_mutex, NULL);
   ret->rvs_addrs = malloc(sizeof(struct _sockaddr_list *));
+  if (ret->rvs_addrs == NULL)
+    {
+      log_(WARN, "Malloc error: creating new rvs_addr\n");
+      return(NULL);
+    }
   *(ret->rvs_addrs) = NULL;
   ret->rvs_count = malloc(sizeof(int));
+  if (ret->rvs_count == NULL)
+    {
+      log_(WARN, "Malloc error: creating new rvs_count\n");
+      return(NULL);
+    }
   *(ret->rvs_count) = 0;
   ret->rvs_mutex = malloc(sizeof(hip_mutex_t));
+  if (ret->rvs_mutex == NULL)
+    {
+      log_(WARN, "Malloc error: creating new rvs_mutex\n");
+      return(NULL);
+    }
   pthread_mutex_init(ret->rvs_mutex, NULL);
   ret->rvs_cond = malloc(sizeof(hip_cond_t));
+  if (ret->rvs_cond == NULL)
+    {
+      log_(WARN, "Malloc error: creating new rvs_cond\n");
+      return(NULL);
+    }
   pthread_cond_init (ret->rvs_cond, NULL);
 
   return(ret);
@@ -891,6 +911,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
   hip_a->dh               = NULL;
   hip_a->peer_dh          = NULL;
   hip_a->keymat_index     = 0;
+  memset(hip_a->keymat, 0, sizeof(hip_a->keymat));
   hip_a->preserve_outbound_policy = FALSE;
   hip_a->udp              = FALSE;
 
@@ -1836,9 +1857,9 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
   unsigned int i = 0, lifetime_sec;
   int done = 0;
   const char zero[8] = { 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0 };
-  unsigned char ij[48];
-  unsigned char ij_part1[40];
-  unsigned char md[SHA_DIGEST_LENGTH];
+  unsigned char ij[48] = {0};
+  unsigned char ij_part1[40] = {0};
+  unsigned char md[SHA_DIGEST_LENGTH] = {0};
   SHA_CTX c;
   int k;
   struct timeval time1, time2;
@@ -1876,7 +1897,6 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
               return(-ERANGE);
             }
         }
-      memset(md, 0, SHA_DIGEST_LENGTH);
       memcpy(ij, ij_part1, 40);
       RAND_bytes(&ij[40], 8);
       SHA1_Init(&c);
@@ -2904,22 +2924,37 @@ static hip_mutex_t *g_lock_cs;
 void init_crypto()
 {
   struct timeval time1;
-  char rnd_seed[20];
+  char rnd_seed[20] = {0};
   int i;
 
   CRYPTO_malloc_init();
 
   /* seed the random number generator */
-  gettimeofday(&time1, NULL);
-  sprintf(rnd_seed, "%x%x", (unsigned int)time1.tv_usec,
-          (unsigned int)time1.tv_sec);
-  RAND_seed(rnd_seed, sizeof(rnd_seed));
+#ifdef WIN32
+  RAND_screen();
+#endif /* WIN32 */
+  /* According to RAND_add(3), /dev/urandom is used, if available,
+   * to seed the PRNG transparently. */
+  if (!RAND_status())
+    {
+      /* PRNG not seeded with enough data, include more data */
+      gettimeofday(&time1, NULL);
+      sprintf(rnd_seed, "%x%x", (unsigned int)time1.tv_usec,
+              (unsigned int)time1.tv_sec);
+      RAND_seed(rnd_seed, sizeof(rnd_seed));
+    }
+
+  if (!RAND_status())
+    {
+      /* fprintf is used because log not initialized yet */
+      fprintf(stderr, "*** Failed to seed PRNG with enough data!\n");
+    }
 
   /* make crypto library thread safe */
   g_lock_cs = OPENSSL_malloc(CRYPTO_num_locks() * sizeof(hip_mutex_t));
   if (!g_lock_cs)
     {
-      log_(WARN, "Error with OPENSSL_malloc() in init_crypto()!\n");
+      fprintf(stderr, "*** Error with OPENSSL_malloc() in init_crypto()!\n");
       return;
     }
   for (i = 0; i < CRYPTO_num_locks(); i++)
