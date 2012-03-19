@@ -633,6 +633,7 @@ int read_identities_file(char *filename, int mine)
   return(0);
 }
 
+
 /*
  * function print_hi_to_buff()
  *
@@ -708,6 +709,19 @@ void print_hi_to_buff(uint8_t **bufp, int *buf_len, hi_node *hi, int mine)
   strncat((char *)*bufp, tmp, *buf_len);
 }
 
+
+/*
+ * function xmlNewChild_from_bn()
+ *
+ * Helper to add big number hex string as a child of the given XML node.
+ */
+void xmlNewChild_from_bn(xmlNodePtr node, BIGNUM *bn, char *name)
+{
+  char *cp = BN_bn2hex(bn);
+  xmlNewChild(node, NULL, BAD_CAST name, BAD_CAST cp);
+  OPENSSL_free(cp);
+}
+
 /*
  * function hi_to_xml()
  *
@@ -777,34 +791,21 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
       switch (h->algorithm_id)
         {
         case HI_ALG_DSA:
-          xmlNewChild(hi, NULL, BAD_CAST "P",
-                      BAD_CAST BN_bn2hex(h->dsa->p));
-          xmlNewChild(hi, NULL, BAD_CAST "Q",
-                      BAD_CAST BN_bn2hex(h->dsa->q));
-          xmlNewChild(hi, NULL, BAD_CAST "G",
-                      BAD_CAST BN_bn2hex(h->dsa->g));
-          xmlNewChild(hi, NULL, BAD_CAST "PUB",
-                      BAD_CAST BN_bn2hex(h->dsa->pub_key));
-          xmlNewChild(hi, NULL,BAD_CAST "PRIV",
-                      BAD_CAST BN_bn2hex(h->dsa->priv_key));
+          xmlNewChild_from_bn(hi, h->dsa->p, "P");
+          xmlNewChild_from_bn(hi, h->dsa->q, "Q");
+          xmlNewChild_from_bn(hi, h->dsa->g, "G");
+          xmlNewChild_from_bn(hi, h->dsa->pub_key, "PUB");
+          xmlNewChild_from_bn(hi, h->dsa->priv_key, "PRIV");
           break;
         case HI_ALG_RSA:
-          xmlNewChild(hi, NULL, BAD_CAST "N",
-                      BAD_CAST BN_bn2hex(h->rsa->n));
-          xmlNewChild(hi, NULL, BAD_CAST "E",
-                      BAD_CAST BN_bn2hex(h->rsa->e));
-          xmlNewChild(hi, NULL, BAD_CAST "D",
-                      BAD_CAST BN_bn2hex(h->rsa->d));
-          xmlNewChild(hi, NULL, BAD_CAST "P",
-                      BAD_CAST BN_bn2hex(h->rsa->p));
-          xmlNewChild(hi, NULL, BAD_CAST "Q",
-                      BAD_CAST BN_bn2hex(h->rsa->q));
-          xmlNewChild(hi, NULL, BAD_CAST "dmp1",
-                      BAD_CAST BN_bn2hex(h->rsa->dmp1));
-          xmlNewChild(hi, NULL, BAD_CAST "dmq1",
-                      BAD_CAST BN_bn2hex(h->rsa->dmq1));
-          xmlNewChild(hi, NULL, BAD_CAST "iqmp",
-                      BAD_CAST BN_bn2hex(h->rsa->iqmp));
+          xmlNewChild_from_bn(hi, h->rsa->n, "N");
+          xmlNewChild_from_bn(hi, h->rsa->e, "E");
+          xmlNewChild_from_bn(hi, h->rsa->d, "D");
+          xmlNewChild_from_bn(hi, h->rsa->p, "P");
+          xmlNewChild_from_bn(hi, h->rsa->q, "Q");
+          xmlNewChild_from_bn(hi, h->rsa->dmp1, "dmp1");
+          xmlNewChild_from_bn(hi, h->rsa->dmq1, "dmq1");
+          xmlNewChild_from_bn(hi, h->rsa->iqmp, "iqmp");
         default:
           break;
         }
