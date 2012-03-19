@@ -2371,11 +2371,14 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
         }
       else if (type == PARAM_PROXY_TICKET)
         {
-#ifdef MOBILE_ROUTER
-          add_proxy_ticket(&data[location]);
-#else /* MOBILE_ROUTER */
-          log_(WARN, "Ignoring proxy ticket in UPDATE packet.\n");
-#endif /* MOBILE_ROUTER */
+          if (OPT.mr)
+            {
+              add_proxy_ticket(&data[location]);
+            }
+          else
+            {
+              log_(WARN, "Ignoring proxy ticket in UPDATE packet.\n");
+            }
         }
       else if (type == PARAM_REG_INFO)                   /* update packet */
         {
@@ -4991,7 +4994,6 @@ int handle_reg_request(hip_assoc *hip_a, const __u8 *data)
           state = REG_SEND_RESP;
           log_(NORM, "Registration with Rendezvous Service "
                "accepted.\n");
-#ifdef MOBILE_ROUTER
         }
       else if ((reg_types[i] == REGTYPE_MR) && OPT.mr)
         {
@@ -5004,7 +5006,6 @@ int handle_reg_request(hip_assoc *hip_a, const __u8 *data)
           log_(NORM, "Registration with Mobile Router Service "
                "accepted.\n");
           state = REG_SEND_RESP;
-#endif /* MOBILE_ROUTER */
         }
       else               /* Unknown or unsupported type */
         {

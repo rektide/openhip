@@ -2438,9 +2438,7 @@ void print_usage()
   printf("  -t <addr>  manually trigger a HIP exchange with the ");
   printf("given address\n");
   printf("  -rvs\t rendezvous server mode\n");
-#ifdef MOBILE_ROUTER
   printf("  -mr\t mobile router mode\n");
-#endif /* MOBILE_ROUTER */
   printf("  -mh\t turn on loss-based multihoming\n");
   printf("With no options, simple output will be displayed.\n\n");
 }
@@ -3441,9 +3439,7 @@ void log_hipopts()
        yesno(OPT.no_retransmit), yesno(OPT.opportunistic),
        yesno(OPT.allow_any));
   log_(NORM, "rvs = %s", yesno(OPT.rvs));
-#ifdef MOBILE_ROUTER
-  log_(NORM, " mr=%s", yesno(OPT.mr));
-#endif /* MOBILE_ROUTER */
+  log_(NORM, " mr = %s", yesno(OPT.mr));
   log_(NORM, "\n");
 }
 

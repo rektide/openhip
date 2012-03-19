@@ -54,10 +54,8 @@ SRC_USERMODE =	usermode/hip_umh_main.c \
 		usermode/hip_dns.c \
 		usermode/hip_esp.c \
 		usermode/hip_sadb.c \
-		usermode/hip_status2.c
-if WANT_MOBILE_ROUTER
-SRC_USERMODE += usermode/hip_mr.c
-endif
+		usermode/hip_status2.c \
+		usermode/hip_mr.c
 
 # Mac support
 if WANT_OSX

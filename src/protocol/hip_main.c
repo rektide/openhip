@@ -183,9 +183,7 @@ int main_loop(int argc, char **argv)
   OPT.allow_any = FALSE;
   OPT.trigger = NULL;
   OPT.rvs = FALSE;
-#ifdef MOBILE_ROUTER
   OPT.mr = FALSE;
-#endif
   OPT.mh = FALSE;
 
   /*
@@ -351,18 +349,9 @@ int main_loop(int argc, char **argv)
             }
           if (strcmp(*argv, "-mr") == 0)
             {
-#ifdef MOBILE_ROUTER
               OPT.mr = TRUE;
               HCNF.reg_types[HCNF.num_reg_types] = REGTYPE_MR;
               HCNF.num_reg_types++;
-#else
-              log_(ERR,
-                   "Error: mobile router option specifie"
-                   "d but daemon has not been configured a"
-                   "nd built with --enable-mobile-router "
-                   "option.\n");
-              exit(1);
-#endif
             }
           else
             {
@@ -539,10 +528,8 @@ int main_loop(int argc, char **argv)
     }
   get_my_addresses();
   select_preferred_address();
-#ifdef MOBILE_ROUTER
   hip_mr_set_external_ifs();
-#endif /* MOBILE_ROUTER */
-       /* Precompute R1s, cookies, DH material */
+  /* Precompute R1s, cookies, DH material */
   init_dh_cache();
   init_all_R1_caches();
   gettimeofday(&time1, NULL);
@@ -1224,14 +1211,12 @@ hip_retransmit_waiting_packets(struct timeval* time1)
   for (i = 0; i < max_hip_assoc; i++)
     {
       hip_a = &hip_assoc_table[i];
-#ifdef MOBILE_ROUTER
       /* retransmit UPDATE-PROXY packets for mobile router clients
        * that have registered and are ESTABLISHED */
       if (OPT.mr && (hip_a->state == ESTABLISHED))
         {
           hip_mr_retransmit(time1, hip_a->peer_hi->hit);
         }
-#endif /* MOBILE_ROUTER */
       if ((hip_a->rexmt_cache.len < 1) ||
           (TDIFF(*time1, hip_a->rexmt_cache.xmit_time) <=
            (int)HCNF.packet_timeout))

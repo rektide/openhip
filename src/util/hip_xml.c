@@ -1275,7 +1275,6 @@ int read_conf_file(char *filename)
             {
               strcpy(HCNF.preferred_iface, data);
             }
-#ifdef MOBILE_ROUTER
         }
       else if (strcmp((char*)node->name,
                       "outbound_interface") == 0)
@@ -1302,7 +1301,6 @@ int read_conf_file(char *filename)
                   HCNF.outbound_ifaces = temp;
                 }
             }
-#endif /* MOBILE_ROUTER */
         }
       else if (strcmp((char*)node->name,
                       "save_known_identities") == 0)

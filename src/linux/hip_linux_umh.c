@@ -220,9 +220,7 @@ void init_hip(int ac, char **av)
 {
   pthread_t tunreader_thrd, esp_output_thrd, esp_input_thrd;
   pthread_t hipd_thrd, dns_thrd, status_thrd;
-#ifdef MOBILE_ROUTER
   pthread_t mr_thrd;
-#endif /* MOBILE_ROUTER */
   char hipd_args[255];
   int i;
   char timestr[26];
@@ -374,7 +372,6 @@ void init_hip(int ac, char **av)
     }
 
   hip_sleep(1);       /* allow thread start before printing message */
-#ifdef MOBILE_ROUTER
   if (is_mobile_router())
     {
       /* XXX command-line opts may not be loaded yet */
@@ -384,7 +381,6 @@ void init_hip(int ac, char **av)
           exit(1);
         }
     }
-#endif /* MOBILE_ROUTER */
   gettimeofday(&time1, NULL);
   ctime_r(&time1.tv_sec, timestr);
   timestr[strlen(timestr) - 1] = 0;

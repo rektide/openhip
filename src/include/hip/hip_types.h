@@ -98,9 +98,7 @@
 #ifdef HIP_VPLS
 #define MAX_LEGACY_HOSTS 255 /* how many legacy hosts can attached to endbox */
 #endif /* HIP_VPLS */
-#ifdef MOBILE_ROUTER
 #define MAX_MR_CLIENTS MAX_CONNECTIONS /* Number of mobile router clients */
-#endif /* MOBILE_ROUTER */
 
 /*
  * IPsec-related constants
@@ -831,18 +829,14 @@ struct hip_opt {
   int allow_any;
   struct sockaddr *trigger;
   int rvs;
-#ifdef MOBILE_ROUTER
   int mr;
-#endif
   int mh;
 };
 
-#ifdef MOBILE_ROUTER
 struct name {
   char *name;
   struct name *next;
 };
-#endif
 
 /*
  * Global configuration data

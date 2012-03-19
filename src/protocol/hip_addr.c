@@ -1429,12 +1429,10 @@ void handle_local_address_change(int add, struct sockaddr *newaddr,int if_index)
           association_del_address(hip_a, newaddr, if_index);
         }
     }
-#ifdef MOBILE_ROUTER
   if (OPT.mr)
     {
       hip_mr_handle_address_change(add, newaddr, if_index);
     }
-#endif
 }
 
 /*

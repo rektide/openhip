@@ -106,14 +106,6 @@ AC_ARG_ENABLE(vpls,
 	[enable_vpls=default
 	 AC_MSG_RESULT(no)])
 
-AC_MSG_CHECKING(if --enable-mobile-router option is specified)
-AC_ARG_ENABLE(mobile-router,
-	[  --enable-mobile-router    enable mobile router server extensions],
-	[enable_mobile_router=$enable_mobile_router
-	 AC_MSG_RESULT(yes)],
-	[enable_mobile_router=default
-	 AC_MSG_RESULT(no)])
-
 #
 # configure option to define HIP_VPLS
 ################################################################################
@@ -148,15 +140,6 @@ else
 fi
 
 #
-# HIP mobile router server extensions 
-################################################################################
-want_mobile_router=false
-if test "x$enable_mobile_router" = "xyes"; then
-	CFLAGS="$CFLAGS -DMOBILE_ROUTER"
-	want_mobile_router=true
-fi
-
-#
 # Mac OS X detection 
 ################################################################################
 want_osx=false
@@ -168,7 +151,6 @@ esac
 
 # Automake conditionals
 ################################################################################
-AM_CONDITIONAL(WANT_MOBILE_ROUTER, test x$want_mobile_router = xtrue)
 AM_CONDITIONAL(WANT_OSX, test x$want_osx = xtrue)
 AM_CONDITIONAL(WANT_VPLS, test x$want_vpls = xtrue)
 AM_CONDITIONAL(WANT_VPLS_FILES_CFG, 
@@ -208,9 +190,3 @@ else
 fi
 AC_MSG_NOTICE([ ])
 
-if test $want_mobile_router = true; then
-	AC_MSG_NOTICE([    - building mobile router server extensions])
-else
-	AC_MSG_NOTICE([    - NOT building mobile router server extensions])
-fi
-AC_MSG_NOTICE([ ])
