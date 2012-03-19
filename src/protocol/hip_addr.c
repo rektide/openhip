@@ -324,6 +324,7 @@ int get_my_addresses()
           /* save the addresses we care about */
           if (tb[IFA_LOCAL])
             {
+              memset(addr, 0, sizeof(struct sockaddr_storage));
               addr->sa_family = ifa->ifa_family;
               memcpy(SA2IP(addr), RTA_DATA(tb[IFA_LOCAL]),
                      RTA_PAYLOAD(tb[IFA_LOCAL]));
@@ -347,10 +348,7 @@ int get_my_addresses()
           if (l->addr.ss_family == AF_INET6)
             {
               la = add_address_to_list(
-                &my_addr_head,
-                (struct sockaddr*)&l->
-                addr,
-                0);
+                &my_addr_head, (struct sockaddr*)&l->addr, 0);
               la->status = ACTIVE;
               log_(NORM, "(0)%s ",
                    logaddr((struct sockaddr*)&l->addr));

@@ -315,6 +315,7 @@ int draw_keys(hip_assoc *hip_a, int draw_hip_keys, int keymat_index)
       /* load the key */
       hip_a->keys[k].type = key_type;
       hip_a->keys[k].length = len;
+      memset(hip_a->keys[k].key, 0, HIP_KEY_SIZE);
       if ((location + len) > KEYMAT_SIZE)
         {
           log_(NORM, "No more keymat material for key %d!\n", k);

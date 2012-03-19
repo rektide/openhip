@@ -441,11 +441,9 @@ void *hip_esp_output(void *arg)
                */
               memmove(&data[20],&data,len);
               saddr =
-                inet_addr(logaddr(SA(&entry->src_addrs
-                                     ->addr)));
+                inet_addr(logaddr(SA(&entry->src_addrs->addr)));
               daddr =
-                inet_addr(logaddr(SA(&entry->dst_addrs
-                                     ->addr)));
+                inet_addr(logaddr(SA(&entry->dst_addrs->addr)));
 
               add_outgoing_esp_header(data, saddr,daddr,len);
 
@@ -2366,7 +2364,7 @@ void esp_start_base_exchange(struct sockaddr *lsi)
 {
   struct sockaddr_storage dst;
   const int len = sizeof(espmsg) + sizeof(struct sockaddr_storage);
-  char msgbuff[sizeof(espmsg) + sizeof(struct sockaddr_storage)];
+  char msgbuff[sizeof(espmsg) + sizeof(struct sockaddr_storage)] = {0};
   espmsg *msg = (espmsg*) &msgbuff[0];
 
   /* lsi is in host byte order, convert to network for ACQUIRE message */

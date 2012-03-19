@@ -69,18 +69,18 @@ extern void esp_start_expire(__u32 spi);
 
 /* the SADB hash table
  * each entry has a rw_lock, and there is one lock for each hash chain */
-hip_sadb_entry *hip_sadb[SADB_SIZE];
+hip_sadb_entry *hip_sadb[SADB_SIZE] = {0};
 hip_mutex_t hip_sadb_locks[SADB_SIZE];
 /* the SADB destination cache hash table
  * each dst_entry has a rw_lock, and there is one lock for each hash chain */
-hip_sadb_dst_entry *hip_sadb_dst[SADB_SIZE];
+hip_sadb_dst_entry *hip_sadb_dst[SADB_SIZE] = {0};
 hip_mutex_t hip_sadb_dst_locks[SADB_SIZE];
 /* the temporary LSI table and embargoed packet buffer */
 hip_lsi_entry *lsi_temp = NULL;
 /* the protocol selector table for determining address family
  * one lock for each hash chain; entries do not change much, only the time
  * which is not critical */
-hip_proto_sel_entry *hip_proto_sel[PROTO_SEL_SIZE];
+hip_proto_sel_entry *hip_proto_sel[PROTO_SEL_SIZE] = {0};
 hip_mutex_t hip_proto_sel_locks[PROTO_SEL_SIZE];
 
 /*

@@ -3873,11 +3873,10 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
 int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
                   __u8 *key, int type)
 {
-  unsigned char hmac_md[EVP_MAX_MD_SIZE];
+  unsigned char hmac_md[EVP_MAX_MD_SIZE] = {0};
   unsigned int hmac_md_len = EVP_MAX_MD_SIZE;
   int key_len = auth_key_len(type);
 
-  memset (hmac_md, 0, hmac_md_len);
   switch (type)
     {
     case ESP_AES_CBC_HMAC_SHA1:

@@ -318,13 +318,12 @@ void start_base_exchange(struct sockaddr *dst)
   hi_node *mine;
   hiphdr hiph;
 
-  struct sockaddr_storage lsi, ss_src;
+  struct sockaddr_storage lsi = {0}, ss_src = {0};
   struct sockaddr *src = SA(&ss_src);
   hip_hit newhit;
   int previous_state = UNASSOCIATED;
 
   /* replace LSI with IP address */
-  memset(&lsi, 0, sizeof(struct sockaddr_storage));
   memcpy(&lsi, dst, SALEN(dst));
   memset(&newhit, 0, HIT_SIZE);
   hitp = &newhit;

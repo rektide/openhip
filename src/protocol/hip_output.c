@@ -469,9 +469,9 @@ int hip_send_I2(hip_assoc *hip_a)
    * initialization vector used as a randomizing block which is
    * XORed w/1st data block
    */
-  unsigned char cbc_iv[16];
+  unsigned char cbc_iv[16] = {0};
 
-  __u64 solution;
+  __u64 solution = 0;
 
   tlv_r1_counter *r1cnt;
   tlv_esp_info *esp_info;
@@ -572,7 +572,6 @@ int hip_send_I2(hip_assoc *hip_a)
   enc->type = htons(PARAM_ENCRYPTED);
   memset(enc->reserved, 0, sizeof(enc->reserved));
   iv_len = enc_iv_len(hip_a->hip_transform);
-  memcpy(enc->iv, cbc_iv, iv_len);
 
   /* inner padding is 8-byte aligned */
   data_len = build_tlv_hostid_len(hip_a->hi, HCNF.send_hi_name);
@@ -1700,7 +1699,7 @@ int hip_send(__u8 *data, int len, struct sockaddr* src, struct sockaddr* dst,
   __u32 *p32;
 #ifndef __WIN32__
   /* on win32 we use send(), otherwise use sendmsg() */
-  struct msghdr msg;
+  struct msghdr msg = {0};
   struct iovec iov;
 #endif /* __WIN32__ */
 
@@ -1761,13 +1760,8 @@ int hip_send(__u8 *data, int len, struct sockaddr* src, struct sockaddr* dst,
     }
 
 #ifndef __WIN32__
-  /* initialize IP message header */
-  msg.msg_name = 0L;
-  msg.msg_namelen = 0;
   msg.msg_iov = &iov;
   msg.msg_iovlen = 1;
-  msg.msg_control = 0L;
-  msg.msg_controllen = 0;
   iov.iov_len = out_len;
   iov.iov_base = out;
 #endif /* __WIN32__ */
@@ -2302,7 +2296,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
 {
   /* HIP sig */
   SHA_CTX c;
-  unsigned char md[SHA_DIGEST_LENGTH];
+  unsigned char md[SHA_DIGEST_LENGTH] = {0};
   DSA_SIG *dsa_sig;
   tlv_hip_sig *sig;
   unsigned int sig_len;
@@ -2335,14 +2329,14 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
   switch (hi->algorithm_id)
     {
     case HI_ALG_DSA:
-      memset(sig->signature, 0, HIP_DSA_SIG_SIZE);
-      sig->signature[0] = 8;
+      sig_len = HIP_DSA_SIG_SIZE;
+      memset(sig->signature, 0, sig_len);
+      sig->signature[0] = 8; /* T */
       /* calculate the DSA signature of the message hash */
       dsa_sig = DSA_do_sign(md, SHA_DIGEST_LENGTH, hi->dsa);
       /* build signature from DSA_SIG struct */
       bn2bin_safe(dsa_sig->r, &sig->signature[1], 20);
       bn2bin_safe(dsa_sig->s, &sig->signature[21], 20);
-      sig_len = 1 + 20 + 20;
       DSA_SIG_free(dsa_sig);
       break;
     case HI_ALG_RSA:

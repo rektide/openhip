@@ -140,6 +140,7 @@ void init_R1_cache(hi_node *hi)
         {
           log_(NORM, "Malloc error! creating R1 packet.\n");
         }
+      memset(entry->packet, 0, len);
       entry->len = hip_generate_R1(entry->packet, hi,
                                    entry->current_puzzle,
                                    entry->dh_entry);
@@ -185,6 +186,7 @@ void replace_next_R1()
 {
   hi_node *h;
   r1_cache_entry *entry;
+  int packet_len;
 
   /*log_(NORMT, "Expiring the R1 in cache slot %d.\n", current_index);*/
 
@@ -213,12 +215,14 @@ void replace_next_R1()
       entry->dh_entry = get_dh_entry(HCNF.dh_group, FALSE);
       entry->dh_entry->ref_count++;
       free(entry->packet);
-      entry->packet = (__u8 *) malloc(calculate_r1_length(h));
+      packet_len = calculate_r1_length(h);
+      entry->packet = (__u8 *) malloc(packet_len);
       if (entry->packet == NULL)
         {
-          log_(NORMT,
-               "Malloc error! Trying to create R1 packet.\n");
+          log_(NORMT, "Malloc error! Trying to create R1 packet (%d bytes).\n",
+               packet_len);
         }
+      memset(entry->packet, 0, packet_len);
       entry->len = hip_generate_R1(entry->packet,
                                    h,
                                    entry->current_puzzle,

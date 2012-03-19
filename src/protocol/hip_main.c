@@ -136,8 +136,8 @@ int main_loop(int argc, char **argv)
 {
   struct timeval time1, timeout;       /* Used in select() loop */
 #ifndef __WIN32__
-  struct msghdr msg;
-  struct iovec iov;
+  struct msghdr msg = {0};
+  struct iovec iov = {0};
 #endif
   struct sockaddr_in addr;       /* For IPv4 */
 
