@@ -110,3 +110,5 @@ install-data-hook:
 	@echo "   a $(DESTDIR)$(sysconfdir)/my_host_identities.xml file."
 	@echo
 
+DISTCLEANFILES = Makefile.in util/Makefile.in 
+

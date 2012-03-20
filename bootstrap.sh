@@ -16,6 +16,10 @@ if [ "$1a" = "--enable-vplsa" ]; then
 	fi
 	mv configure.ac configure.ac.orig
 	sed -e "s,#AC_PROG_LIBTOOL,AC_PROG_LIBTOOL," configure.ac.orig > configure.ac
+elif [ "$1a" = "cleana" ]; then
+	echo "Cleaning up autoconf dirs..."
+	rm -rf autom4te.cache config
+	exit 0;
 elif [ "$1a" = "a" ]; then
 	LIBTOOLIZE_MSG=""
 	LIBTOOLIZE=""
@@ -28,7 +32,7 @@ elif [ "$1a" = "a" ]; then
 		mv configure.ac.orig configure.ac
 	fi
 else
-	echo "usage: ./bootstrap.sh [--enable-vpls]"
+	echo "usage: ./bootstrap.sh [clean|--enable-vpls]"
 	exit 1;
 fi
 
@@ -37,6 +41,10 @@ if [ -d /usr/local/share/aclocal ]; then
 else
 	EXTRA_INC=""
 fi;
+
+if ! [ -d "config" ]; then
+    mkdir config
+fi
 
 echo "(1/3) Running aclocal..." && aclocal $EXTRA_INC \
     && $LIBTOOLIZE_MSG && $LIBTOOLIZE \

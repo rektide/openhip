@@ -35,3 +35,6 @@ docs:	Doxyfile
 clean:	
 	rm -rf html
 	rm -rf latex
+
+
+DISTCLEANFILES = Makefile.in
