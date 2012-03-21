@@ -2422,7 +2422,8 @@ void print_usage()
   printf("  -d\t daemon mode, fork and write output to logfile\n");
   printf("  -r1\t show pre-calculated R1 generation\n");
   printf("  -o\t opportunistic -- send NULL destination HIT in I1\n");
-  printf("  -a\t allow any -- receive NULL destination HIT in I1\n");
+  printf("  -a\t allow any -- allow HITs not listed in the known identities "
+         "file\n");
   printf("  -conf\t <filename> absolute path to hip.conf file\n");
   printf("  -p\t permissive -- doesn't enforce sigs, checksums ");
   printf("(for debugging)\n");
