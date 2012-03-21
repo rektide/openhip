@@ -1,5 +1,0 @@
-#!/bin/sh
-
-/usr/local/sbin/hitgen -conf -file /usr/local/etc/hip/hip.conf
-/usr/local/sbin/hitgen -noinput -file /usr/local/etc/hip/my_host_identities.xml
-mkdir -p /usr/local/var/log /usr/local/var/run

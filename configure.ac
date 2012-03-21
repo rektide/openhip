@@ -162,7 +162,6 @@ PKG_CHECK_MODULES(libxml2, libxml-2.0)
 
 AC_CONFIG_FILES([src/include/hip/hip_version.h
 		 src/linux/openhip.spec
-		 src/linux/deb/control
 		 src/win32/install-win32/openhip.nsi
 		 docs/Doxyfile
 		 Makefile

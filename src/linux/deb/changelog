@@ -1,0 +1,7 @@
+openhip (0.9-0ubuntu1) oneirirc; urgency=low
+
+  * relicensed and restyled code, netfilter queue mobile router, removed pfkey
+    and outdated kernel support, make check framework, RFC 4303 anti-replay
+    protection, VPLS mode passes layer-2 traffic
+
+ -- Jeff Ahrenholz <jeffrey.m.ahrenholz@boeing.com>  Tue, 20 Mar 2012 15:10:43 -0700

@@ -1,0 +1,23 @@
+Source: openhip
+Section: net
+Priority: optional
+Maintainer: OpenHIP Developers <openhip-developers@lists.sourceforge.net>
+Build-Depends: debhelper, cdbs, autoconf, automake, pkg-config, gcc, make, libxml2-dev, libssl-dev
+Homepage: http://www.openhip.org
+
+Package: openhip
+Architecture: any
+Depends: libxml2, openssl
+Description: Host Identity Protocol daemon for Linux user space.
+ OpenHIP is a free, open-source implementation of the Host Identity Protocol
+ (HIP). HIP is being developed within the Internet Engineering Task Force
+ (IETF) and the Internet Research Task Force (IRTF) to study and experiment
+ with HIP and related protocols.  
+ .
+ HIP is a specific proposal to decouple
+ network identity from network location in the Internet protocol stack.
+ Historically, IP addresses have served both functions. This dual use of IP
+ addresses is becoming problematic, and there have been many research efforts
+ aimed at studying the decoupling of identifier and locator in the network
+ stack. HIP is a specific proposal that uses public/private key pairs as the
+ host identifiers.
