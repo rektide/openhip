@@ -47,7 +47,7 @@ if ! [ -d "config" ]; then
     mkdir config
 fi
 
-echo "(1/4) Running aclocal..." && aclocal $EXTRA_INC \
+echo "(1/4) Running aclocal..." && aclocal -I config $EXTRA_INC \
     && echo "(2/4) Running autoheader..." && autoheader \
     && $LIBTOOLIZE_MSG && $LIBTOOLIZE \
     && echo "(3/4) Running automake..." \

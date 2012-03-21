@@ -30,5 +30,22 @@
 SUBDIRS = src docs
 TARGETS = 
 
+ACLOCAL_AMFLAGS = -I config
+
+# Extra files to include with distribution tarball. The autoconf system does
+# not know about some of the file used for WIN32, packaging, etc.
+EXTRA_DIST = bootstrap.sh LICENSE README RELEASE_NOTES patches conf \
+	     Makefile.msvc
+
 DISTCLEANFILES = stamp-h1 aclocal.m4 config.h.in configure Makefile.in
+
+dist-hook:
+	rm -rf `find $(distdir)/ -type d -name .svn`
+
+
+.PHONY: deb
+deb:
+	mkdir -p debian
+	cp -vf src/linux/deb/* debian/
+	@echo "Ready to run pbuilder."
 

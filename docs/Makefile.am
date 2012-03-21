@@ -36,5 +36,6 @@ clean:
 	rm -rf html
 	rm -rf latex
 
+EXTRA_DIST = main.txt
 
 DISTCLEANFILES = Makefile.in

@@ -110,5 +110,9 @@ install-data-hook:
 	@echo "   a $(DESTDIR)$(sysconfdir)/my_host_identities.xml file."
 	@echo
 
+# Extra files to include with distribution tarball. The autoconf system does
+# not know about some of the file used for WIN32, packaging, etc.
+EXTRA_DIST = include linux util usermode/hip_nl.c win32
+
 DISTCLEANFILES = Makefile.in util/Makefile.in 
 
