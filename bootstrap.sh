@@ -1,9 +1,10 @@
 #!/bin/sh
 
-# Test for prerequisites aclocal, automake, autoconf
-command -v aclocal >/dev/null 2>&1 || { echo >&2 "Command 'aclocal' not found, aborting."; exit 1;}
-command -v automake >/dev/null 2>&1 || { echo >&2 "Command 'automake' not found, aborting."; exit 1;}
-command -v autoconf >/dev/null 2>&1 || { echo >&2 "Command 'autoconf' not found, aborting."; exit 1;}
+# Test for prerequisites aclocal, autoheader automake, autoconf
+PREREQS="aclocal autoheader automake autoconf"
+for p in $PREREQS; do
+    command -v $p >/dev/null 2>&1 || { echo >&2 "Command '$p' not found, aborting."; exit 1;}
+done
 
 # libtool is only used to build the configuration libraries associated
 #  with the --enable-vpls configure option
@@ -46,11 +47,12 @@ if ! [ -d "config" ]; then
     mkdir config
 fi
 
-echo "(1/3) Running aclocal..." && aclocal $EXTRA_INC \
+echo "(1/4) Running aclocal..." && aclocal $EXTRA_INC \
+    && echo "(2/4) Running autoheader..." && autoheader \
     && $LIBTOOLIZE_MSG && $LIBTOOLIZE \
-    && echo "(2/3) Running automake..." \
+    && echo "(3/4) Running automake..." \
     && automake --add-missing --copy --foreign \
-    && echo "(3/3) Running autoconf..." && autoconf \
+    && echo "(4/4) Running autoconf..." && autoconf \
     && echo "" \
     && echo "You are now ready to run \"./configure\"$CONFOPTS."
 
