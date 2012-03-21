@@ -42,10 +42,16 @@ DISTCLEANFILES = stamp-h1 aclocal.m4 config.h.in configure Makefile.in
 dist-hook:
 	rm -rf `find $(distdir)/ -type d -name .svn`
 
-
 .PHONY: deb
 deb:
 	mkdir -p debian
 	cp -vf src/linux/deb/* debian/
 	@echo "Ready to run pbuilder."
+
+.PHONY: rpm
+rpm:
+	rpmdev-setuptree
+	cp -afv openhip-*.tar.gz ~/rpmbuild/SOURCES
+	cp -afv src/linux/openhip.spec ~/rpmbuild/SPECS
+	rpmbuild -bs ~/rpmbuild/SPECS/openhip.spec
 
