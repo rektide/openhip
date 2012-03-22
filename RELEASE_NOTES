@@ -17,6 +17,7 @@ The changes featured in the release are:
     * for HIP_VPLS/endbox mode pass layer-2 traffic: include ethernet headers
       in tunnel; use hello protocol for endbox multicast election; 
       allow default endbox for unresolvable legacy addresses
+    * use pbuilder-dist and mock for building deb and RPM packages
 
 
 ***** Version 0.8 July 2011 *****
