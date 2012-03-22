@@ -82,8 +82,12 @@ hipstatus_SOURCES = util/usermode-status.c
 
 AM_COLOR_TESTS=always
 scriptdir=util/scripts
+if WANT_VPLS
+TESTS = $(scriptdir)/test-endbox.sh
+else
 TESTS = $(scriptdir)/test-bex.sh $(scriptdir)/test-mobility.sh \
 	$(scriptdir)/test-rekey.sh
+endif
 
 .PHONY : shell
 shell:

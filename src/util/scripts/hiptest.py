@@ -14,6 +14,7 @@ HIP_CFG_CACHE="~/.hiptest"
 HIP_CFG_DIR="/usr/local/etc/hip"
 
 import optparse, sys, os, datetime, time, shutil, re
+from stat import *
 from core import pycore
 from core.misc import ipaddr
 from core.misc.utils import check_call, mutecheck_call
@@ -22,12 +23,12 @@ from core.misc.ipaddr import *
 # node list (count from 1)
 nodes = [None]
 
-
 class HipSession(pycore.Session):
     def buildknownhosts(self):
         ''' Collect HITs from HipNodes into a known_host_identities.xml file,
             and deploy that file to all nodes.
         '''
+        hits = [None]
         cfgbase = os.path.expanduser(HIP_CFG_CACHE)
         knownhosts = os.path.join(cfgbase, "known_host_identities.xml")
         kh = open(knownhosts, "w")
@@ -41,8 +42,20 @@ class HipSession(pycore.Session):
             f = open(pub, "r")
             publines = f.readlines()
             publines.insert(-2, "    <addr>%s</addr>\n" % n.getpreferredaddr())
+            if (len(n.legacynodes) > 1):
+                for line in publines:
+                    if line.startswith("    <HIT>"):
+                        hits.append(line.strip(' </HIT>\n'))
+                publines.insert(-2,"    <legacyNodesIp>%s</legacyNodesIp>\n" % \
+                                         n.legacynodes[1].getaddr())
             kh.write("".join(publines[3:-1]))
             f.close()
+        if (len(hits) > 2):
+            for hit in hits[2:]:
+                kh.write("  <peer_allowed>\n")
+                kh.write("    <hit1>%s</hit1>\n" % hits[1])
+                kh.write("    <hit2>%s</hit2>\n" % hit)
+                kh.write("  </peer_allowed>\n")
         kh.write("</known_host_identities>\n")
         kh.close()
         # deploy
@@ -60,6 +73,20 @@ class HipSession(pycore.Session):
             print "LSI for %s not found!" % dst.name
             return False
         status, res = src.cmdresult(['ping', '-c', '3', lsi])
+        if res.find(" 0% packet loss"):
+            return True
+        if status == 0:
+            return True
+        return False
+
+    def lnpingcheck(self, src, dst):
+        ''' Ping the legacy node IP of the dst node from the src node.
+        '''
+        ip = dst.getaddr()
+        if ip is None:
+            print "IP for %s not found!" % dst.name
+            return False
+        status, res = src.cmdresult(['ping', '-c', '3', ip])
         if res.find(" 0% packet loss"):
             return True
         if status == 0:
@@ -153,12 +180,57 @@ class HipSession(pycore.Session):
                 print "FAIL"
         return ok and ok2
 
+    def endboxbex(self, init, resp, verbose=True):
+        ''' Initialize a base exchange between between the endboxes by pinging
+        from the legacy nodes for the endboxes, and check the result.
+        Assumes HIP is already running on the endboxes. Returns True for
+        success/pass, False for failure.
+        '''
+        if verbose:
+            print "triggering base exchange on endboxes by using ping " \
+                  "from %s to %s..." % \
+                  (init.legacynodes[1].name, resp.legacynodes[1].name)
+        ok = self.lnpingcheck(init.legacynodes[1], resp.legacynodes[1])
+        if verbose:
+            print "ping returned",
+            if ok:
+                print "OK"
+            else:
+                print "FAIL"
+
+        for h in (init, resp):
+            if verbose:
+                print "log file for", h.name,
+            if h.checkhiplog('HIP exchange complete.'):
+                if verbose:
+                    print "indicates base exchange completed OK"
+            else:
+                ok = False
+                if verbose:
+                    print "does not list completed base exchange! FAIL"
+        return ok
+
+class LegacyNode(pycore.nodes.LxcNode):
+    def __init__(self, *args, **kwds):
+        super(LegacyNode, self).__init__(*args, **kwds)
+
+    def getaddr(self, family=socket.AF_INET):
+        for ifc in self.netifs():
+            if isinstance(ifc, pycore.nodes.TunTap):
+                continue
+            for addr in ifc.addrlist:
+                ip = addr.split("/")[0]
+                if family == socket.AF_INET and isIPv4Address(ip):
+                    return ip
+                elif family == socket.AF_INET6 and isIPv6Address(ip):
+                    return ip
 
 class HipNode(pycore.nodes.LxcNode):
     def __init__(self, *args, **kwds):
         super(HipNode, self).__init__(*args, **kwds)
         self.hip_path = None
         self.addtap(name="hip0")
+        self.legacynodes = [None]
 
     def addtap(self, name):
         ''' Install a TAP device into the namespace for use by the HIP daemon.
@@ -177,6 +249,25 @@ class HipNode(pycore.nodes.LxcNode):
         cfgbase = os.path.expanduser(HIP_CFG_CACHE)
         cfgpath = os.path.join(cfgbase, self.name)
         return os.path.join(cfgpath, "hip.conf")
+
+    def hipbridgeup(self):
+        contents = []
+        contents.append("#!/bin/bash")
+        contents.append("brctl addbr hipbr")
+        contents.append("brctl addif hipbr eth1")
+        contents.append("brctl addif hipbr hip0")
+        contents.append("ifconfig hip0 mtu 1500")
+        contents.append("ifconfig hipbr up")
+        return "\n".join(contents)
+
+    def hipbridgedown(self):
+        contents = []
+        contents.append("#!/bin/bash")
+        contents.append("ifconfig hipbr down")
+        contents.append("brctl delif hipbr hip0")
+        contents.append("brctl delif hipbr eth1")
+        contents.append("brctl delbr hipbr")
+        return "\n".join(contents)
 
     def hitgen(self):
         ''' Generate a HIP config for the given node. First check for cached
@@ -205,6 +296,24 @@ class HipNode(pycore.nodes.LxcNode):
         if not os.path.exists(pub):
             self.cmd([os.path.join(self.hip_path, "hitgen"), "-publish"])
 
+    def hipbridgefiles(self):
+        cfgbase = os.path.expanduser(HIP_CFG_CACHE)
+        cfgpath = os.path.join(cfgbase, self.name)
+
+        hipbridgeup = os.path.join(cfgpath, "bridge_up.sh")
+        if not os.path.exists(hipbridgeup):
+            f = open(hipbridgeup, "w")
+            f.write(self.hipbridgeup())
+            f.close()
+        os.chmod(hipbridgeup, S_IREAD | S_IWRITE | S_IEXEC)
+
+        hipbridgedown = os.path.join(cfgpath, "bridge_down.sh")
+        if not os.path.exists(hipbridgedown):
+            f = open(hipbridgedown, "w")
+            f.write(self.hipbridgedown())
+            f.close()
+        os.chmod(hipbridgedown, S_IREAD | S_IWRITE | S_IEXEC)
+
     def hipconfval(self, key, value):
         ''' Update the specified key in the hip.conf file with the given value.
         Copy hip.conf to hip.conf.default first.
@@ -221,9 +330,15 @@ class HipNode(pycore.nodes.LxcNode):
         lines = f.readlines()
         f.close()
         f = open(hipconf, 'w')
+        changed = False
         for line in lines:
             if line.startswith("  <%s>" % key):
                 line = "  <%s>%s</%s>\n" % (key, value, key)
+                changed = True
+            if line.startswith("</hip_configuration>"):
+                if (not changed):
+                    newline = "  <%s>%s</%s>\n" % (key, value, key)
+                    f.write(newline)
             f.write(line)
         f.close()
 
@@ -325,7 +440,7 @@ class HipNode(pycore.nodes.LxcNode):
 
 
 def main():
-    tests = ["bex","mobility","rekey","shell"]
+    tests = ["bex","mobility","rekey","shell","endbox"]
     usagestr = "usage: %prog [-h] [options] [tests]\n"
     usagestr += "valid tests are: %s" % tests
     parser = optparse.OptionParser(usage = usagestr)
@@ -362,17 +477,31 @@ def main():
 
     # IP subnet
     prefix = ipaddr.IPv4Prefix("10.83.0.0/16")
+    overlayprefix = ipaddr.IPv4Prefix("192.168.0.0/24")
     session = HipSession(persistent=True)
     # emulated Ethernet switch
     switch = session.addobj(cls = pycore.nodes.SwitchNode)
     print "creating %d nodes with addresses from %s session %d" % \
           (options.numnodes, prefix, session.sessionid)
+    nln = 0
     for i in xrange(1, options.numnodes + 1):
         n = session.addobj(cls = HipNode, name = "n%d" % i)
         n.newnetif(switch, ["%s/%s" % (prefix.addr(i), prefix.prefixlen)])
         n.cmd(["sysctl", "net.ipv4.icmp_echo_ignore_broadcasts=0"])
         n.sethippath(os.getcwd())
         n.hitgen()
+        if "endbox" in args:
+            overlayswitch = session.addobj(cls = pycore.nodes.SwitchNode)
+            n.newnetif(overlayswitch)
+            n.hipbridgefiles()
+            n.hipconfval("disable_udp", "yes")
+            n.hipconfval("master_interface", "eth0")
+            n.hipconfval("cfg_library", "/usr/local/lib/libhipcfgfiles.so")
+            nln = nln + 1
+            ln = session.addobj(cls = LegacyNode, name = "ln%d" % nln)
+            ln.newnetif(overlayswitch,
+               ["%s/%s" % (overlayprefix.addr(nln), overlayprefix.prefixlen)])
+            n.legacynodes.append(ln)
         nodes.append(n)
 
     # The known_host_identities.xml file is built after all of the host IDs
@@ -399,6 +528,9 @@ def main():
         print "spawning terminal shells for nodes 1 and 2"
         nodes[1].term("bash")
         nodes[2].term("bash")
+        if "endbox" in args:
+          nodes[1].legacynodes[1].term("bash")
+          nodes[2].legacynodes[1].term("bash")
         print "leaving session %d running" % session.sessionid
         print "run 'sudo core-cleanup.sh' to clean up this test environment"
         sys.exit(0)
@@ -419,6 +551,12 @@ def main():
         if not session.rekey(nodes[1], nodes[2]):
             problem = True
         nodes[1].hipconfrestore()
+    if "endbox" in args:
+        if not session.endboxbex(nodes[1], nodes[2]):
+            print "problem with legacy node connectivity!"
+            problem = True
+        nodes[1].hipconfrestore()
+        nodes[2].hipconfrestore()
 
     print "shutting down session %d" % session.sessionid
     session.shutdown()
