@@ -948,6 +948,7 @@ void init_hip(DWORD ac, char **av)
   char hipd_args[255];
   int i;
 
+  printf("%s v%s HIP Windows service\n", HIP_NAME, HIP_VERSION);
   printf("init_hip()\n");
 
   /* get arguments for hipd */

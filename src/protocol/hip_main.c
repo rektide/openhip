@@ -75,6 +75,7 @@
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
+#include <hip/hip_version.h> /* HIP_VERSION */
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
 #endif
@@ -371,9 +372,9 @@ int main_loop(int argc, char **argv)
     }
 
 #ifdef __WIN32__
-  log_(QOUT, "hipd started.\n");
+  log_(QOUT, "hipd v%s started.\n", HIP_VERSION);
 #else
-  log_(QOUT, "hipd (%d) started.\n", getpid());
+  log_(QOUT, "hipd v%s (%d) started.\n", HIP_VERSION, getpid());
 #endif
   log_hipopts();
 

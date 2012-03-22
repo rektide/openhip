@@ -227,6 +227,7 @@ void init_hip(int ac, char **av)
   struct timeval time1;
   int do_daemon = 0;
 
+  printf("%s v%s HIP daemon\n", HIP_NAME, HIP_VERSION);
   /*printf("init_hip()\n");*/
 
   /* get arguments for hipd */
