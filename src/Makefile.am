@@ -27,6 +27,7 @@
 #  \brief  Automake makefile.
 #
 
+# the following option may be safely disabled for older versions of automake
 AUTOMAKE_OPTIONS=color-tests
 
 sbin_PROGRAMS = hitgen hip hipstatus
