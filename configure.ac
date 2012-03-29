@@ -142,6 +142,7 @@ fi
 #
 # Mac OS X detection 
 ################################################################################
+AC_CANONICAL_HOST
 want_osx=false
 case "${host}" in
   *-apple-darwin*)

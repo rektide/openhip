@@ -92,6 +92,10 @@ int s_esp, s_esp_udp, s_esp_udp_dg, s_esp6;
 
 #ifdef __MACOSX__
 extern char *logaddr(struct sockaddr *addr);
+/* __MACOS__ uses raw IP output */
+#ifndef RAW_IP_OUT
+#define RAW_IP_OUT
+#endif
 #endif
 
 __u32 g_tap_lsi;
@@ -161,10 +165,6 @@ extern __u32 get_preferred_lsi(struct sockaddr *lsi);
 extern int do_bcast();
 extern int maxof(int num_args, ...);
 
-#ifdef __MACOSX__
-void add_outgoing_esp_header(__u8 *data, __u32 src, __u32 dst, __u16 len);
-#endif
-
 void init_readsp()
 {
   if (readsp[0])
@@ -213,16 +213,15 @@ void *hip_esp_output(void *arg)
   static hip_sadb_entry *entry;
   struct sockaddr_storage ss_lsi;
   struct sockaddr *lsi = (struct sockaddr*)&ss_lsi;
+#ifndef RAW_IP_OUT
   sockaddr_list *l;
+#endif /* RAW_IP_OUT */
 #ifndef HIP_VPLS
   __u32 lsi_ip;
 #else
   struct arp_hdr *arph;
   time_t last_time, now_time;
   int packet_count = 0;
-#endif
-#ifdef __MACOSX__
-  __u32 saddr, daddr;
 #endif
 #ifdef RAW_IP_OUT
   int s_raw = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
@@ -381,7 +380,7 @@ void *hip_esp_output(void *arg)
           while (entry)
             {
               pthread_mutex_lock(&entry->rw_lock);
-#ifdef RAW_IP_OUT
+#if defined RAW_IP_OUT
               offset = sizeof(struct ip);
 #else
               offset = 0;
@@ -417,43 +416,19 @@ void *hip_esp_output(void *arg)
                * selection problems.
                */
               add_ipv4_header(data,
-                              ntohl(LSI4(&entry->src_addrs->
-                                         addr)),
-                              ntohl(LSI4(
-                                      &entry->dst_addrs
-                                      ->
-                                      addr)),
-                              (struct ip*)
-                              &raw_buff[sizeof(struct eth_hdr)
-                              ],
-                              sizeof(struct ip) + len,
-                              IPPROTO_ESP);
-              err = sendto(s_raw, data,
-                           sizeof(struct ip) + len, flags,
+                              ntohl(LSI4(&entry->src_addrs->addr)),
+                              ntohl(LSI4( &entry->dst_addrs->addr)),
+                              (struct ip*) &raw_buff[sizeof(struct eth_hdr)],
+                              sizeof(struct ip) + len, IPPROTO_ESP);
+#ifdef __MACOSX__
+              err = sendto(s_esp, data, sizeof(struct ip) + len, flags, 0, 0);
+#else
+              err = sendto(s_raw, data, sizeof(struct ip) + len, flags,
                            SA(&entry->dst_addrs->addr),
                            SALEN(&entry->dst_addrs->addr));
+#endif /* __MACOSX__ */
+
 #else
-#ifdef __MACOSX__
-/*I need to build an IP header and write it to a different address!*/
-              /* TODO: use offset above, and LSI4 macro
-               * instead
-               *       of calls to inet_addr()
-               */
-              memmove(&data[20],&data,len);
-              saddr =
-                inet_addr(logaddr(SA(&entry->src_addrs->addr)));
-              daddr =
-                inet_addr(logaddr(SA(&entry->dst_addrs->addr)));
-
-              add_outgoing_esp_header(data, saddr,daddr,len);
-
-              err = sendto(s_esp,data, len + sizeof(struct ip),
-                           flags, 0, 0);
-              if (err < 0)
-                {
-                  perror("sendto()");
-                }
-#else /* __MACOSX__ */
               if (entry->mode == 3)
                 {
                   s = s_esp_udp;
@@ -470,7 +445,6 @@ void *hip_esp_output(void *arg)
               err = sendto(s, data, len, flags,
                            SA(&entry->dst_addrs->addr),
                            SALEN(&entry->dst_addrs->addr));
-#endif /* __MACOSX__ */
 #endif /* RAW_IP_OUT */
               if (err < 0)
                 {
@@ -486,6 +460,7 @@ void *hip_esp_output(void *arg)
                     &now,
                     1);
                 }
+#ifndef RAW_IP_OUT
               /* multihoming: duplicate packets to multiple
                * destination addresses */
               for (l = entry->dst_addrs->next; l;
@@ -502,6 +477,7 @@ void *hip_esp_output(void *arg)
                         strerror(errno));
                     }
                 }
+#endif /* !RAW_IP_OUT */
               /* broadcasts are unicast to each association */
               if (!is_broadcast)
                 {
@@ -509,10 +485,10 @@ void *hip_esp_output(void *arg)
                 }
               entry = hip_sadb_get_next(entry);
             }             /* end while */
-                          /*
-                           * IPv6
-                           */
         }
+      /*
+       * IPv6
+       */
       else if ((raw_buff[12] == 0x86) && (raw_buff[13] == 0xdd))
         {
           ip6h = (struct ip6_hdr*) &raw_buff[14];
@@ -685,46 +661,19 @@ void *hip_esp_output(void *arg)
                * Use this to override OS source address
                * selection problems.
                */
-              add_ipv4_header(data,
-                              ntohl(LSI4(&entry->src_addrs->
-                                         addr)),
-                              ntohl(LSI4(
-                                      &entry->dst_addrs
-                                      ->
-                                      addr)),
-                              (struct ip*)
-                              &raw_buff[sizeof(struct eth_hdr)
-                              ],
-                              sizeof(struct ip) + len,
-                              IPPROTO_ESP);
-              err = sendto(s_raw, data,
-                           sizeof(struct ip) + len, flags,
+              add_ipv4_header(data, ntohl(LSI4(&entry->src_addrs->addr)),
+                              ntohl(LSI4(&entry->dst_addrs-> addr)),
+                              (struct ip*) &raw_buff[sizeof(struct eth_hdr)],
+                              sizeof(struct ip) + len, IPPROTO_ESP);
+#ifdef __MACOSX__
+              err = sendto(s_esp, data, sizeof(struct ip) + len, flags, 0, 0);
+#else
+              err = sendto(s_raw, data, sizeof(struct ip) + len, flags,
                            SA(&entry->dst_addrs->addr),
                            SALEN(&entry->dst_addrs->addr));
+#endif /* __MACOSX__ */
+
 #else
-#ifdef __MACOSX__
-/*I need to build an IP header and write it to a different address!*/
-              /* TODO: use offset above, and LSI4 macro
-               * instead
-               *       of calls to inet_addr()
-               */
-              memmove(&data[20],&data,len);
-              saddr =
-                inet_addr(logaddr(SA(&entry->src_addrs
-                                     ->addr)));
-              daddr =
-                inet_addr(logaddr(SA(&entry->dst_addrs
-                                     ->addr)));
-
-              add_outgoing_esp_header(data, saddr,daddr,len);
-
-              err = sendto(s_esp,data, len + sizeof(struct ip),
-                           flags, 0, 0);
-              if (err < 0)
-                {
-                  perror("sendto()");
-                }
-#else /* __MACOSX__ */
               if (entry->mode == 3)
                 {
                   s = s_esp_udp;
@@ -741,7 +690,6 @@ void *hip_esp_output(void *arg)
               err = sendto(s, data, len, flags,
                            SA(&entry->dst_addrs->addr),
                            SALEN(&entry->dst_addrs->addr));
-#endif /* __MACOSX__ */
 #endif /* RAW_IP_OUT */
               if (err < 0)
                 {
@@ -2208,11 +2156,7 @@ void add_ipv4_header(__u8 *data, __u32 src, __u32 dst, struct ip *old,
   iph->ip_dst.s_addr = htonl(dst);
 
   /* add the header checksum */
-#if defined(__MACOSX__) && defined(__BIG_ENDIAN__)
-  iph->ip_sum = ip_fast_csum((__u8*)iph, 20);
-#else
   iph->ip_sum = ip_fast_csum((__u8*)iph, iph->ip_hl);
-#endif
 }
 
 /*
@@ -2282,31 +2226,6 @@ void add_ipv6_header(__u8 *data,
       ip6h->ip6_hlim = old4->ip_ttl;                    /* __u8 */
     }
 }
-
-#ifdef __MACOSX__
-
-void add_outgoing_esp_header(__u8 *data, __u32 src, __u32 dst, __u16 len)
-{
-  struct ip *iph = (struct ip*)data;
-
-  memset(iph, 0, sizeof(struct ip));
-  iph->ip_v = 4;
-  iph->ip_hl = 5;
-  iph->ip_tos = 0;
-  iph->ip_len = htons(len + sizeof(struct ip));
-  iph->ip_id  = 1337;
-  iph->ip_off = htons(0x4000);
-  iph->ip_ttl = 64;
-  iph->ip_p = IPPROTO_ESP;
-  iph->ip_sum = 0;
-  iph->ip_src.s_addr = src;
-  iph->ip_dst.s_addr = dst;
-
-  /* add the header checksum */
-  iph->ip_sum = ip_fast_csum((__u8*)iph, iph->ip_hl);
-}
-
-#endif
 
 /*
  * get_mac_addr()

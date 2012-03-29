@@ -76,7 +76,6 @@
 /* Local functions */
 /* int read_netlink_response();*/
 
-void readdress_association(int add, struct sockaddr *newaddr, int if_index);
 void association_add_address(hip_assoc *hip_a, struct sockaddr *newaddr,
                              int if_index);
 void association_del_address(hip_assoc *hip_a, struct sockaddr *newaddr,

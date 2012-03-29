@@ -33,6 +33,7 @@
 #ifndef _CHECKSUM_H
 #define _CHECKSUM_H
 
+#ifndef __MACOSX__
 #ifndef __WIN32__
 #include <asm/types.h>
 #include <endian.h>
@@ -41,8 +42,12 @@
 #include <win32/types.h>
 #include <ws2tcpip.h>
 #endif /* __WIN32__ */
+#else /* __MACOSX__ */
+#include <mac/mac_types.h>
+#include <netinet/in.h>
+#endif /* __MACOSX__ */
 
-#ifdef __WIN32__
+#if defined __WIN32__ || defined __MACOSX__
 /* Windows' ws2tcpip.h has struct in6_addr with __u8 and __u16 members,
  * but no __u32 as we need here for accumulation.
  */
@@ -116,7 +121,7 @@ static __inline unsigned long csum_tcpudp_nofold(unsigned long saddr,
  * computes the checksum of the TCP/UDP pseudo-header
  * returns a 16-bit checksum, already complemented
  */
-#ifdef __WIN32__
+#if defined __WIN32__ || defined __MACOSX__
 static __inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
                                                      unsigned long daddr,
                                                      unsigned short len,
@@ -181,7 +186,7 @@ static __inline unsigned short csum_hip_revert(unsigned long saddr,
 /*
  * HIP checksum = tcp checksum + hitMagic - csum(saddr,daddr)
  */
-#ifdef __WIN32__
+#if defined __WIN32__ || defined __MACOSX__
 static __inline unsigned short csum_tcpudp_hip_nofold6(struct in6_addr *saddr1,
                                                        struct in6_addr *daddr1,
                                                        unsigned short sum,
@@ -291,7 +296,7 @@ static inline unsigned short csum_tcpudp_hip_nofold6(struct in6_addr *saddr,
 
 #endif
 
-#ifdef __WIN32__
+#if defined __WIN32__ || defined __MACOSX__
 static __inline unsigned short csum_hip_revert6(struct in6_addr *saddr1,
                                                 struct in6_addr *daddr1,
                                                 unsigned short sum,
