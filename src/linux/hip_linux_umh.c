@@ -72,6 +72,9 @@ extern int get_preferred_lsi(struct sockaddr *lsi);
 extern int is_dns_thread_disabled();
 extern int is_mobile_router();
 
+#ifdef __MACOSX__
+#define DISABLE_HIPMR
+#endif /* __MACOSX__ */
 
 /*
  * Globals
@@ -220,7 +223,9 @@ void init_hip(int ac, char **av)
 {
   pthread_t tunreader_thrd, esp_output_thrd, esp_input_thrd;
   pthread_t hipd_thrd, dns_thrd, status_thrd;
+#ifndef DISABLE_HIPMR
   pthread_t mr_thrd;
+#endif
   char hipd_args[255];
   int i;
   char timestr[26];
@@ -375,12 +380,16 @@ void init_hip(int ac, char **av)
   hip_sleep(1);       /* allow thread start before printing message */
   if (is_mobile_router())
     {
+#ifndef DISABLE_HIPMR
       /* XXX command-line opts may not be loaded yet */
       if (pthread_create(&mr_thrd, NULL, hip_mobile_router, NULL))
         {
+#endif
           printf("Error creating Mobile Router thread.\n");
           exit(1);
+#ifndef DISABLE_HIPMR
         }
+#endif
     }
   gettimeofday(&time1, NULL);
   ctime_r(&time1.tv_sec, timestr);

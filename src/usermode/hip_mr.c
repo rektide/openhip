@@ -31,6 +31,13 @@
  *
  */
 
+/* Netfilter queueing mechanism is not available on all platforms.
+ * Disable it at compile-time here.
+ */
+#ifdef __MACOSX__
+#define DISABLE_HIPMR 1
+#endif /* __MACOSX__ */
+
 #include <unistd.h>
 #include <pthread.h>            /* phread_exit() */
 #include <netinet/in.h>         /* INET6_ADDRSTRLEN */
@@ -51,9 +58,17 @@
 #include <hip/hip_globals.h>
 #include <hip/hip_mr.h>
 #include <win32/checksum.h>     /* ip_fast_csum() */
+#ifndef __MACOSX__
 #include <linux/types.h>
+#endif /* __MACOSX__ */
+
+#ifndef DISABLE_HIPMR
+
 #ifndef aligned_be64
 #define aligned_be64 u_int64_t __attribute__((aligned(8)))
+#endif
+#ifndef aligned_u64
+#define aligned_u64 u_int64_t __attribute__((aligned(8)))
 #endif
 #include <linux/netfilter.h>    /* NF_DROP */
 
@@ -75,6 +90,21 @@
 #define MR_TIMEOUT_US 500000 /* microsecond timeout for mobile_router select()*/
 #define MAX_MR_CLIENTS MAX_CONNECTIONS
 #define MAX_EIFACES 8
+
+#endif
+
+#ifdef DISABLE_HIPMR
+
+int hip_mr_set_external_ifs() { return 0; }
+void hip_mr_handle_address_change(int add, struct sockaddr *newaddr, int ifi) { }
+int init_hip_mr_client(hip_hit peer_hit, struct sockaddr *src) { return 0; }
+
+int  hip_mr_retransmit(struct timeval *time1, hip_hit hit) {  return 0; }
+int  add_proxy_ticket(const __u8 *data) { return -1; }
+
+int is_mobile_router() { return 0; }
+
+#else
 
 enum { EIF_UNAVAILABLE, EIF_AVAILABLE };
 
@@ -3151,3 +3181,4 @@ int netfilter_queue_set_verdict(int nlfd, int queue_num, __u32 id,
   return(0);
 }
 
+#endif
