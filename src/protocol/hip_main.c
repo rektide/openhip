@@ -578,6 +578,10 @@ int main_loop(int argc, char **argv)
     }
 
 #ifdef IPV6_HIP
+#ifndef IPV6_RECVPKTINFO
+#define IPV6_RECVPKTINFO        49
+#endif
+
   setsockopt(s6_hip, IPPROTO_IPV6, IPV6_RECVERR, &optval, sizeof(optval));
   setsockopt(s6_hip, IPPROTO_IPV6, IPV6_RECVPKTINFO, &optval,
              sizeof(optval));
