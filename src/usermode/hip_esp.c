@@ -2056,7 +2056,7 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
                 elen;
     }
 #else /* HIP_VPLS */
-  *outlen = sizeof(struct eth_hdr) + elen;
+  *outlen = elen;
 #endif /* HIP_VPLS */
 
   /* previously, this happened after write(), but there
