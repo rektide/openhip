@@ -37,7 +37,7 @@ logger -s "Starting HIP daemon"
 if [ $USE_SYSLOG = "y" ]; then
     /usr/local/sbin/hip -v 2>&1 | (tee /dev/null | logger -t hiplog) &
 else
-    mv /var/log/hip/hip.log /var/log/hip/hip.log-`date +"%Y%m%d%H%M%S"`
+    mv /var/log/hip.log /var/log/hip.log-`date +"%Y%m%d%H%M%S"`
     /usr/local/sbin/hip -v > /var/log/hip.log 2>&1 &
 fi
 
