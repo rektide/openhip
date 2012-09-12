@@ -378,7 +378,8 @@ void endbox_periodic_heartbeat(time_t *now_time,
   snprintf(filename, sizeof(filename),
            "/usr/local/etc/hip/heartbeat_hip_%s", name);
 
-  if (*now_time - *last_time > 60)
+  if ((HCNF.endbox_heartbeat_time > 0) &&
+      (*now_time - *last_time > HCNF.endbox_heartbeat_time))
     {
       printf("hip_esp_%s() heartbeat (%d packets)\n",
              name, *packet_count);

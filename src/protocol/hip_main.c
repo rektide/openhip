@@ -224,6 +224,7 @@ int main_loop(int argc, char **argv)
 #ifdef HIP_VPLS
   HCNF.use_my_identities_file = 0;
   HCNF.endbox_hello_time = 0;
+  HCNF.endbox_heartbeat_time = 0;
   HCNF.endbox_allow_core_dump = 0;
 #endif
 
@@ -644,7 +645,8 @@ int main_loop(int argc, char **argv)
 #endif /* __WIN32__ */
 #ifdef HIP_VPLS
       now_time = time(NULL);
-      if (now_time - last_time > 60)
+      if ((HCNF.endbox_heartbeat_time > 0) &&
+          (now_time - last_time > HCNF.endbox_heartbeat_time))
         {
           log_(NORMT, "hipd_main() heartbeat\n");
           last_time = now_time;

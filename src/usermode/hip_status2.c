@@ -45,6 +45,7 @@
 #include <hip/hip_sadb.h>               /* access to SADB */
 #include <hip/hip_status.h>
 #include <hip/hip_funcs.h>      /* pthread_mutex_lock() */
+#include <hip/hip_globals.h>    /* HCNF */
 
 #ifdef HIP_VPLS
 #include <utime.h>
@@ -128,7 +129,8 @@ void *hip_status(void *arg)
 
 #ifdef HIP_VPLS
       now_time = time(NULL);
-      if (now_time - last_time > 60)
+      if ((HCNF.endbox_heartbeat_time > 0) &&
+          (now_time - last_time > HCNF.endbox_heartbeat_time))
         {
           printf("hip_status() heartbeat\n");
           last_time = now_time;

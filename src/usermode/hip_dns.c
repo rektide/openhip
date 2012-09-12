@@ -72,6 +72,7 @@
 #include <hip/hip_dns.h>        /* dns structures */
 #include <hip/hip_usermode.h>
 #include <hip/hip_sadb.h>       /* access to SADB */
+#include <hip/hip_globals.h>    /* HCNF */
 
 /*
  * Globals
@@ -218,7 +219,8 @@ void *hip_dns(void *arg)
 
 #ifdef HIP_VPLS
       now_time = time(NULL);
-      if (now_time - last_time > 60)
+      if ((HCNF.endbox_heartbeat_time > 0) &&
+          (now_time - last_time > HCNF.endbox_heartbeat_time))
         {
           printf("hip_dns() heartbeat\n");
           last_time = now_time;

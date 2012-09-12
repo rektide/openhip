@@ -884,8 +884,10 @@ struct hip_conf {
   __u8 use_my_identities_file;          /* use my_host_identities file */
   __u32 endbox_hello_time;              /* frequency of endbox hellos on overlay
                                          */
+  __u32 endbox_heartbeat_time;          /* frequency of endbox heartbeat
+                                         * logging messages */
   __u32 endbox_allow_core_dump;         /* whether or not to allow endbox to
-                                         *core dump */
+                                         * core dump */
 #endif /* HIP_VPLS */
   char conf_filename[255];
   char my_hi_filename[255];

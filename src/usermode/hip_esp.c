@@ -1111,7 +1111,8 @@ void *tunreader(void *arg)
       timeout.tv_usec = 0;
 #ifdef HIP_VPLS
       now_time = time(NULL);
-      if (now_time - last_time > 60)
+      if ((HCNF.endbox_heartbeat_time > 0) &&
+          (now_time - last_time > HCNF.endbox_heartbeat_time))
         {
           printf("tunreader() heartbeat\n");
           last_time = now_time;

@@ -1043,6 +1043,11 @@ int read_conf_file(char *filename)
         {
           sscanf(data, "%d", &HCNF.endbox_hello_time);
         }
+      else if (strcmp((char *)node->name,
+                      "endbox_heartbeat_time") == 0)
+        {
+          sscanf(data, "%d", &HCNF.endbox_heartbeat_time);
+        }
       else if (strcmp((char *)node->name, "endbox_allow_core_dump") == 0)
         {
           if (strncmp(data, "yes", 3) == 0)
