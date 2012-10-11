@@ -1006,6 +1006,10 @@ int read_conf_file(char *filename)
         {
           sscanf(data, "%d", &HCNF.loc_lifetime);
         }
+      else if (strcmp((char *)node->name, "icmp_timeout") == 0)
+        {
+          sscanf(data, "%d", &HCNF.icmp_timeout);
+        }
       else if (strcmp((char *)node->name, "preferred_hi") == 0)
         {
           HCNF.preferred_hi = (char *)malloc(MAX_HI_NAMESIZE);

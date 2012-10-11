@@ -196,6 +196,7 @@ int main_loop(int argc, char **argv)
   HCNF.msl = 5;
   HCNF.ual = 600;
   HCNF.failure_timeout = (HCNF.max_retries * HCNF.packet_timeout);
+  HCNF.icmp_timeout = 0;
   for (i = 0; i < (SUITE_ID_MAX - 1); i++)
     {
       HCNF.esp_transforms[i] = HCNF.hip_transforms[i] = (__u16)(i + 1);
@@ -1399,6 +1400,17 @@ void hip_handle_state_timeouts(struct timeval *time1)
               delete_associations(hip_a, 0, 0);
               free_hip_assoc(hip_a);
               break;
+            }
+          /*
+           * Respond to ICMP Parameter Problem packet again
+           */
+          if (hip_a->icmp_update_status == ICMP_UPDATE_SUCCESSFUL &&
+              (TDIFF(*time1, hip_a->icmp_update_time) >
+               (int)HCNF.icmp_timeout))
+            {
+              hip_a->icmp_update_status = ICMP_UPDATE_UNSET;
+              hip_a->icmp_update_time.tv_sec  = 0;
+              hip_a->icmp_update_time.tv_usec = 0;
             }
           /*
            * Check last used time

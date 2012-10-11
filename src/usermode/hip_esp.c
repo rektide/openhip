@@ -46,6 +46,7 @@
 #include <netinet/in.h>
 #endif /* __MACOSX__ */
 #include <netinet/ip.h>         /* struct ip */
+#include <netinet/ip_icmp.h>    /* struct icmp */
 #include <netinet/ip6.h>        /* struct ip6_hdr */
 #include <netinet/icmp6.h>      /* struct icmp6_hdr */
 #include <netinet/tcp.h>        /* struct tcphdr */
@@ -53,6 +54,7 @@
 #include <arpa/inet.h>
 #ifndef __MACOSX__
 #include <linux/types.h>
+#include <linux/errqueue.h>
 #endif /* __MACOSX__ */
 #endif /* __WIN32__ */
 #include <string.h>             /* memset, etc */
@@ -184,6 +186,154 @@ void init_readsp()
   /* also initialize the Ethernet address table */
   RAND_bytes(eth_addrs, sizeof(eth_addrs));
 }
+
+#ifndef __WIN32__
+
+/*
+ * send_icmp()
+ *
+ * Send an ICMP packet with type "Parameter Problem"
+ * TODO: Rate-limit this.
+ */
+void send_icmp(struct ip *iph, struct ip_esp_hdr *esph)
+{
+  __u8 icmp_parameter_problem[sizeof(struct ip) + sizeof(struct icmp) + 8];
+  struct icmp *icmp;
+  int s_icmp, flags, err;
+  struct sockaddr_in sendto_addr;
+
+  /* Set the fields of the ICMP packet */
+
+  icmp = (struct icmp *)(icmp_parameter_problem + sizeof(struct ip));
+  icmp->icmp_type = ICMP_PARAMETERPROB;
+  icmp->icmp_code = 0;
+  icmp->icmp_cksum = 0;
+  icmp->icmp_pptr = sizeof(struct ip) + offsetof(struct ip_esp_hdr, spi);
+
+  /* Copy the IP header of the unknown SPI */
+
+  memcpy(&(icmp->icmp_ip), iph, sizeof(struct ip));
+
+  /* Copy the first 64 bits of the ESP header */
+
+  memcpy((__u8 *)icmp + sizeof(struct icmp), esph, 8);
+
+  /* Compute the check_sum and add the IPv4 header */
+
+  icmp->icmp_cksum = ip_fast_csum((__u8*)icmp, 9);
+  add_ipv4_header(icmp_parameter_problem,
+                  ntohl(iph->ip_dst.s_addr),
+                  ntohl(iph->ip_src.s_addr), iph,
+                  sizeof(icmp_parameter_problem), IPPROTO_ICMP);
+
+  /* Open the socket */
+
+  s_icmp = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+  flags = 1;
+  if (setsockopt(s_icmp, IPPROTO_IP, IP_HDRINCL, (char *)&flags,
+                 sizeof(flags)) < 0)
+    {
+      printf("*** setsockopt() error for ICMP socket in send_icmp\n");
+      close(s_icmp);
+      return;
+    }
+
+  /* Send the packet */
+
+  flags = 0;
+  memset(&sendto_addr, 0, sizeof(sendto_addr));
+  sendto_addr.sin_family = AF_INET;
+  sendto_addr.sin_addr.s_addr = iph->ip_src.s_addr;
+  sendto_addr.sin_port = htons(0);
+
+  err = sendto(s_icmp, icmp_parameter_problem,
+               sizeof(icmp_parameter_problem), flags,
+               (const struct sockaddr *)&sendto_addr,
+               sizeof(sendto_addr));
+
+  if (err < 0)
+    perror("*** sendto error in send_icmp");
+  close(s_icmp);
+}
+
+/*
+ * check_icmp_parameter_problem()
+ *
+ * Check if the socket has received an ICMP packet with type
+ * "Parameter Problem".  If so, send an UPDATE address check.
+ */
+void check_icmp_parameter_problem(int s_esp)
+{
+  int ret;
+  int flags = MSG_ERRQUEUE;
+  struct msghdr msg;
+  unsigned char msg_buffer[512];
+  struct iovec iov[1];
+  unsigned char iov_buffer[512];
+  struct cmsghdr * chdr;
+  struct sock_extended_err *ee_msg;
+  struct ip_esp_hdr *esph;
+  struct timeval time1;
+  struct sockaddr *addrcheck;
+  sockaddr_list *l;
+  __u32 spi;
+  __u32 nonce;
+
+  memset(&msg, 0, sizeof(msg));
+  memset(msg_buffer, 0,  sizeof(msg_buffer));
+  memset(iov_buffer, 0,  sizeof(iov_buffer));
+  msg.msg_control = msg_buffer;
+  msg.msg_controllen = sizeof(msg_buffer);
+  msg.msg_iov = iov;
+  msg.msg_iovlen = 1;
+  iov[0].iov_base = iov_buffer;
+  iov[0].iov_len = sizeof(iov_buffer);
+
+  ret = recvmsg(s_esp, &msg, flags);
+  if (ret < 0)
+    {
+      perror("*** check_icmp_parameter_problem error");
+      return;
+    }
+  if (msg.msg_flags != MSG_ERRQUEUE)
+    {
+      return;
+    }
+  esph = (struct ip_esp_hdr *)(msg.msg_iov[0].iov_base);
+  spi  = ntohl(esph->spi);
+
+  hip_assoc *hip_a = find_hip_association_by_spi(spi, 2);
+  if (hip_a && (hip_a->icmp_update_status == ICMP_UPDATE_UNSET))
+    {
+      for (chdr = CMSG_FIRSTHDR(&msg); chdr != NULL; chdr = CMSG_NXTHDR(&msg, chdr))
+        {
+          if (chdr->cmsg_type == IP_RECVERR)
+            {
+              ee_msg = (struct sock_extended_err *)CMSG_DATA(chdr);
+              if (ee_msg && (SO_EE_ORIGIN_ICMP == ee_msg->ee_origin) &&
+                            (ICMP_PARAMETERPROB == ee_msg->ee_type))
+                {
+                  /* perform UPDATE address check */
+                  l = &hip_a->peer_hi->addrs;
+                  addrcheck = SA(&l->addr);
+                  gettimeofday(&time1, NULL);
+                  hip_a->icmp_update_status = ICMP_UPDATE_TRIGGERED;
+                  hip_a->rekey = malloc(sizeof(struct rekey_info));
+                  memset(hip_a->rekey, 0, sizeof(struct rekey_info));
+                  hip_a->rekey->update_id = hip_a->hi->update_id++;
+                  hip_a->rekey->need_ack = TRUE;
+                  hip_a->rekey->rk_time.tv_sec = time1.tv_sec;
+                  RAND_bytes((__u8*)&nonce, sizeof(__u32));
+                  l->nonce = nonce;
+                  hip_send_update(hip_a, NULL, NULL, addrcheck);
+                  break;
+                }
+            }
+        }
+    }
+}
+
+#endif /*not __WIN32__*/
 
 /*
  * hip_esp_output()
@@ -855,16 +1005,30 @@ void *hip_esp_input(void *arg)
 #else
           len = read(s_esp, buff, sizeof(buff));
 #endif
-          iph = (struct ip *) &buff[0];
-          esph = (struct ip_esp_hdr *) &buff[sizeof(struct ip)];
-          spi     = ntohl(esph->spi);
-          if (!(entry = hip_sadb_lookup_spi(spi)))
+          if (len < 0)
             {
-              /*printf("Warning: SA not found for SPI 0x%x\n",
-               *       spi);*/
+#ifndef __WIN32__
+              if ( HCNF.icmp_timeout > 0)
+                {
+                  check_icmp_parameter_problem(s_esp);
+                }
+#endif
               continue;
             }
-
+          iph = (struct ip *) &buff[0];
+          esph = (struct ip_esp_hdr *) &buff[sizeof(struct ip)];
+          spi  = ntohl(esph->spi);
+          if (!(entry = hip_sadb_lookup_spi(spi)))
+            {
+              printf("Warning: SA not found for SPI 0x%x\n", spi);
+#ifndef __WIN32__
+              if (HCNF.icmp_timeout > 0)
+              {
+                send_icmp(iph, esph);
+              }
+#endif
+              continue;
+            }
           pthread_mutex_lock(&entry->rw_lock);
           err = hip_esp_decrypt(buff, len, data, &offset, &len,
                                 entry, iph, &now);

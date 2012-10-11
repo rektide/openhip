@@ -173,6 +173,14 @@ typedef enum {
   REG_FAIL_TYPE_UNAVAIL
 } REQ_FAILURE_CODES;
 
+/* Status of UPDATE triggered by ICMP */
+
+typedef enum {
+  ICMP_UPDATE_UNSET = 0,
+  ICMP_UPDATE_TRIGGERED,
+  ICMP_UPDATE_SUCCESSFUL
+} ICMP_UPDATE_STATUS;
+
 /*
  * Macros
  */
@@ -333,6 +341,8 @@ typedef struct _hip_assoc {
   int state;
   struct timeval state_time;
   struct timeval use_time;
+  int icmp_update_status;
+  struct timeval icmp_update_time;
   __u64 used_bytes_in;
   __u64 used_bytes_out;
   __u32 spi_in;
@@ -856,6 +866,8 @@ struct hip_conf {
   __u32 failure_timeout;                /* seconds to wait in state E_FAILED */
   __u32 msl;                            /* max segment lifetime */
   __u32 ual;                            /* seconds until unused SA expires */
+  __u32 icmp_timeout;                   /* seconds until again respond to ICMP
+                                         * after a successfule ICMP UPDATE */
   __u16 esp_transforms[SUITE_ID_MAX];       /* ESP transforms proposed in R1 */
   __u16 hip_transforms[SUITE_ID_MAX];       /* HIP transforms proposed in R1 */
   char *log_filename;                   /* non-default pathname for log	     */

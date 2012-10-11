@@ -885,7 +885,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
 
   /* Misc state */
   set_state(hip_a, UNASSOCIATED);
-  hip_a->use_time.tv_sec = 0;
+  hip_a->use_time.tv_sec  = 0;
   hip_a->use_time.tv_usec = 0;
   hip_a->used_bytes_in    = 0;
   hip_a->used_bytes_out   = 0;
@@ -896,6 +896,9 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
   hip_a->rekey            = NULL;
   hip_a->peer_rekey       = NULL;
   memset(&hip_a->rexmt_cache, 0, sizeof(hip_a->rexmt_cache));
+  hip_a->icmp_update_status = ICMP_UPDATE_UNSET;
+  hip_a->icmp_update_time.tv_sec  = 0;
+  hip_a->icmp_update_time.tv_usec = 0;
 
   /* Crypto */
   hip_a->hip_transform    = 0;

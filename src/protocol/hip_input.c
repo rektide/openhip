@@ -3045,6 +3045,11 @@ void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src)
           hip_a->peer_rekey = NULL;
         }
       clear_retransmissions(hip_a);
+      if (hip_a->icmp_update_status == ICMP_UPDATE_TRIGGERED)
+        {
+          hip_a->icmp_update_status = ICMP_UPDATE_SUCCESSFUL;
+          gettimeofday(&hip_a->icmp_update_time, NULL);
+        }
       /* readdressing occurs later, when address list is
        * scanned for new ACTIVE addresses */
     }

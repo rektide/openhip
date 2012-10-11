@@ -231,6 +231,7 @@ void init_hip(int ac, char **av)
   char timestr[26];
   struct timeval time1;
   int do_daemon = 0;
+  int optval = 1;
 
   printf("%s v%s HIP daemon\n", HIP_NAME, HIP_VERSION);
   /*printf("init_hip()\n");*/
@@ -338,6 +339,8 @@ void init_hip(int ac, char **av)
       printf("Error creating IPv4 ESP input socket.\n");
       exit(1);
     }
+  /* set this socket to receive ICMP parameter problem messages */
+  setsockopt(s_esp, SOL_IP, IP_RECVERR, &optval, sizeof(optval));
 #endif
   if ((s_esp_udp = init_esp_input(AF_INET, SOCK_RAW, IPPROTO_UDP,
                                   HIP_UDP_PORT, "IPv4 UDP")) < 0)
