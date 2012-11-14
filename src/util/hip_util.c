@@ -1111,6 +1111,8 @@ void replace_hip_assoc(hip_assoc *a_old, hip_assoc *a_new)
   a_old->spi_in = a_new->spi_in;
   a_old->spi_out = a_new->spi_out;
   memcpy(&a_old->cookie_r, &a_new->cookie_r, sizeof(hipcookie));
+  // 14-Nov-2012 -- Need to copy in cookie solution
+  a_old->cookie_j = a_new->cookie_j;
   memcpy(&a_old->rexmt_cache, &a_new->rexmt_cache,
          sizeof(struct hip_packet_entry));
   a_old->opaque = a_new->opaque;
