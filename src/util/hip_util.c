@@ -2307,8 +2307,11 @@ int compare_bits(const char *s1,
   mask = mask >> (64 - numbits);
   memcpy(&a, &s1[s1_len - 8], 8);       /* get the last 8 bytes (64 bits) */
   memcpy(&b, &s2[s2_len - 8], 8);
-  a = ntoh64(a) & mask;       /* s1, s2 are coming from network */
-  b = ntoh64(b) & mask;
+// 14-Nov-2012: Using ntoh64 breaks x86 <--> big endian (e.g. ARM) compatibility
+//  a = ntoh64(a) & mask;       /* s1, s2 are coming from network */
+//  b = ntoh64(b) & mask;
+  a &= mask;       /* s1, s2 are coming from network */
+  b &= mask;
   return(a != b);
 }
 
