@@ -1705,12 +1705,13 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
     }
   padinfo = (struct ip_esp_padinfo*) &in[location + padlen];
   padinfo->pad_length = padlen;
-  padinfo->next_hdr = (family == AF_INET) ? iph->ip_p : ip6h->ip6_nxt;
 #ifdef HIP_VPLS
   if (family == AF_UNSPEC)
     {
       padinfo->next_hdr = 0;
     }
+#else
+  padinfo->next_hdr = (family == AF_INET) ? iph->ip_p : ip6h->ip6_nxt;
 #endif
   /* padinfo is encrypted too */
   elen += padlen + 2;
