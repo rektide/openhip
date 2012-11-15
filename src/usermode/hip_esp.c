@@ -1710,6 +1710,10 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
     {
       padinfo->next_hdr = 0;
     }
+  else
+    {
+      padinfo->next_hdr = (family == AF_INET) ? iph->ip_p : ip6h->ip6_nxt;
+    }
 #else
   padinfo->next_hdr = (family == AF_INET) ? iph->ip_p : ip6h->ip6_nxt;
 #endif
