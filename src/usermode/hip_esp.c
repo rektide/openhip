@@ -333,6 +333,96 @@ void check_icmp_parameter_problem(int s_esp)
     }
 }
 
+lost_spi_entry *new_lost_spi_entry(__u32 spi)
+{
+  lost_spi_entry *entry;
+  entry = (lost_spi_entry*) malloc(sizeof(lost_spi_entry));
+  if (!entry)
+    return NULL;
+
+  entry->next = NULL;
+  entry->spi = spi;
+  gettimeofday(&entry->first_time, NULL);
+
+  return entry;
+}
+
+lost_spi_entry *add_lost_spi_entry(lost_spi_entry *start, __u32 spi)
+{
+  lost_spi_entry *entry, *last = NULL;
+  
+  for (entry = start; entry != NULL; entry = entry->next)
+    {
+      last = entry;
+    }
+
+  entry = new_lost_spi_entry(spi);
+  if (!entry)
+    return NULL;
+
+  last->next = entry;
+
+  return entry;
+}
+
+lost_spi_entry *get_lost_spi_entry(lost_spi_entry *start, __u32 spi)
+{
+  lost_spi_entry *entry;
+  for (entry = start; entry != NULL; entry = entry->next)
+    {
+      if (entry->spi == spi)
+        return entry;
+    }
+  
+  return NULL;
+}
+
+lost_spi_entry *delete_spi_entry(lost_spi_entry *currEntry, __u32 spi)
+{
+  // Bail if we are at end of list
+  if (currEntry == NULL)
+    return NULL;
+
+  if (currEntry->spi == spi)
+    {
+      lost_spi_entry *tempNext = currEntry->next;
+      free(currEntry);
+      return tempNext;
+    }
+
+  // recurse if we didn't find the entry we're looking for
+  currEntry->next = delete_spi_entry(currEntry->next, spi);
+
+  // return the pointer from where we were called
+  return currEntry;
+}
+
+lost_spi_entry *expire_old_lost_spi_entries(lost_spi_entry *currEntry, 
+                                            struct timeval *now)
+{
+  // Bail if we are at end of list
+  if (currEntry == NULL)
+    return NULL;
+
+  if (TDIFF(*now, currEntry->first_time) > 
+      (int)HCNF.max_retries * (int)HCNF.icmp_timeout)
+    {
+      log_(NORM, "Removing *EXPIRED* invalid SPI 0x%x\n", currEntry->spi);
+      lost_spi_entry *tempNext = currEntry->next;
+      free(currEntry);
+      currEntry = tempNext;
+      // Recurse to keep looking for more expired SPIs
+      currEntry = expire_old_lost_spi_entries(currEntry, now);
+    }
+  else
+    {
+      // Recurse if we didn't find an expired SPI
+      currEntry->next = expire_old_lost_spi_entries(currEntry->next, now);
+    }
+
+  return currEntry;
+}
+
 #endif /*not __WIN32__*/
 
 /*
@@ -932,6 +1022,8 @@ void *hip_esp_input(void *arg)
 #ifdef __WIN32__
   DWORD lenin;
   OVERLAPPED overlapped = { 0 };
+#else
+  lost_spi_entry *lost_spi_head = NULL;
 #endif
 #ifdef HIP_VPLS
   time_t last_time, now_time;
@@ -982,7 +1074,16 @@ void *hip_esp_input(void *arg)
 #ifdef HIP_VPLS
       endbox_periodic_heartbeat(&now_time, &last_time, &packet_count,
                                 "input", touchHeartbeat);
+
 #endif
+
+#ifndef __WIN32__
+	  if ( HCNF.icmp_timeout > 0)
+        {
+          lost_spi_head = expire_old_lost_spi_entries(lost_spi_head, &now);
+        }
+#endif
+
       hip_remove_expired_lsi_entries(&now);           /* unbuffer packets */
       hip_remove_expired_sel_entries(&now);           /* this is rate-limited */
       hip_sadb_expire(&now);
@@ -1010,6 +1111,7 @@ void *hip_esp_input(void *arg)
 #ifndef __WIN32__
               if ( HCNF.icmp_timeout > 0)
                 {
+                  log_(NORM, "Checking for icmp parameter problems\n");
                   check_icmp_parameter_problem(s_esp);
                 }
 #endif
@@ -1023,9 +1125,42 @@ void *hip_esp_input(void *arg)
               printf("Warning: SA not found for SPI 0x%x\n", spi);
 #ifndef __WIN32__
               if (HCNF.icmp_timeout > 0)
-              {
-                send_icmp(iph, esph);
-              }
+                {
+                  /* Search for invalid SPIs in lost_spi_head list.
+                   * If not found, add it and set the current time.
+                   * If found, and icmp_timeout has elapsed, send an
+                   * icmp to trigger an SA update.
+                   */
+                  lost_spi_entry *lost_spi = NULL;
+                  if (!(lost_spi = get_lost_spi_entry(lost_spi_head, spi)))
+                    {
+                      if (lost_spi_head)
+                        {
+                          lost_spi = add_lost_spi_entry(lost_spi_head, spi);
+                        }
+                      else
+                        {
+                          // New list of lost spis
+                          lost_spi_head = new_lost_spi_entry(spi);
+                        }
+                        log_(NORM, "Tracking *INVALID* SPI 0x%x\n", spi);
+                    }
+                  else if (TDIFF(now, lost_spi->first_time) > 
+                           (int)HCNF.icmp_timeout)
+                    {
+                      /* Note that packets with the invalid SPI need to also be
+                       * received _after_ the icmp_timeout in order to finally
+                       * send the icmp.
+                       */
+                      log_(NORM, "Sending icmp to host\n");
+                      send_icmp(iph, esph);
+
+                      /* Deleting the spi from the lost_spi_head list has the
+                       * affect of rate-limiting the icmp packets.
+                       */
+                      lost_spi_head = delete_spi_entry(lost_spi_head, spi);
+                    }
+                }
 #endif
               continue;
             }

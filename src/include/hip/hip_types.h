@@ -807,6 +807,15 @@ typedef struct _thread_arg {
   tlv_reg_response resp;
 } thread_arg;
 
+/*
+ * Struct to use in tracking invalid SPIs
+ */
+typedef struct _lost_spi_entry
+{
+  struct _lost_spi_entry *next;
+  __u32 spi;
+  struct timeval first_time;
+} lost_spi_entry;
 
 /*
  * Logging
