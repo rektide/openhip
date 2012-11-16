@@ -438,13 +438,17 @@ void hip_esp_output(void *arg)
 void *hip_esp_output(void *arg)
 #endif
 {
-  int len, err, flags, raw_len, is_broadcast, s, offset = 0;
+  int len, err, flags, raw_len, is_broadcast, s = 0, offset = 0;
   fd_set fd;
   struct timeval timeout, now;
   __u8 raw_buff[BUFF_LEN];
   __u8 data[BUFF_LEN];       /* encrypted data buffer */
   struct ip *iph;
 
+  // Local storage for sadb entry members
+  int sadb_entry_mode = 0;
+  struct sockaddr_storage local_src_addr_storage;
+  struct sockaddr_storage local_dst_addr_storage;
 #ifdef __WIN32__
   DWORD lenin;
   OVERLAPPED overlapped = { 0 };
@@ -454,8 +458,10 @@ void *hip_esp_output(void *arg)
   struct sockaddr_storage ss_lsi;
   struct sockaddr *lsi = (struct sockaddr*)&ss_lsi;
 #ifndef RAW_IP_OUT
+#ifndef HIP_VPLS
   sockaddr_list *l;
-#endif /* RAW_IP_OUT */
+#endif /* !HIP_VPLS */
+#endif /* !RAW_IP_OUT */
 #ifndef HIP_VPLS
   __u32 lsi_ip;
 #else
@@ -639,6 +645,13 @@ void *hip_esp_output(void *arg)
                 {
                   entry->dropped++;
                 }
+              else
+                {
+                  // Save entry variables locally for later use
+                  local_src_addr_storage = entry->src_addrs->addr;
+                  local_dst_addr_storage = entry->dst_addrs->addr;
+                  sadb_entry_mode = entry->mode;
+                }
               pthread_mutex_unlock(&entry->rw_lock);
               if (err)
                 {
@@ -656,35 +669,41 @@ void *hip_esp_output(void *arg)
                * selection problems.
                */
               add_ipv4_header(data,
-                              ntohl(LSI4(&entry->src_addrs->addr)),
-                              ntohl(LSI4( &entry->dst_addrs->addr)),
+                              ntohl(LSI4(&local_src_addr_storage)),
+                              ntohl(LSI4(&local_dst_addr_storage)),
                               (struct ip*) &raw_buff[sizeof(struct eth_hdr)],
                               sizeof(struct ip) + len, IPPROTO_ESP);
 #ifdef __MACOSX__
               err = sendto(s_esp, data, sizeof(struct ip) + len, flags, 0, 0);
 #else
               err = sendto(s_raw, data, sizeof(struct ip) + len, flags,
-                           SA(&entry->dst_addrs->addr),
-                           SALEN(&entry->dst_addrs->addr));
+                           SA(&local_dst_addr_storage),
+                           SALEN(&local_dst_addr_storage));
 #endif /* __MACOSX__ */
 
 #else
-              if (entry->mode == 3)
+              if (sadb_entry_mode == 3)
                 {
                   s = s_esp_udp;
                 }
-              else if (entry->dst_addrs->addr.ss_family ==
+              else if (local_dst_addr_storage.ss_family ==
                        AF_INET)
                 {
                   s = s_esp;
                 }
-              else
+              else if (local_dst_addr_storage.ss_family ==
+                       AF_INET6)
                 {
                   s = s_esp6;
                 }
+              else
+                {
+                  log_(WARN, "Continuing after unknown SADB entry mode: %d\n", sadb_entry_mode);
+                  continue;
+                }
               err = sendto(s, data, len, flags,
-                           SA(&entry->dst_addrs->addr),
-                           SALEN(&entry->dst_addrs->addr));
+                           SA(&local_dst_addr_storage),
+                           SALEN(&local_dst_addr_storage));
 #endif /* RAW_IP_OUT */
               if (err < 0)
                 {
@@ -701,6 +720,11 @@ void *hip_esp_output(void *arg)
                     1);
                 }
 #ifndef RAW_IP_OUT
+/* DMattes: 16-Nov-2012: I don't believe VPLS mode uses multihoming
+ * and I'm not sure how to make the access to the SADB entry
+ * thread-safe here.
+ */
+#ifndef HIP_VPLS
               /* multihoming: duplicate packets to multiple
                * destination addresses */
               for (l = entry->dst_addrs->next; l;
@@ -717,6 +741,7 @@ void *hip_esp_output(void *arg)
                         strerror(errno));
                     }
                 }
+#endif /* !HIP_VPLS */
 #endif /* !RAW_IP_OUT */
               /* broadcasts are unicast to each association */
               if (!is_broadcast)
@@ -790,13 +815,20 @@ void *hip_esp_output(void *arg)
             {
               entry->dropped++;
             }
+          else
+            {
+              // Save entry variables locally for later use
+              local_src_addr_storage = entry->src_addrs->addr;
+              local_dst_addr_storage = entry->dst_addrs->addr;
+              sadb_entry_mode = entry->mode;
+            }
           pthread_mutex_unlock(&entry->rw_lock);
           if (err)
             {
               continue;
             }
           flags = 0;
-          if (entry->mode == 3)
+          if (sadb_entry_mode == 3)
             {
               s = s_esp_udp;
             }
@@ -805,13 +837,19 @@ void *hip_esp_output(void *arg)
             {
               s = s_esp;
             }
-          else
+          else if (local_dst_addr_storage.ss_family ==
+                   AF_INET6)
             {
               s = s_esp6;
             }
+          else
+            {
+              log_(WARN, "Continuing after unknown SADB entry mode: %d\n", sadb_entry_mode);
+              continue;
+            }
           err = sendto(   s, data, len, flags,
-                          SA(&entry->dst_addrs->addr),
-                          SALEN(&entry->dst_addrs->addr));
+                          SA(&local_dst_addr_storage),
+                          SALEN(&local_dst_addr_storage));
           if (err < 0)
             {
               printf("hip_esp_output IPv6 sendto() failed:"
@@ -895,41 +933,56 @@ void *hip_esp_output(void *arg)
                 {
                   break;
                 }
+              else
+                {
+                  // Save entry variables locally for later use
+                  local_src_addr_storage = entry->src_addrs->addr;
+                  local_dst_addr_storage = entry->dst_addrs->addr;
+                  sadb_entry_mode = entry->mode;
+                }
               flags = 0;
 #ifdef RAW_IP_OUT
               /* Build IPv4 header and send out raw socket.
                * Use this to override OS source address
                * selection problems.
                */
-              add_ipv4_header(data, ntohl(LSI4(&entry->src_addrs->addr)),
-                              ntohl(LSI4(&entry->dst_addrs-> addr)),
+              add_ipv4_header(data,
+                              ntohl(LSI4(&local_src_addr_storage)),
+                              ntohl(LSI4(&local_dst_addr_storage)),
                               (struct ip*) &raw_buff[sizeof(struct eth_hdr)],
                               sizeof(struct ip) + len, IPPROTO_ESP);
 #ifdef __MACOSX__
               err = sendto(s_esp, data, sizeof(struct ip) + len, flags, 0, 0);
 #else
               err = sendto(s_raw, data, sizeof(struct ip) + len, flags,
-                           SA(&entry->dst_addrs->addr),
-                           SALEN(&entry->dst_addrs->addr));
+                           SA(&local_dst_addr_storage),
+                           SALEN(&local_dst_addr_storage));
 #endif /* __MACOSX__ */
 
 #else
-              if (entry->mode == 3)
+              if (sadb_entry_mode == 3)
                 {
                   s = s_esp_udp;
                 }
-              else if (entry->dst_addrs->addr.ss_family ==
+              else if (local_dst_addr_storage.ss_family ==
                        AF_INET)
                 {
                   s = s_esp;
                 }
-              else
+              else if (local_dst_addr_storage.ss_family ==
+                       AF_INET6)
                 {
                   s = s_esp6;
                 }
+              else
+                {
+                  log_(WARN, "Continuing after unknown SADB entry mode: %d\n", sadb_entry_mode);
+                  continue;
+                }
+
               err = sendto(s, data, len, flags,
-                           SA(&entry->dst_addrs->addr),
-                           SALEN(&entry->dst_addrs->addr));
+                           SA(&local_dst_addr_storage),
+                           SALEN(&local_dst_addr_storage));
 #endif /* RAW_IP_OUT */
               if (err < 0)
                 {
