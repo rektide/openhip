@@ -447,8 +447,10 @@ void *hip_esp_output(void *arg)
 
   // Local storage for sadb entry members
   int sadb_entry_mode = 0;
-  struct sockaddr_storage local_src_addr_storage;
   struct sockaddr_storage local_dst_addr_storage;
+#ifdef RAW_IP_OUT
+  struct sockaddr_storage local_src_addr_storage;
+#endif
 #ifdef __WIN32__
   DWORD lenin;
   OVERLAPPED overlapped = { 0 };
@@ -645,13 +647,14 @@ void *hip_esp_output(void *arg)
                 {
                   entry->dropped++;
                 }
-              else
-                {
+
                   // Save entry variables locally for later use
-                  local_src_addr_storage = entry->src_addrs->addr;
-                  local_dst_addr_storage = entry->dst_addrs->addr;
-                  sadb_entry_mode = entry->mode;
-                }
+#ifdef RAW_IP_OUT
+			  local_src_addr_storage = entry->src_addrs->addr;
+#endif
+			  local_dst_addr_storage = entry->dst_addrs->addr;
+			  sadb_entry_mode = entry->mode;
+
               pthread_mutex_unlock(&entry->rw_lock);
               if (err)
                 {
@@ -815,13 +818,11 @@ void *hip_esp_output(void *arg)
             {
               entry->dropped++;
             }
-          else
-            {
-              // Save entry variables locally for later use
-              local_src_addr_storage = entry->src_addrs->addr;
-              local_dst_addr_storage = entry->dst_addrs->addr;
-              sadb_entry_mode = entry->mode;
-            }
+
+		  // Save entry variables locally for later use
+		  local_dst_addr_storage = entry->dst_addrs->addr;
+		  sadb_entry_mode = entry->mode;
+
           pthread_mutex_unlock(&entry->rw_lock);
           if (err)
             {
@@ -928,17 +929,18 @@ void *hip_esp_output(void *arg)
                                     &len,
                                     entry,
                                     &now);
+
+              // Save entry variables locally for later use
+#ifdef RAW_IP_OUT
+              local_src_addr_storage = entry->src_addrs->addr;
+#endif
+              local_dst_addr_storage = entry->dst_addrs->addr;
+              sadb_entry_mode = entry->mode;
+
               pthread_mutex_unlock(&entry->rw_lock);
               if (err)
                 {
                   break;
-                }
-              else
-                {
-                  // Save entry variables locally for later use
-                  local_src_addr_storage = entry->src_addrs->addr;
-                  local_dst_addr_storage = entry->dst_addrs->addr;
-                  sadb_entry_mode = entry->mode;
                 }
               flags = 0;
 #ifdef RAW_IP_OUT
