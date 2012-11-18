@@ -88,6 +88,7 @@ int touchHeartbeat;
 HANDLE tapfd;
 #else
 int tapfd;
+int lost_spi_entry_count;
 #endif
 int readsp[2] = { 0,0 };
 int s_esp, s_esp_udp, s_esp_udp_dg, s_esp6;
@@ -344,6 +345,8 @@ lost_spi_entry *new_lost_spi_entry(__u32 spi)
   entry->spi = spi;
   gettimeofday(&entry->first_time, NULL);
 
+  lost_spi_entry_count++;
+
   return entry;
 }
 
@@ -387,6 +390,7 @@ lost_spi_entry *delete_spi_entry(lost_spi_entry *currEntry, __u32 spi)
     {
       lost_spi_entry *tempNext = currEntry->next;
       free(currEntry);
+      lost_spi_entry_count--;
       return tempNext;
     }
 
@@ -410,6 +414,7 @@ lost_spi_entry *expire_old_lost_spi_entries(lost_spi_entry *currEntry,
       log_(NORM, "Removing *EXPIRED* invalid SPI 0x%x\n", currEntry->spi);
       lost_spi_entry *tempNext = currEntry->next;
       free(currEntry);
+      lost_spi_entry_count--;
       currEntry = tempNext;
       // Recurse to keep looking for more expired SPIs
       currEntry = expire_old_lost_spi_entries(currEntry, now);
@@ -648,7 +653,7 @@ void *hip_esp_output(void *arg)
                   entry->dropped++;
                 }
 
-                  // Save entry variables locally for later use
+			  // Save entry variables locally for later use
 #ifdef RAW_IP_OUT
 			  local_src_addr_storage = entry->src_addrs->addr;
 #endif
@@ -1096,6 +1101,10 @@ void *hip_esp_input(void *arg)
   get_preferred_lsi(lsi);
   g_tap_lsi = LSI4(lsi);
 
+#ifndef __WIN32__
+  lost_spi_entry_count = 0;
+#endif
+
   while (g_state == 0)
     {
       gettimeofday(&now, NULL);
@@ -1189,16 +1198,22 @@ void *hip_esp_input(void *arg)
                   lost_spi_entry *lost_spi = NULL;
                   if (!(lost_spi = get_lost_spi_entry(lost_spi_head, spi)))
                     {
-                      if (lost_spi_head)
+                      /* Prevent resource exhaustion by only tracking a limited
+                       * number of unknown SPIs.
+                       */
+                      if (lost_spi_entry_count < MAX_LOST_SPI_ENTRIES)
                         {
-                          lost_spi = add_lost_spi_entry(lost_spi_head, spi);
+                          if (lost_spi_head)
+                            {
+                              lost_spi = add_lost_spi_entry(lost_spi_head, spi);
+                            }
+                          else
+                            {
+                              // New list of lost spis
+                              lost_spi_head = new_lost_spi_entry(spi);
+                            }
+                          log_(NORM, "Tracking *INVALID* SPI 0x%x\n", spi);
                         }
-                      else
-                        {
-                          // New list of lost spis
-                          lost_spi_head = new_lost_spi_entry(spi);
-                        }
-                        log_(NORM, "Tracking *INVALID* SPI 0x%x\n", spi);
                     }
                   else if (TDIFF(now, lost_spi->first_time) > 
                            (int)HCNF.icmp_timeout)
