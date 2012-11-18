@@ -88,7 +88,7 @@ int touchHeartbeat;
 HANDLE tapfd;
 #else
 int tapfd;
-int lost_spi_entry_count;
+int unknown_spi_entry_count;
 #endif
 int readsp[2] = { 0,0 };
 int s_esp, s_esp_udp, s_esp_udp_dg, s_esp6;
@@ -334,10 +334,10 @@ void check_icmp_parameter_problem(int s_esp)
     }
 }
 
-lost_spi_entry *new_lost_spi_entry(__u32 spi)
+unknown_spi_entry *new_unknown_spi_entry(__u32 spi)
 {
-  lost_spi_entry *entry;
-  entry = (lost_spi_entry*) malloc(sizeof(lost_spi_entry));
+  unknown_spi_entry *entry;
+  entry = (unknown_spi_entry*) malloc(sizeof(unknown_spi_entry));
   if (!entry)
     return NULL;
 
@@ -345,21 +345,21 @@ lost_spi_entry *new_lost_spi_entry(__u32 spi)
   entry->spi = spi;
   gettimeofday(&entry->first_time, NULL);
 
-  lost_spi_entry_count++;
+  unknown_spi_entry_count++;
 
   return entry;
 }
 
-lost_spi_entry *add_lost_spi_entry(lost_spi_entry *start, __u32 spi)
+unknown_spi_entry *add_unknown_spi_entry(unknown_spi_entry *start, __u32 spi)
 {
-  lost_spi_entry *entry, *last = NULL;
+  unknown_spi_entry *entry, *last = NULL;
   
   for (entry = start; entry != NULL; entry = entry->next)
     {
       last = entry;
     }
 
-  entry = new_lost_spi_entry(spi);
+  entry = new_unknown_spi_entry(spi);
   if (!entry)
     return NULL;
 
@@ -368,9 +368,9 @@ lost_spi_entry *add_lost_spi_entry(lost_spi_entry *start, __u32 spi)
   return entry;
 }
 
-lost_spi_entry *get_lost_spi_entry(lost_spi_entry *start, __u32 spi)
+unknown_spi_entry *get_unknown_spi_entry(unknown_spi_entry *start, __u32 spi)
 {
-  lost_spi_entry *entry;
+  unknown_spi_entry *entry;
   for (entry = start; entry != NULL; entry = entry->next)
     {
       if (entry->spi == spi)
@@ -380,7 +380,7 @@ lost_spi_entry *get_lost_spi_entry(lost_spi_entry *start, __u32 spi)
   return NULL;
 }
 
-lost_spi_entry *delete_spi_entry(lost_spi_entry *currEntry, __u32 spi)
+unknown_spi_entry *delete_spi_entry(unknown_spi_entry *currEntry, __u32 spi)
 {
   // Bail if we are at end of list
   if (currEntry == NULL)
@@ -388,9 +388,9 @@ lost_spi_entry *delete_spi_entry(lost_spi_entry *currEntry, __u32 spi)
 
   if (currEntry->spi == spi)
     {
-      lost_spi_entry *tempNext = currEntry->next;
+      unknown_spi_entry *tempNext = currEntry->next;
       free(currEntry);
-      lost_spi_entry_count--;
+      unknown_spi_entry_count--;
       return tempNext;
     }
 
@@ -401,7 +401,7 @@ lost_spi_entry *delete_spi_entry(lost_spi_entry *currEntry, __u32 spi)
   return currEntry;
 }
 
-lost_spi_entry *expire_old_lost_spi_entries(lost_spi_entry *currEntry, 
+unknown_spi_entry *expire_old_unknown_spi_entries(unknown_spi_entry *currEntry, 
                                             struct timeval *now)
 {
   // Bail if we are at end of list
@@ -412,17 +412,17 @@ lost_spi_entry *expire_old_lost_spi_entries(lost_spi_entry *currEntry,
       (int)HCNF.max_retries * (int)HCNF.icmp_timeout)
     {
       log_(NORM, "Removing *EXPIRED* invalid SPI 0x%x\n", currEntry->spi);
-      lost_spi_entry *tempNext = currEntry->next;
+      unknown_spi_entry *tempNext = currEntry->next;
       free(currEntry);
-      lost_spi_entry_count--;
+      unknown_spi_entry_count--;
       currEntry = tempNext;
       // Recurse to keep looking for more expired SPIs
-      currEntry = expire_old_lost_spi_entries(currEntry, now);
+      currEntry = expire_old_unknown_spi_entries(currEntry, now);
     }
   else
     {
       // Recurse if we didn't find an expired SPI
-      currEntry->next = expire_old_lost_spi_entries(currEntry->next, now);
+      currEntry->next = expire_old_unknown_spi_entries(currEntry->next, now);
     }
 
   return currEntry;
@@ -1083,7 +1083,7 @@ void *hip_esp_input(void *arg)
   DWORD lenin;
   OVERLAPPED overlapped = { 0 };
 #else
-  lost_spi_entry *lost_spi_head = NULL;
+  unknown_spi_entry *unknown_spi_head = NULL;
 #endif
 #ifdef HIP_VPLS
   time_t last_time, now_time;
@@ -1102,7 +1102,7 @@ void *hip_esp_input(void *arg)
   g_tap_lsi = LSI4(lsi);
 
 #ifndef __WIN32__
-  lost_spi_entry_count = 0;
+  unknown_spi_entry_count = 0;
 #endif
 
   while (g_state == 0)
@@ -1144,7 +1144,7 @@ void *hip_esp_input(void *arg)
 #ifndef __WIN32__
 	  if ( HCNF.icmp_timeout > 0)
         {
-          lost_spi_head = expire_old_lost_spi_entries(lost_spi_head, &now);
+          unknown_spi_head = expire_old_unknown_spi_entries(unknown_spi_head, &now);
         }
 #endif
 
@@ -1190,32 +1190,32 @@ void *hip_esp_input(void *arg)
 #ifndef __WIN32__
               if (HCNF.icmp_timeout > 0)
                 {
-                  /* Search for invalid SPIs in lost_spi_head list.
+                  /* Search for invalid SPIs in unknown_spi_head list.
                    * If not found, add it and set the current time.
                    * If found, and icmp_timeout has elapsed, send an
                    * icmp to trigger an SA update.
                    */
-                  lost_spi_entry *lost_spi = NULL;
-                  if (!(lost_spi = get_lost_spi_entry(lost_spi_head, spi)))
+                  unknown_spi_entry *unknown_spi = NULL;
+                  if (!(unknown_spi = get_unknown_spi_entry(unknown_spi_head, spi)))
                     {
                       /* Prevent resource exhaustion by only tracking a limited
                        * number of unknown SPIs.
                        */
-                      if (lost_spi_entry_count < MAX_LOST_SPI_ENTRIES)
+                      if (unknown_spi_entry_count < MAX_UNKNOWN_SPI_ENTRIES)
                         {
-                          if (lost_spi_head)
+                          if (unknown_spi_head)
                             {
-                              lost_spi = add_lost_spi_entry(lost_spi_head, spi);
+                              unknown_spi = add_unknown_spi_entry(unknown_spi_head, spi);
                             }
                           else
                             {
-                              // New list of lost spis
-                              lost_spi_head = new_lost_spi_entry(spi);
+                              // New list of unknown spis
+                              unknown_spi_head = new_unknown_spi_entry(spi);
                             }
                           log_(NORM, "Tracking *INVALID* SPI 0x%x\n", spi);
                         }
                     }
-                  else if (TDIFF(now, lost_spi->first_time) > 
+                  else if (TDIFF(now, unknown_spi->first_time) > 
                            (int)HCNF.icmp_timeout)
                     {
                       /* Note that packets with the invalid SPI need to also be
@@ -1225,10 +1225,10 @@ void *hip_esp_input(void *arg)
                       log_(NORM, "Sending icmp to host\n");
                       send_icmp(iph, esph);
 
-                      /* Deleting the spi from the lost_spi_head list has the
+                      /* Deleting the spi from the unknown_spi_head list has the
                        * affect of rate-limiting the icmp packets.
                        */
-                      lost_spi_head = delete_spi_entry(lost_spi_head, spi);
+                      unknown_spi_head = delete_spi_entry(unknown_spi_head, spi);
                     }
                 }
 #endif

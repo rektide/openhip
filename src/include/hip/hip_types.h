@@ -810,13 +810,13 @@ typedef struct _thread_arg {
 /*
  * Struct to use in tracking invalid SPIs
  */
-#define MAX_LOST_SPI_ENTRIES 2*MAX_CONNECTIONS
-typedef struct _lost_spi_entry
+#define MAX_UNKNOWN_SPI_ENTRIES 2*MAX_CONNECTIONS
+typedef struct _unknown_spi_entry
 {
-  struct _lost_spi_entry *next;
+  struct _unknown_spi_entry *next;
   __u32 spi;
   struct timeval first_time;
-} lost_spi_entry;
+} unknown_spi_entry;
 
 /*
  * Logging
