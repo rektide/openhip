@@ -89,6 +89,7 @@ HANDLE tapfd;
 #else
 int tapfd;
 int unknown_spi_entry_count;
+unknown_spi_entry *unknown_spi_head;
 #endif
 int readsp[2] = { 0,0 };
 int s_esp, s_esp_udp, s_esp_udp_dg, s_esp6;
@@ -426,6 +427,56 @@ unknown_spi_entry *expire_old_unknown_spi_entries(unknown_spi_entry *currEntry,
     }
 
   return currEntry;
+}
+
+/* Track unknown SPIs and return 1 if it is time to send
+ * an ICMP to the peer.
+ */
+int track_spi_for_icmp(__u32 spi, struct timeval *now)
+{
+  int rc = 0;
+
+  /* Search for invalid SPIs in unknown_spi_head list.
+   * If not found, add it and set the current time.
+   * If found, and icmp_timeout has elapsed, send an
+   * icmp to trigger an SA update.
+   */
+  unknown_spi_entry *unknown_spi = NULL;
+  if (!(unknown_spi = get_unknown_spi_entry(unknown_spi_head, spi)))
+    {
+      /* Prevent resource exhaustion by only tracking a limited
+       * number of unknown SPIs.
+       */
+      if (unknown_spi_entry_count < MAX_UNKNOWN_SPI_ENTRIES)
+        {
+          if (unknown_spi_head)
+            {
+              unknown_spi = add_unknown_spi_entry(unknown_spi_head, spi);
+            }
+          else
+            {
+              // New list of unknown spis
+              unknown_spi_head = new_unknown_spi_entry(spi);
+            }
+          log_(NORM, "Tracking *INVALID* SPI 0x%x\n", spi);
+        }
+    }
+  else if (TDIFF(*now, unknown_spi->first_time) > 
+           (int)HCNF.icmp_timeout)
+    {
+      /* Note that packets with the invalid SPI need to also be
+       * received _after_ the icmp_timeout in order to finally
+       * send the icmp.
+       */
+      rc = 1;
+
+      /* Deleting the spi from the unknown_spi_head list has the
+       * affect of rate-limiting the icmp packets.
+       */
+      unknown_spi_head = delete_spi_entry(unknown_spi_head, spi);
+    }
+
+  return rc;
 }
 
 #endif /*not __WIN32__*/
@@ -1082,8 +1133,6 @@ void *hip_esp_input(void *arg)
 #ifdef __WIN32__
   DWORD lenin;
   OVERLAPPED overlapped = { 0 };
-#else
-  unknown_spi_entry *unknown_spi_head = NULL;
 #endif
 #ifdef HIP_VPLS
   time_t last_time, now_time;
@@ -1102,6 +1151,7 @@ void *hip_esp_input(void *arg)
   g_tap_lsi = LSI4(lsi);
 
 #ifndef __WIN32__
+  unknown_spi_head = NULL;
   unknown_spi_entry_count = 0;
 #endif
 
@@ -1190,45 +1240,10 @@ void *hip_esp_input(void *arg)
 #ifndef __WIN32__
               if (HCNF.icmp_timeout > 0)
                 {
-                  /* Search for invalid SPIs in unknown_spi_head list.
-                   * If not found, add it and set the current time.
-                   * If found, and icmp_timeout has elapsed, send an
-                   * icmp to trigger an SA update.
-                   */
-                  unknown_spi_entry *unknown_spi = NULL;
-                  if (!(unknown_spi = get_unknown_spi_entry(unknown_spi_head, spi)))
+                  if (track_spi_for_icmp(spi, &now))
                     {
-                      /* Prevent resource exhaustion by only tracking a limited
-                       * number of unknown SPIs.
-                       */
-                      if (unknown_spi_entry_count < MAX_UNKNOWN_SPI_ENTRIES)
-                        {
-                          if (unknown_spi_head)
-                            {
-                              unknown_spi = add_unknown_spi_entry(unknown_spi_head, spi);
-                            }
-                          else
-                            {
-                              // New list of unknown spis
-                              unknown_spi_head = new_unknown_spi_entry(spi);
-                            }
-                          log_(NORM, "Tracking *INVALID* SPI 0x%x\n", spi);
-                        }
-                    }
-                  else if (TDIFF(now, unknown_spi->first_time) > 
-                           (int)HCNF.icmp_timeout)
-                    {
-                      /* Note that packets with the invalid SPI need to also be
-                       * received _after_ the icmp_timeout in order to finally
-                       * send the icmp.
-                       */
                       log_(NORM, "Sending icmp to host\n");
                       send_icmp(iph, esph);
-
-                      /* Deleting the spi from the unknown_spi_head list has the
-                       * affect of rate-limiting the icmp packets.
-                       */
-                      unknown_spi_head = delete_spi_entry(unknown_spi_head, spi);
                     }
                 }
 #endif
