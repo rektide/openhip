@@ -1291,6 +1291,18 @@ void *hip_esp_input(void *arg)
           len = read(s_esp_udp, buff, sizeof(buff));
 #endif /* __WIN32__ */
 
+          if (len < 0)
+            {
+#ifndef __WIN32__
+              if ( HCNF.icmp_timeout > 0)
+                {
+                  log_(NORM, "Checking for icmp parameter problems\n");
+                  check_icmp_parameter_problem(s_esp_udp);
+                }
+#endif
+              continue;
+            }
+
           if (len < (sizeof(struct ip) + sizeof(udphdr)))
             {
               continue;                   /* packet too short */
@@ -1323,8 +1335,17 @@ void *hip_esp_input(void *arg)
 
           if (!(entry = hip_sadb_lookup_spi(spi)))
             {
-              printf("Warning: SA not found for SPI 0x%x\n",
-                     spi);
+              printf("Warning: SA not found for SPI 0x%x\n", spi);
+#ifndef __WIN32__
+              if (HCNF.icmp_timeout > 0)
+                {
+                  if (track_spi_for_icmp(spi, &now))
+                    {
+                      log_(NORM, "Sending icmp to host\n");
+                      send_icmp(iph, esph);
+                    }
+                }
+#endif
               continue;
             }
 
