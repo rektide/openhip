@@ -51,6 +51,7 @@
 #include <hip/hip_types.h>
 #include <hip/hip_funcs.h>
 #include <hip/hip_sadb.h>
+#include <hip/hip_globals.h> /* access to HNCF */
 
 /*
  * Globals
@@ -662,9 +663,9 @@ init_tap_create_file_retry:
     }
   RegCloseKey(interface_key);
 
-  /* also add route for 1.0.0.0/8 to TAP-Win32 */
+  /* also add route for LSI to TAP-Win32 */
   memset(&route, 0, sizeof(route));
-  route.dwForwardDest = htonl(0x01000000L);
+  route.dwForwardDest = ((struct sockaddr_in *)(&HCNF.lsi_prefix))->sin_addr.s_addr;
   route.dwForwardMask = htonl(0xFF000000L);
   CreateIpForwardEntry(&route);
 

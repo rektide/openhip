@@ -638,10 +638,10 @@ void *hip_esp_output(void *arg)
 
 #if defined(__BIG_ENDIAN__) || defined(__arm__)
           if (((iph->ip_v) == IPVERSION) &&
-              ((iph->ip_dst.s_addr >> 24 & 0xFF) != 0x01))
+              ((iph->ip_dst.s_addr >> 24 & 0xFF) != (LSI_PREFIX >> 24 & 0xFF)))
 #else /* BIG_ENDIAN */
           if (((iph->ip_v) == IPVERSION) &&
-              ((iph->ip_dst.s_addr & 0xFF) != 0x01))
+              ((iph->ip_dst.s_addr & 0xFF) != LSI_PREFIX))
 #endif /* BIG_ENDIAN */
             {
               continue;

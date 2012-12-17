@@ -1355,6 +1355,27 @@ int read_conf_file(char *filename)
             }
 #endif
         }
+      else if (strcmp((char *)node->name, "lsi_prefix") == 0)
+        {
+          addr = SA(&HCNF.lsi_prefix);
+          memset(addr, 0, sizeof(struct sockaddr_storage));
+          addr->sa_family = ((strchr(data, ':') == NULL) ? AF_INET : AF_INET6);
+          if (addr->sa_family == AF_INET6)
+            {
+              log_(ERR, "Invalid LSI prefix address family AF_INET6\n");
+            }
+          if (str_to_addr((__u8*)data, addr) <= 0)
+            {
+              log_(ERR, "Invalid LSI prefix address '%s'\n", data);
+            }
+          /* Check that last three bytes in the address are zero */
+          if ( ntohl((((struct sockaddr_in *)(addr))->sin_addr.s_addr)) & 
+               0x00fffffful)
+            {
+              log_(ERR, "LSI prefix not an 8-bit network address %s\n",
+                   logaddr(SA(addr)));
+            }
+        }
       else if (strlen((char *)node->name))
         {
           log_(WARN,

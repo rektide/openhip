@@ -212,10 +212,9 @@ typedef enum {
 /* The below prefix applies to the uppermost 28 bits only (RFC 4843) */
 #define HIT_PREFIX_SHA1_32BITS 0x20010010
 /* convert lower 24-bits of HIT to LSI */
-#define HIT2LSI(a) (0x01000000L | \
+#define HIT2LSI(a) (ntohl((((struct sockaddr_in *)(&HCNF.lsi_prefix))->sin_addr.s_addr)) | \
                     ((a[HIT_SIZE - 3] << 16) + \
                      (a[HIT_SIZE - 2] << 8) + (a[HIT_SIZE - 1])))
-
 /* compute the exponent of registration lifetime */
 #define YLIFE(x) ((float)x - (float)64) / (float)8
 
@@ -911,6 +910,7 @@ struct hip_conf {
   __u32 endbox_allow_core_dump;         /* whether or not to allow endbox to
                                          * core dump */
 #endif /* HIP_VPLS */
+  struct sockaddr_storage lsi_prefix;   /* LSI prefix in form of IPv4 addr */
   char conf_filename[255];
   char my_hi_filename[255];
   char known_hi_filename[255];

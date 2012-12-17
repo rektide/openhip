@@ -18,7 +18,7 @@ brctl addif hipbr $olif
 brctl addif hipbr hip0
 ifconfig hip0 mtu 1500
 ifconfig hipbr up $mylsi
-ip route add 1.0.0.0/8 dev hipbr
+ip route add $mylsi/8 dev hipbr
 
 logger -s "Bridge up with - LSI: $mylsi   hostname: $hn  underlay_if: $ulif  overlay_if: $olif"
 

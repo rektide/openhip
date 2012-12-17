@@ -64,7 +64,9 @@
  * Macros
  */
 /* LSI functions */
-#define IS_LSI32(a) ((a & htonl(0xFF000000)) == htonl(0x01000000))
+#define LSI_PREFIX ((((struct sockaddr_in *) \
+                    (&HCNF.lsi_prefix))->sin_addr.s_addr))
+#define IS_LSI32(a) ((a & htonl(0xFF000000L)) == LSI_PREFIX)
 #ifdef __WIN32__
 #define IN6_ARE_ADDR_EQUAL IN6_ADDR_EQUAL
 #define IS_HIT(x) (((ntohs(((struct in6_addr*)x)->s6_words[0]) & 0xFFFF) \

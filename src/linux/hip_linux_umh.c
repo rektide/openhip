@@ -149,7 +149,7 @@ void post_init_tap()
   addr.ss_family = AF_INET;
 
   /* this performs the equivalent of:
-   * system("/sbin/ip addr add 1.0.0.1/8 broadcast 1.255.255.255 dev
+   * system("/sbin/ip addr add <pre>.0.0.1/8 broadcast <pre>.255.255.255 dev
    *        hip0")
    * system("/sbin/ip link set hip0 mtu 1400");
    * system("/sbin/ip link set hip0 up");
@@ -174,13 +174,14 @@ post_init_tap_retry:
   taplsi = get_preferred_lsi(SA(&addr));
   sprintf(
     buff,
-    "/sbin/ifconfig %s %u.%u.%u.%u netmask 255.0.0.0 broadcast 1.255.255.255 up",
+    "/sbin/ifconfig %s %u.%u.%u.%u netmask 255.0.0.0 broadcast %u.255.255.255 up",
     tap_dev_name,
-    NIPQUAD(LSI4((struct sockaddr *)&addr)));
+    NIPQUAD(LSI4((struct sockaddr *)&addr)),
+    (unsigned char *)&(LSI4(addr))[0]);
   printf("cmd = %s\n",buff);
   system(buff);
 #else
-  /* Add the 1.x.x.x LSI address to the TAP interface
+  /* Add the LSI address to the TAP interface
    */
   get_preferred_lsi(SA(&addr));
   if (add_address_to_iface(SA(&addr), 8, if_index) < 0)

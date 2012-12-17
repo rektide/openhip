@@ -523,13 +523,13 @@ void print_hitgen_usage()
  */
 int main(int argc, char *argv[])
 {
-  char name[255], basename[255], filename[255];
+  char name[255], basename[255], filename[255], confname[255];
   char rnd_seed[255];
   int i, have_filename = 0, do_publish = 0, do_conf = 0, do_noinput = 0;
   int do_append = 0;
   hi_options opts;
   xmlDocPtr doc = NULL;
-  xmlNodePtr root_node = NULL;
+  xmlNodePtr root_node = NULL, node;
   int my_filename_exists = 0;
 
 #ifndef __WIN32__
@@ -562,6 +562,9 @@ int main(int argc, char *argv[])
     }
   sprintf(filename, "%s/%s", SYSCONFDIR, HIP_MYID_FILENAME);
   OPT.debug = D_DEFAULT;
+  memset(&HCNF, 0, sizeof(struct hip_conf));
+  HCNF.lsi_prefix.ss_family = AF_INET;
+  str_to_addr((__u8*)"1.0.0.0", SA(&HCNF.lsi_prefix));
 
   opts.type = 0;
   opts.bitsize = 0;
@@ -704,6 +707,36 @@ int main(int argc, char *argv[])
   printf("\nhitgen v%s\n\n", HIP_VERSION);
   printf("This utility will generate host identities for this machine."
          "\n\n");
+
+  /* Read any LSI prefix from hip.conf */
+  sprintf(confname, "./%s", HIP_CONF_FILENAME);
+  if (access(confname, R_OK))
+    {
+      sprintf(confname, "%s/%s", SYSCONFDIR, HIP_CONF_FILENAME);
+    }
+  if (!access(confname, R_OK))
+    {
+      doc = xmlParseFile(confname);
+      if (doc) 
+        {
+          root_node = xmlDocGetRootElement(doc);
+          for (node = root_node ? root_node->children : NULL; node;
+               node = node->next)
+            {
+              if (strcmp((char *)node->name, "lsi_prefix") == 0)
+                {
+                  if (str_to_addr((__u8*)xmlNodeGetContent(node),
+                                  SA(&HCNF.lsi_prefix)) <= 0)
+                    {
+                      printf("Invalid LSI prefix address in %s.\n",
+                          HIP_CONF_FILENAME);
+                    }
+                }
+            }
+          xmlFreeDoc(doc);
+        }
+    }
+
   /*
    * The below check for file existence will remove the
    * "I/O warning : failed to load external entity ..." messages
@@ -737,6 +770,7 @@ int main(int argc, char *argv[])
       root_node = xmlNewNode(NULL, BAD_CAST "my_host_identities");
       xmlDocSetRootElement(doc, root_node);
     }
+
 
   /* DTD support */
   /* dtd = xmlCreateIntSubset(doc,BAD_CAST "root",NULL,BAD_CAST "x.dtd");

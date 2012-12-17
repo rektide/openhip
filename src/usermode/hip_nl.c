@@ -386,7 +386,7 @@ int sendIpAddrTable(PMIB_IPADDRTABLE pTable)
   len = NLMSG_LENGTH( sizeof(struct ifaddrmsg) + sizeof(struct rtattr) +
                       sizeof(__u32));
   msg = (struct nlmsghdr *) buff;
-  /* due to timing, 1.0.0.1 is not in Window's IP table yet,
+  /* due to timing, LSI is not in Window's IP table yet,
    * but is needed by hipd for the ACQUIRE, so here we add
    * it manually */
   msg->nlmsg_len = NLMSG_ALIGN(len);
@@ -410,7 +410,7 @@ int sendIpAddrTable(PMIB_IPADDRTABLE pTable)
   /* step through IP address table and add to netlink dump message */
   for (i = 0; i < (int)pTable->dwNumEntries; i++)
     {
-      /* omit 0.0.0.0; (1.0.0.1 is needed for ACQUIRE mechanism) */
+      /* omit 0.0.0.0; (LSI is needed for ACQUIRE mechanism) */
       if (pTable->table[i].dwAddr == 0)
         {
           continue;

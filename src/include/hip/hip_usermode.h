@@ -104,8 +104,6 @@ extern int g_state;
 /* get IP address length in bytes */
 #define SAIPLEN(x) (((struct sockaddr*)x)->sa_family == AF_INET) ? 4 : 16
 #endif
-#define IS_LSI32(a) ((a & htonl(0xFF000000)) == htonl(0x01000000))
-
 
 /* from linux/include/linux/kernel.h */
 #define NIPQUAD(addr) \
