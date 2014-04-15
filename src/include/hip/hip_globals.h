@@ -81,6 +81,6 @@ extern int g_state;
 extern int netlsp[2];
 #endif
 
-const unsigned char khi_context_id[16];
+extern const unsigned char khi_context_id[16];
 
 #endif

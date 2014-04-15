@@ -41,6 +41,7 @@
 #include <iostream>
 #include <dlfcn.h>
 #include <arpa/inet.h>
+#include <hip/hip_globals.h>
 #include <hip/hip_cfg.h>
 #include <libxml/tree.h>
 
