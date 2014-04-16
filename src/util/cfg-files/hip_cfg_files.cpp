@@ -32,6 +32,7 @@
 
 #include <iostream>
 #include <openssl/engine.h>
+#include <hip/hip_globals.h>
 #include <hip/hip_cfg_files.h>
 
 hipCfgFiles *hipCfgFiles::_instance = NULL;
@@ -41,6 +42,8 @@ int hipcfg_init(struct hip_conf *hc)
 {
   /* printf("cfg-local hipcfg_init called\n"); */
   hipCfg *hs = hipCfgFiles::getInstance();
+  HCNF.lsi_prefix.ss_family = AF_INET; /* use 1.x.x.x as the LSI prefix */
+  ((sockaddr_in*)&HCNF.lsi_prefix)->sin_addr.s_addr = htonl(0x01000000);
   return(hs->loadCfg(hc));
 }
 

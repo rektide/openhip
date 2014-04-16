@@ -30,7 +30,7 @@
 
 if WANT_VPLS_FILES_CFG
 lib_LTLIBRARIES = libhipcfgfiles.la
-SRC_HIPCFGFILES = cfg-common/hip_cfg.cpp cfg-files/hip_cfg_files.cpp
+SRC_HIPCFGFILES = cfg-common/hip_cfg.cpp cfg-files/hip_cfg_files.cpp ../protocol/hip_globals.c
 libhipcfgfiles_la_CPPFLAGS = -DHIP_VPLS -Wall -Woverloaded-virtual -Wcast-qual -DSYSCONFDIR="\"$(sysconfdir)\""
 libhipcfgfiles_la_LDFLAGS = -version_info $(VERSION) -release $(VERSION)
 libhipcfgfiles_la_SOURCES = $(SRC_HIPCFGFILES)
