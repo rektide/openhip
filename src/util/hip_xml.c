@@ -66,6 +66,7 @@
 #include <hip/hip_funcs.h>
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
+#include <hip/hip_sadb.h>       /* hip_sadb_addr() */
 #endif /* HIP_VPLS */
 #include <hip/hip_dns.h>        /* DNS headers			*/
 
@@ -961,6 +962,13 @@ int read_conf_file(char *filename)
   int t, tmp, done;
   struct sockaddr *addr;
   __u16 *trns;
+#ifdef HIP_VPLS
+  __u32 multicast_spi = 0;
+  __u8 *multicast_key = NULL;
+  struct sockaddr_storage ss_tmp;
+  struct sockaddr_storage multicast_group;
+  memset(&multicast_group, 0, sizeof(struct sockaddr_storage));
+#endif /* HIP_VPLS */
 
   doc = xmlParseFile(filename);
   if (doc == NULL)
@@ -1336,8 +1344,8 @@ int read_conf_file(char *filename)
             {
               HCNF.peer_certificate_required = FALSE;
             }
-#ifdef HIP_VPLS
         }
+#ifdef HIP_VPLS
       /* Example: /usr/local/lib/libhipcfgldap.so */
       else if (strcmp((char*)node->name, "cfg_library") == 0)
         {
@@ -1353,8 +1361,89 @@ int read_conf_file(char *filename)
             {
               strcpy(HCNF.cfg_library, data);
             }
-#endif
         }
+      else if (strcmp((char *)node->name, "multicast_group") == 0)
+        {
+          addr = SA(&multicast_group);
+          memset(addr, 0, sizeof(struct sockaddr_storage));
+          addr->sa_family = ((strchr(data, ':') == NULL) ? AF_INET : AF_INET6);
+          if (str_to_addr((__u8*)data, addr) <= 0)
+            {
+              log_(WARN, "Invalid multicast group address '%s'\n",
+                   data);
+              addr->sa_family = 0;
+            }
+        }
+      else if (strcmp((char *)node->name, "multicast_spi") == 0)
+        {
+          tmp = hex_to_bin(data, (char *)&multicast_spi, sizeof(__u32));
+          log_(NORM, "multicast SPI configured as 0x%x\n", multicast_spi);
+        }
+      else if (strcmp((char *)node->name, "multicast_key") == 0)
+        {
+          if (0 == multicast_spi)
+            {
+              log_(ERR, "Multicast key configured without SPI first\n");
+            }
+          else if (multicast_group.ss_family != AF_INET)
+            {
+              log_(ERR, "Multicast key configured without group first\n");
+            }
+          else
+            {
+              tmp = strlen(data);
+              multicast_key = malloc(tmp);
+              if (!multicast_key)
+                {
+                  log_(
+                    WARN,
+                    "Warning: multicast key malloc error!\n");
+                }
+              else {
+                memset(multicast_key, 0, tmp);
+                tmp = hex_to_bin(data, (char *)multicast_key, tmp);
+                if (tmp < KEY_LEN_SHA1)
+                  {
+                    log_(
+                      WARN,
+                      "Warning: multicast key too small (%d)\n", tmp);
+                  }
+                memset(&ss_tmp, 0, sizeof(struct sockaddr_storage));
+                ss_tmp.ss_family = AF_INET;
+                ((struct sockaddr_in*)&ss_tmp)->sin_addr.s_addr =
+                  ntohl(STATIC_MULTICAST_LSI);
+                /* add a static multicast SA */
+                if (hip_sadb_add(4, 2,  /* mode=4 multicast, direction=2 out */
+                        SA(&ss_tmp), SA(&ss_tmp),        /* src_hit, dst_hit */
+                        SA(&ss_tmp), SA(&multicast_group),  /* src, dst      */
+                        SA(&ss_tmp), SA(&ss_tmp),        /* src_lsi, dst_lsi */
+                        multicast_spi, 0,                   /* spi, spinat   */
+                        /* this algorithm not working properly for multicast:
+                        multicast_key, SADB_X_EALG_AESCBC,                   */
+                        multicast_key, SADB_EALG_3DESCBC, /* e_key, e_type */
+                        enc_key_len(ESP_3DES_CBC_HMAC_SHA1), /* e_keylen      */
+                        multicast_key, SADB_AALG_SHA1HMAC,  /* a_key, a_type */
+                        auth_key_len(ESP_3DES_CBC_HMAC_SHA1),/* a_keylen      */
+                        0xFFFFFFFF) < 0)            /* lifetime of 136 years */
+                  {
+                    log_(
+                      WARN,
+                      "Warning: failed to add multicast SA\n");
+                  }
+                else
+                  {
+                    log_(
+                      NORM, "multicast SA added: SPI %0x key",
+                      multicast_spi);
+                    print_hex(multicast_key, tmp);
+                    log_(
+                      NORM, "\n");
+                  }
+                free(multicast_key);
+              }
+            }
+        }
+#endif
       else if (strcmp((char *)node->name, "lsi_prefix") == 0)
         {
           addr = SA(&HCNF.lsi_prefix);

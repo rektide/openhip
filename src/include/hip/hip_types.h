@@ -217,6 +217,8 @@ typedef enum {
                      (a[HIT_SIZE - 2] << 8) + (a[HIT_SIZE - 1])))
 /* compute the exponent of registration lifetime */
 #define YLIFE(x) ((float)x - (float)64) / (float)8
+/* LSI used to identify optional static multicast SA */
+#define STATIC_MULTICAST_LSI 0xE0000000
 
 /*
  * typedefs

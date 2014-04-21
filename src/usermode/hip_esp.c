@@ -526,6 +526,7 @@ void *hip_esp_output(void *arg)
   struct arp_hdr *arph;
   time_t last_time, now_time;
   int packet_count = 0;
+  static hip_sadb_entry *static_multicast_entry;
 #endif
 #ifdef RAW_IP_OUT
   int s_raw = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
@@ -546,15 +547,33 @@ void *hip_esp_output(void *arg)
   lsi->sa_family = AF_INET;
   get_preferred_lsi(lsi);
   g_tap_lsi = LSI4(lsi);
-
 #ifdef HIP_VPLS
+  LSI4(lsi) = STATIC_MULTICAST_LSI;
+  static_multicast_entry = hip_sadb_lookup_addr(lsi);
+  if (static_multicast_entry != NULL)
+    {
+      /* prevent usage during broadcast by changing direction to incoming */
+      pthread_mutex_lock(&static_multicast_entry->rw_lock);
+      static_multicast_entry->direction = 1;
+      printf("hip_esp_output() using static multicast entry with SPI = 0x%x\n", 
+          static_multicast_entry->spi);
+      pthread_mutex_unlock(&static_multicast_entry->rw_lock);
+      flags = 64; /* net.ipv4.ip_default_ttl */
+      if (setsockopt(s_esp, IPPROTO_IP, IP_MULTICAST_TTL, 
+                     &flags, sizeof(flags)) < 0)
+        {
+          printf("*** setsockopt(multicast_ttl) error for esp socket in "
+                 "hip_esp_output\n");
+        }
+    }
+
   touchHeartbeat = 1;
   last_time = time(NULL);
   printf("hip_esp_output() thread (tid %u pid %d) started...\n",
          (unsigned)pthread_self(), getpid());
-#else
+#else /* HIP_VPLS */
   printf("hip_esp_output() thread started...\n");
-#endif
+#endif /* HIP_VPLS */
   while (g_state == 0)
     {
       /* periodic select loop */
@@ -626,14 +645,30 @@ void *hip_esp_output(void *arg)
               continue;
             }
           is_broadcast = FALSE;
-          /* Right now multicast only goes through currently
-           * established tunnels.
+          /* Duplicate multicast or broadcast packets through currently
+           * established tunnels if use_broadcast=true.
+           * If a static multicast SA is configured, map to static multicast
+           * group and use that SA instead.
            */
           if (IN_MULTICAST(ntohl(iph->ip_dst.s_addr)) ||
               (((ntohl(iph->ip_dst.s_addr)) & 0x000000FF) ==
                0x000000FF))
             {
-
+              /* check for configured multicast SA */
+              if (IN_MULTICAST(ntohl(iph->ip_dst.s_addr)) &&
+                  static_multicast_entry)
+                {
+                  /* use pre-configured static multicast group */
+                  entry = static_multicast_entry;
+                  is_broadcast = FALSE;
+                }
+              else
+                {
+                  /* unicast the multicast/broadcast to each entry */
+                  entry = hip_sadb_get_next(NULL);
+                  is_broadcast = TRUE;
+                }
+            }
 #else /* HIP_VPLS */
 
 #if defined(__BIG_ENDIAN__) || defined(__arm__)
@@ -657,12 +692,12 @@ void *hip_esp_output(void *arg)
                 {
                   continue;
                 }
-#endif /* HIP_VPLS */
               /* unicast the broadcast to each entry */
               entry = hip_sadb_get_next(NULL);
               is_broadcast = TRUE;
-              /* unicast packets */
             }
+#endif /* HIP_VPLS */
+          /* unicast packets */
           else if (!(entry = hip_sadb_lookup_addr(lsi)))
             {
 #ifdef HIP_VPLS
@@ -745,6 +780,12 @@ void *hip_esp_output(void *arg)
                 {
                   s = s_esp_udp;
                 }
+#ifdef HIP_VPLS
+              else if (sadb_entry_mode == 4)
+                {
+                 s = s_esp; /* static multicast SA uses IPv4 ESP only */
+                }
+#endif /* HIP_VPLS */
               else if (local_dst_addr_storage.ss_family ==
                        AF_INET)
                 {
@@ -1137,6 +1178,8 @@ void *hip_esp_input(void *arg)
 #ifdef HIP_VPLS
   time_t last_time, now_time;
   int packet_count = 0;
+  static hip_sadb_entry *static_multicast_entry;
+  struct ip_mreq mreq;
 
   last_time = time(NULL);
   printf("hip_esp_input() thread (tid %d pid %d) started...\n",
@@ -1149,6 +1192,31 @@ void *hip_esp_input(void *arg)
   lsi->sa_family = AF_INET;
   get_preferred_lsi(lsi);
   g_tap_lsi = LSI4(lsi);
+#ifdef HIP_VPLS
+  LSI4(lsi) = STATIC_MULTICAST_LSI;
+  static_multicast_entry = hip_sadb_lookup_addr(lsi);
+  if (static_multicast_entry != NULL)
+    {
+      /* configure ESP socket to receive multicast ESP packets */
+      memset(&mreq, 0, sizeof(struct ip_mreq));
+      pthread_mutex_lock(&static_multicast_entry->rw_lock);
+      mreq.imr_multiaddr.s_addr = 
+        LSI4(&static_multicast_entry->dst_addrs->addr);
+      mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+      if (setsockopt(s_esp, IPPROTO_IP, IP_ADD_MEMBERSHIP, 
+                     &mreq, sizeof(mreq)) < 0)
+        {
+          printf("*** setsockopt(multicast_ttl) error for esp socket in "
+                 "hip_esp_output\n");
+        }
+      else
+        {
+          printf("hip_esp_input() subscribed to multicast group %s\n",
+                 logaddr(SA(&static_multicast_entry->dst_addrs->addr)));
+        }
+      pthread_mutex_unlock(&static_multicast_entry->rw_lock);
+    }
+#endif /* HIP_VPLS */
 
 #ifndef __WIN32__
   unknown_spi_head = NULL;
@@ -1274,6 +1342,15 @@ void *hip_esp_input(void *arg)
           iph =
             (struct ip*) &data[offset +
                                sizeof(struct eth_hdr)];
+          if (entry->mode == 4)
+            {
+              /* Static multicast SA decrypts incorrectly when AES is used */
+              if ((iph->ip_v != IPVERSION) || (iph->ip_hl != 5))
+                {
+                  printf("hip_esp_input() corrupt multicast packet\n");
+                  continue;
+                }
+            }
           endbox_ipv4_multicast_write(data, offset, len);
 #else /* HIP_VPLS */
           if (write(tapfd, &data[offset], len) < 0)
@@ -2200,9 +2277,12 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
   if (esp_anti_replay_check_initial(entry, ntohl(esp->seq_no),
                                     &new_seqno_hi))
     {
-      printf("duplicate sequence number detected: %x\n",
-             ntohl(esp->seq_no));
-      return(-1);
+      /* skip sequence number check for static multicast SA */
+      if (entry->mode != 4) {
+        printf("duplicate sequence number detected: %x\n",
+               ntohl(esp->seq_no));
+        return(-1);
+      }
     }
 
   /*
@@ -2266,7 +2346,18 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
     }
 
   /* update anti-replay window now that integrity has been verified */
+#ifndef HIP_VPLS
   shift = esp_update_anti_replay(entry, ntohl(esp->seq_no), new_seqno_hi);
+#else /* !HIP_VPLS */
+  if (entry->mode == 4)
+    {
+      shift = 1; /* static multicast SA - do not use anti-replay window */
+    }
+  else
+    {
+      shift = esp_update_anti_replay(entry, ntohl(esp->seq_no), new_seqno_hi);
+    }
+#endif /* !HIP_VPLS */
   if (shift == 1)
     {
       /* normal case - in-order packet has next sequence number */
@@ -2468,6 +2559,11 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
     }
 #else /* HIP_VPLS */
   *outlen = elen;
+
+  if (entry->mode == 4)
+    {
+      return(0); /* do not update SA bytes */
+    }
 #endif /* HIP_VPLS */
 
   /* previously, this happened after write(), but there
