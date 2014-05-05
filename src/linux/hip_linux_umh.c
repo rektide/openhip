@@ -64,6 +64,7 @@
 #include <hip/hip_usermode.h>
 #include <hip/hip_sadb.h>
 
+extern void init_espsp();
 extern int devname_to_index(char *dev, __u64 *mac);
 extern int add_address_to_iface(struct sockaddr *addr, int plen, int if_index);
 extern int set_link_params(char *dev, int mtu);
@@ -262,6 +263,7 @@ void init_hip(int ac, char **av)
 
   init_crypto();
   hip_sadb_init();
+  init_espsp();
   g_state = 0;
 
   /*

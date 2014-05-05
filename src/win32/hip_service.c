@@ -56,6 +56,7 @@
 /*
  * Globals
  */
+extern void init_espsp();
 CHAR szKey[MAX_PATH];
 extern HANDLE tapfd;
 extern int s_esp, s_esp_udp, s_esp6;
@@ -981,6 +982,7 @@ void init_hip(DWORD ac, char **av)
   /* Initialize crypto library */
   init_crypto();
   hip_sadb_init();
+  init_espsp();
   g_state = 0;
 
   /*

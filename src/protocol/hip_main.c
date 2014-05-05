@@ -83,9 +83,6 @@
 #ifdef __MACOSX__
 extern void del_divert_rule(int);
 #endif
-#ifdef __WIN32__
-extern int socketpair(int, int, int, int sv[2]);
-#endif
 
 #ifndef __MACOSX__
 #ifndef __WIN32__
@@ -555,17 +552,6 @@ int main_loop(int argc, char **argv)
     {
       log_(ERR, "raw IPv4 socket() for hipd failed\n");
       goto hip_main_error_exit;
-    }
-
-  /* socketpair for communicating with the ESP input/output threads */
-#ifdef __MACOSX__
-  if (socketpair(AF_UNIX, SOCK_DGRAM, PF_UNSPEC, espsp))
-    {
-#else
-  if (socketpair(AF_UNIX, SOCK_DGRAM, PF_UNIX, espsp))
-    {
-#endif /* __MACOSX__ */
-      log_(ERR, "socketpair() for ESP threads failed\n");
     }
 
 #ifndef __WIN32__

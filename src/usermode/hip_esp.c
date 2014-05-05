@@ -183,10 +183,28 @@ void init_readsp()
   if (socketpair(AF_UNIX, SOCK_DGRAM, PF_UNIX, readsp))
     {
 #endif
-      printf("sockpair() failed\n");
+      printf("socketpair() failed\n");
     }
   /* also initialize the Ethernet address table */
   RAND_bytes(eth_addrs, sizeof(eth_addrs));
+}
+
+void init_espsp()
+{
+  if (espsp[0])
+    {
+      return;
+    }
+
+#ifdef __MACOSX__
+  if (socketpair(AF_UNIX, SOCK_DGRAM, PF_UNSPEC, espsp))
+    {
+#else
+  if (socketpair(AF_UNIX, SOCK_DGRAM, PF_UNIX, espsp))
+    {
+#endif
+      printf("socketpair() failed\n");
+    }
 }
 
 #ifndef __WIN32__
