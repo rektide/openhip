@@ -2061,10 +2061,10 @@ int hip_esp_encrypt(__u8 *in, int len, __u8 *out, int *outlen,
   switch (entry->e_type)
     {
     case SADB_EALG_3DESCBC:
-      des_ede3_cbc_encrypt(&in[hdr_len],
+      DES_ede3_cbc_encrypt(&in[hdr_len],
                            &esp->enc_data[iv_len], elen,
-                           entry->ks[0], entry->ks[1], entry->ks[2],
-                           (des_cblock*)cbc_iv, DES_ENCRYPT);
+                           &entry->ks[0], &entry->ks[1], &entry->ks[2],
+                           (DES_cblock*)cbc_iv, DES_ENCRYPT);
       break;
     case SADB_X_EALG_BLOWFISHCBC:
       BF_cbc_encrypt(&in[hdr_len],
@@ -2459,9 +2459,9 @@ int hip_esp_decrypt(__u8 *in, int len, __u8 *out, int *offset, int *outlen,
   switch (entry->e_type)
     {
     case SADB_EALG_3DESCBC:
-      des_ede3_cbc_encrypt(&esp->enc_data[iv_len], &out[*offset],elen,
-                           entry->ks[0], entry->ks[1], entry->ks[2],
-                           (des_cblock*)cbc_iv, DES_DECRYPT);
+      DES_ede3_cbc_encrypt(&esp->enc_data[iv_len], &out[*offset],elen,
+                           &entry->ks[0], &entry->ks[1], &entry->ks[2],
+                           (DES_cblock*)cbc_iv, DES_DECRYPT);
       break;
     case SADB_X_EALG_BLOWFISHCBC:
       BF_cbc_encrypt(&esp->enc_data[iv_len], &out[*offset], elen,

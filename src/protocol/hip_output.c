@@ -460,7 +460,7 @@ int hip_send_I2(hip_assoc *hip_a)
 
   /* encrypted(host_id) */
   __u16 data_len, iv_len;
-  des_key_schedule ks1, ks2, ks3;
+  DES_key_schedule ks1, ks2, ks3;
   u_int8_t secret_key1[8], secret_key2[8], secret_key3[8];
   unsigned char *key;
   BF_KEY bfkey;
@@ -647,9 +647,9 @@ int hip_send_I2(hip_assoc *hip_a)
       memcpy(&secret_key2, key + 8, len);
       memcpy(&secret_key3, key + 16, len);
 
-      des_set_odd_parity((des_cblock *)&secret_key1);
-      des_set_odd_parity((des_cblock *)&secret_key2);
-      des_set_odd_parity((des_cblock *)&secret_key3);
+      DES_set_odd_parity((DES_cblock *)&secret_key1);
+      DES_set_odd_parity((DES_cblock *)&secret_key2);
+      DES_set_odd_parity((DES_cblock *)&secret_key3);
       log_(NORM, "3-DES encryption key: 0x");
       print_hex(secret_key1, len);
       log_(NORM, "-");
@@ -658,18 +658,18 @@ int hip_send_I2(hip_assoc *hip_a)
       print_hex(secret_key3, len);
       log_(NORM, "\n");
 
-      if (((err = des_set_key_checked((
-                                        (des_cblock *)&
+      if (((err = DES_set_key_checked((
+                                        (DES_cblock *)&
                                         secret_key1),
-                                      ks1)) != 0) ||
-          ((err = des_set_key_checked((
-                                        (des_cblock *)&
+                                      &ks1)) != 0) ||
+          ((err = DES_set_key_checked((
+                                        (DES_cblock *)&
                                         secret_key2),
-                                      ks2)) != 0) ||
-          ((err = des_set_key_checked((
-                                        (des_cblock *)&
+                                      &ks2)) != 0) ||
+          ((err = DES_set_key_checked((
+                                        (DES_cblock *)&
                                         secret_key3),
-                                      ks3)) != 0))
+                                      &ks3)) != 0))
         {
           log_(WARN, "Unable to use calculated DH secret for ");
           log_(NORM, "3DES key (%d)\n", err);
@@ -678,13 +678,13 @@ int hip_send_I2(hip_assoc *hip_a)
           return(-1);
         }
       log_(NORM, "Encrypting %d bytes using 3-DES.\n", data_len);
-      des_ede3_cbc_encrypt(unenc_data,
+      DES_ede3_cbc_encrypt(unenc_data,
                            enc_data,
                            data_len,
-                           ks1,
-                           ks2,
-                           ks3,
-                           (des_cblock*)cbc_iv,
+                           &ks1,
+                           &ks2,
+                           &ks3,
+                           (DES_cblock*)cbc_iv,
                            DES_ENCRYPT);
       memcpy(enc->iv + iv_len, enc_data, data_len);
       break;

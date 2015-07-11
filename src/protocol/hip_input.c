@@ -1019,7 +1019,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
   unsigned char *dh_secret_key;
   dh_cache_entry *dh_entry = NULL;
   unsigned char *key, *enc_data = NULL, *unenc_data = NULL;
-  des_key_schedule ks1, ks2, ks3;
+  DES_key_schedule ks1, ks2, ks3;
   BF_KEY bfkey;
   AES_KEY aes_key;
   u_int8_t secret_key1[8], secret_key2[8], secret_key3[8];
@@ -1338,11 +1338,11 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                   memcpy(&secret_key3,
                          key + 16,
                          key_len / 3);
-                  des_set_odd_parity((des_cblock*)
+                  DES_set_odd_parity((DES_cblock*)
                                      (&secret_key1));
-                  des_set_odd_parity((des_cblock*)
+                  DES_set_odd_parity((DES_cblock*)
                                      (&secret_key2));
-                  des_set_odd_parity((des_cblock*)
+                  DES_set_odd_parity((DES_cblock*)
                                      (&secret_key3));
                   log_(NORM, "decryption key: 0x");
                   print_hex(secret_key1, key_len);
@@ -1352,15 +1352,15 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                   print_hex(secret_key3, key_len);
                   log_(NORM, "\n");
 
-                  if (des_set_key_checked((des_cblock*)
+                  if (DES_set_key_checked((DES_cblock*)
                                           &secret_key1,
-                                          ks1) ||
-                      des_set_key_checked((des_cblock*)
+                                          &ks1) ||
+                      DES_set_key_checked((DES_cblock*)
                                           &secret_key2,
-                                          ks2) ||
-                      des_set_key_checked((des_cblock*)
+                                          &ks2) ||
+                      DES_set_key_checked((DES_cblock*)
                                           &secret_key3,
-                                          ks3))
+                                          &ks3))
                     {
                       log_(NORM, "Unable to use cal");
                       log_(NORM, "culated DH secret");
@@ -1370,14 +1370,14 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                     }
                   log_(NORM, "Decrypting %d bytes ", len);
                   log_(NORM, "using 3-DES.\n");
-                  des_ede3_cbc_encrypt(
+                  DES_ede3_cbc_encrypt(
                     enc_data,
                     unenc_data,
                     len,
-                    ks1,
-                    ks2,
-                    ks3,
-                    (des_cblock*)
+                    &ks1,
+                    &ks2,
+                    &ks3,
+                    (DES_cblock*)
                     cbc_iv,
                     DES_DECRYPT);
                   break;
