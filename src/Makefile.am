@@ -66,7 +66,7 @@ hipstatus_CFLAGS = -D__MACOSX__
 SRC_USERMODE += mac/hip_mac.c
 endif
 
-INCLUDES = -I./include @libxml2_CFLAGS@
+AM_CPPFLAGS = -I./include @libxml2_CFLAGS@
 LDADD = @libxml2_LIBS@ -lz -ldl
 
 # VPLS support
