@@ -1002,7 +1002,7 @@ int free_hip_assoc(hip_assoc *hip_a)
     }
   if (hip_a->dh_secret)
     {
-      memset(hip_a->dh_secret, 0, sizeof(hip_a->dh_secret));
+      memset(hip_a->dh_secret, 0, sizeof(*hip_a->dh_secret));
       free(hip_a->dh_secret);
     }
   /* erase any residual keying material, set ptrs to NULL  */

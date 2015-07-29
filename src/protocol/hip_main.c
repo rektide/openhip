@@ -300,7 +300,7 @@ int main_loop(int argc, char **argv)
                    sockaddr_in) :
             sizeof(struct
                    sockaddr_in6));
-          memset(OPT.trigger, 0, sizeof(OPT.trigger));
+          memset(OPT.trigger, 0, sizeof(*OPT.trigger));
           OPT.trigger->sa_family = af;
           if (str_to_addr((__u8*)*argv, OPT.trigger) < 1)
             {

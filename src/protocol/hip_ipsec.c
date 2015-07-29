@@ -901,7 +901,7 @@ void hip_handle_multihoming_timeouts(struct timeval *now)
                             SA(&hip_a->mh->mh_addr));
           hip_send_notify(hip_a, NOTIFY_LOSS_DETECT,
                           loss_locator, sizeof(loss_locator));
-          memset(hip_a->mh, 0, sizeof(hip_a->mh));
+          memset(hip_a->mh, 0, sizeof(*hip_a->mh));
           free(hip_a->mh);
           hip_a->mh = NULL;
           /* loss report within the last 30 seconds, check total
