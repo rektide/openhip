@@ -564,7 +564,7 @@ int main(int argc, char *argv[])
   OPT.debug = D_DEFAULT;
   memset(&HCNF, 0, sizeof(struct hip_conf));
   HCNF.lsi_prefix.ss_family = AF_INET;
-  str_to_addr((__u8*)"1.0.0.0", SA(&HCNF.lsi_prefix));
+  str_to_addr((__u8*)"240.0.0.0", SA(&HCNF.lsi_prefix));
 
   opts.type = 0;
   opts.bitsize = 0;
