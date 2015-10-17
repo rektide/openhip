@@ -226,7 +226,7 @@ int main_loop(int argc, char **argv)
   HCNF.endbox_allow_core_dump = 0;
 #endif
   HCNF.lsi_prefix.ss_family = AF_INET;
-  str_to_addr((__u8*)"1.0.0.0", SA(&HCNF.lsi_prefix));
+  str_to_addr((__u8*)"240.0.0.0", SA(&HCNF.lsi_prefix));
 
   /*
    * check program arguments

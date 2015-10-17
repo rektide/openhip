@@ -390,12 +390,12 @@ int hip_sadb_add(__u32 mode, int direction,
       memcpy(key1, &e_key[0], key_len);
       memcpy(key2, &e_key[8], key_len);
       memcpy(key3, &e_key[16], key_len);
-      des_set_odd_parity((des_cblock*)key1);
-      des_set_odd_parity((des_cblock*)key2);
-      des_set_odd_parity((des_cblock*)key3);
-      err = des_set_key_checked((des_cblock*)key1, entry->ks[0]);
-      err += des_set_key_checked((des_cblock*)key2, entry->ks[1]);
-      err += des_set_key_checked((des_cblock*)key3, entry->ks[2]);
+      DES_set_odd_parity((DES_cblock*)key1);
+      DES_set_odd_parity((DES_cblock*)key2);
+      DES_set_odd_parity((DES_cblock*)key3);
+      err = DES_set_key_checked((DES_cblock*)key1, &entry->ks[0]);
+      err += DES_set_key_checked((DES_cblock*)key2, &entry->ks[1]);
+      err += DES_set_key_checked((DES_cblock*)key3, &entry->ks[2]);
       if (err)
         {
           printf("hip_sadb_add: Warning - 3DES key problem.\n");

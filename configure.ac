@@ -34,7 +34,7 @@ AC_CONFIG_SRCDIR([src/protocol/hip_main.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
 AM_CONFIG_HEADER([config.h])
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([subdir-objects])
 
 # Default compiler flags, to avoid using -g with release files.
 # GNU_SOURCE is defined so we have the IPv6 pktinfo structure
@@ -57,7 +57,7 @@ AC_PROG_AWK
 AC_PROG_CC
 AC_PROG_CPP
 AM_PROG_CC_C_O
-#AC_PROG_LIBTOOL
+AC_PROG_LIBTOOL
 
 # Checks for libraries.
 AC_CHECK_LIB([crypto], [AES_cbc_encrypt])
